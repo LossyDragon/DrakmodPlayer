@@ -57,6 +57,9 @@ android {
 }
 
 dependencies {
+    // Local Projects
+    implementation(project(":libxmp"))
+
     debugImplementation(libs.compose.ui.tooling.preview)
     implementation(platform(libs.compose.bom))
     implementation(libs.bundles.compose)

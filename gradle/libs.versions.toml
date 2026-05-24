@@ -3,6 +3,7 @@ java = "21"
 agp = "9.2.1" # https://mvnrepository.com/artifact/com.android.application/com.android.application.gradle.plugin
 kotlin = "2.3.21" # https://mvnrepository.com/artifact/org.jetbrains.kotlin.android/org.jetbrains.kotlin.android.gradle.plugin
 composeBom = "2026.05.01" # https://mvnrepository.com/artifact/androidx.compose/compose-bom
+oboe = "1.10.0" # https://mvnrepository.com/artifact/com.google.oboe/oboe
 activityCompose = "1.13.0" # https://mvnrepository.com/artifact/androidx.activity/activity-compose
 
 [libraries]
@@ -20,10 +21,11 @@ compose-runtime-livedata = { module = "androidx.compose.runtime:runtime-livedata
 compose-ui-tooling = { module = "androidx.compose.ui:ui-tooling" }
 compose-ui-tooling-preview = { module = "androidx.compose.ui:ui-tooling-preview" }
 compose-ui-ui = { module = "androidx.compose.ui:ui" }
-
 # Community Compose (or KMP) Librares
 # compose-settings-ui = { module = "com.github.alorma.compose-settings:ui-tiles", version.ref = "settings" }
 # compose-settings-ui-extended = { module = "com.github.alorma.compose-settings:ui-tiles-extended", version.ref = "settings" }
+# Other Libraries
+google-oboe = {module = "com.google.oboe:oboe", version.ref = "oboe"}
 
 [bundles]
 compose = [
@@ -43,4 +45,5 @@ communityCompose = []
 [plugins]
 android-application = { id = "com.android.application", version.ref = "agp" }
 kotlin-compose = { id = "org.jetbrains.kotlin.plugin.compose", version.ref = "kotlin" }
+android-library = { id = "com.android.library", version.ref = "agp" }
 

@@ -24,4 +24,4 @@ dependencyResolutionManagement {
 
 rootProject.name = "Dragon Mod Player"
 include(":app")
- 
+include(":libxmp")
