@@ -7,7 +7,12 @@ import androidx.activity.ComponentActivity
 import androidx.activity.SystemBarStyle
 import androidx.activity.enableEdgeToEdge
 
-/** TODO kDoc **/
+/**
+ * Configures the activity to draw behind the system bars with transparent backgrounds.
+ * Enables edge-to-edge rendering with transparent status and navigation bars, and on Android Q+
+ * disables the system-enforced contrast scrim that would otherwise be applied to the 3-button
+ * navigation bar.
+ */
 fun ComponentActivity.setEdgeToEdgeConfig() {
     enableEdgeToEdge(
         statusBarStyle = SystemBarStyle.dark(android.graphics.Color.TRANSPARENT),
@@ -20,7 +25,10 @@ fun ComponentActivity.setEdgeToEdgeConfig() {
     }
 }
 
-/** TODO kDoc **/
+/**
+ * Launches the system share sheet with [message] as plain text.
+ * @param message the text payload to share.
+ */
 fun Context.shareLink(message: String) {
     val sendIntent: Intent = Intent().apply {
         action = Intent.ACTION_SEND

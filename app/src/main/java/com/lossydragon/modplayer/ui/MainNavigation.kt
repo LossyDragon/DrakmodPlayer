@@ -14,10 +14,10 @@ import androidx.navigation3.runtime.rememberNavBackStack
 import androidx.navigation3.runtime.rememberSaveableStateHolderNavEntryDecorator
 import androidx.navigation3.ui.NavDisplay
 import com.lossydragon.modplayer.di.appModule
-import com.lossydragon.modplayer.ui.preferences.NavPreferences
 import com.lossydragon.modplayer.ui.screens.browser.FileBrowserScreen
 import com.lossydragon.modplayer.ui.screens.downloads.NavDownloads
 import com.lossydragon.modplayer.ui.screens.playlists.NavPlaylists
+import com.lossydragon.modplayer.ui.screens.preferences.NavPreferences
 import com.lossydragon.modplayer.ui.theme.AppTheme
 import kotlinx.collections.immutable.persistentListOf
 import org.koin.android.ext.koin.androidContext

@@ -8,20 +8,17 @@ import androidx.core.content.ContextCompat
 
 fun Context.requestNotificationPermission(onRequest: () -> Unit) {
     if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
-        val hasPerm = ContextCompat
-            .checkSelfPermission(this, Manifest.permission.POST_NOTIFICATIONS)
-        if (hasPerm != PackageManager.PERMISSION_GRANTED) {
-            onRequest()
-        }
+        requestPermission(Manifest.permission.POST_NOTIFICATIONS, onRequest)
     }
 }
 
 fun Context.requestWriteStoragePermission(onRequest: () -> Unit) {
     if (Build.VERSION.SDK_INT <= Build.VERSION_CODES.P) {
-        val hasPerm = ContextCompat
-            .checkSelfPermission(this, Manifest.permission.WRITE_EXTERNAL_STORAGE)
-        if (hasPerm != PackageManager.PERMISSION_GRANTED) {
-            onRequest()
-        }
+        requestPermission(Manifest.permission.WRITE_EXTERNAL_STORAGE, onRequest)
     }
+}
+
+private fun Context.requestPermission(permission: String, onRequest: () -> Unit) {
+    val hasPerm = ContextCompat.checkSelfPermission(this, permission)
+    if (hasPerm != PackageManager.PERMISSION_GRANTED) onRequest()
 }

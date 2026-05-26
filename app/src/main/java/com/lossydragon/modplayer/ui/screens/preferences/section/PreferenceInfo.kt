@@ -1,9 +1,11 @@
-package com.lossydragon.modplayer.ui.preferences.section
+package com.lossydragon.modplayer.ui.screens.preferences.section
 
+import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
+import androidx.compose.ui.unit.dp
 import com.alorma.compose.settings.ui.expressive.SettingsMenuLink
-import com.lossydragon.modplayer.ui.preferences.components.PreferenceSection
+import com.lossydragon.modplayer.ui.screens.preferences.components.PreferenceSection
 
 @OptIn(ExperimentalMaterial3ExpressiveApi::class)
 @Composable
@@ -19,6 +21,7 @@ fun PreferenceInfo(
                 style = MaterialTheme.typography.headlineSmall
             )
         },
+        verticalArrangement = Arrangement.spacedBy(4.dp),
         content = {
             SettingsMenuLink(
                 title = { Text(text = "Formats") },

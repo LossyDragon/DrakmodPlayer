@@ -1,4 +1,4 @@
-package com.lossydragon.modplayer.ui.preferences
+package com.lossydragon.modplayer.ui.screens.preferences
 
 import androidx.compose.foundation.*
 import androidx.compose.foundation.layout.*
@@ -9,31 +9,75 @@ import androidx.compose.runtime.*
 import androidx.compose.ui.*
 import androidx.compose.ui.platform.*
 import androidx.compose.ui.tooling.preview.*
+import com.lossydragon.modplayer.db.AppPreferences
 import com.lossydragon.modplayer.di.appModule
 import com.lossydragon.modplayer.ui.components.BackButton
-import com.lossydragon.modplayer.ui.preferences.section.PreferenceInfo
-import com.lossydragon.modplayer.ui.preferences.section.PreferenceInterface
-import com.lossydragon.modplayer.ui.preferences.section.PreferencePlayer
+import com.lossydragon.modplayer.ui.screens.preferences.section.PreferenceInfo
+import com.lossydragon.modplayer.ui.screens.preferences.section.PreferenceInterface
+import com.lossydragon.modplayer.ui.screens.preferences.section.PreferencePlayer
 import com.lossydragon.modplayer.ui.theme.AppTheme
+import kotlinx.coroutines.launch
 import org.koin.android.ext.koin.androidContext
+import org.koin.compose.koinInject
 import org.koin.core.context.startKoin
 
 @OptIn(ExperimentalMaterial3ExpressiveApi::class)
 @Composable
 internal fun PreferencesScreen(
     modifier: Modifier = Modifier,
+    snackbarHostState: SnackbarHostState,
     onBack: () -> Unit,
     onFormats: () -> Unit,
     onAbout: () -> Unit
 ) {
-    var isShowingResetDialog by remember { mutableStateOf(false) }
+    val scope = rememberCoroutineScope()
+    val prefs = if (LocalView.current.isInEditMode) {
+        AppPreferences(LocalContext.current)
+    } else {
+        koinInject<AppPreferences>()
+    }
 
+    var isShowingResetDialog by remember { mutableStateOf(false) }
     if (isShowingResetDialog) {
-        TODO()
+        AlertDialog(
+            onDismissRequest = {},
+            icon = {
+                Icon(
+                    imageVector = Icons.Default.RestartAlt,
+                    contentDescription = null
+                )
+            },
+            title = { Text(text = "Reset Settings") },
+            text = {
+                Text(
+                    text = "Are you sure you want to reset all settings to their original value?" +
+                        "\nThis action cannot be undone."
+                )
+            },
+            confirmButton = {
+                TextButton(
+                    onClick = {
+                        scope.launch {
+                            prefs.resetAll()
+                            snackbarHostState.showSnackbar("Reset all settings to default values.")
+                        }
+                        isShowingResetDialog = false
+                    },
+                    content = { Text(text = "Confirm") }
+                )
+            },
+            dismissButton = {
+                TextButton(
+                    onClick = { isShowingResetDialog = false },
+                    content = { Text(text = "Cancel") }
+                )
+            }
+        )
     }
 
     Scaffold(
         modifier = modifier,
+        snackbarHost = { SnackbarHost(snackbarHostState) },
         topBar = {
             CenterAlignedTopAppBar(
                 title = { Text(text = "Settings") },
@@ -79,13 +123,9 @@ internal fun PreferencesScreen(
 @Preview
 @Composable
 private fun Preview() {
-    val context = LocalContext.current
-    startKoin {
-        androidContext(context)
-        modules(appModule)
-    }
     AppTheme {
         PreferencesScreen(
+            snackbarHostState = SnackbarHostState(),
             onBack = {},
             onAbout = {},
             onFormats = {},

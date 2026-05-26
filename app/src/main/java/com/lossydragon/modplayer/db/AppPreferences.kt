@@ -1,14 +1,18 @@
 package com.lossydragon.modplayer.db
 
 import android.content.Context
+import androidx.compose.ui.graphics.toArgb
 import androidx.datastore.core.DataStore
 import androidx.datastore.core.handlers.ReplaceFileCorruptionHandler
 import androidx.datastore.preferences.core.Preferences
+import androidx.datastore.preferences.core.booleanPreferencesKey
 import androidx.datastore.preferences.core.edit
 import androidx.datastore.preferences.core.emptyPreferences
 import androidx.datastore.preferences.core.intPreferencesKey
 import androidx.datastore.preferences.core.stringPreferencesKey
 import androidx.datastore.preferences.preferencesDataStore
+import com.lossydragon.modplayer.ui.theme.seed
+import com.materialkolor.PaletteStyle
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.firstOrNull
 import kotlinx.coroutines.flow.map
@@ -26,6 +30,10 @@ private val Context.dataStore by preferencesDataStore(
 class AppPreferences(context: Context) {
 
     private val dataStore: DataStore<Preferences> = context.dataStore
+
+    private val appThemeStyle = intPreferencesKey("app_theme_style")
+    private val appThemeAmoled = booleanPreferencesKey("app_theme_amoled")
+    private val appThemeColor = intPreferencesKey("app_theme_color")
 
     private val lastDirectoryUri = stringPreferencesKey("last_directory_uri")
     private val sampleRate = intPreferencesKey("sample_rate")
@@ -50,10 +58,27 @@ class AppPreferences(context: Context) {
     private suspend fun <T> set(key: Preferences.Key<T>, value: T) =
         dataStore.edit { it[key] = value }
 
+    suspend fun resetAll() = dataStore.edit { it.clear() }
+
+    /* Application */
+    fun getAppThemeAmoledFlow() = flow(appThemeAmoled, false)
+    suspend fun getAppThemeAmoled() = get(appThemeAmoled, false)
+    suspend fun setAppThemeAmoled(v: Boolean) = set(appThemeAmoled, v)
+
+    fun getAppThemeStyleFlow() = flow(appThemeStyle, PaletteStyle.Vibrant.ordinal)
+    suspend fun getAppThemeStyle() = get(appThemeStyle, PaletteStyle.Vibrant.ordinal)
+    suspend fun setAppThemeStyle(v: Int) = set(appThemeStyle, v)
+
+    fun getThemeColorFlow() = flow(appThemeColor, seed.toArgb())
+    suspend fun getThemeColor() = get(appThemeColor, seed.toArgb())
+    suspend fun setThemeColor(v: Int) = set(appThemeColor, v)
+
+    /* File Browser */
     fun getLastDirectoryFlow() = flowNullable(lastDirectoryUri)
     suspend fun getLastDirectoryUri() = get(lastDirectoryUri, "").ifBlank { null }
     suspend fun setLastDirectoryUri(v: String) = set(lastDirectoryUri, v)
 
+    /* Player */
     fun getSampleRateFlow() = flow(sampleRate, Xmp.DEFAULT_SAMPLE_RATE)
     suspend fun getSampleRate() = get(sampleRate, Xmp.DEFAULT_SAMPLE_RATE)
     suspend fun setSampleRate(v: Int) = set(sampleRate, v)

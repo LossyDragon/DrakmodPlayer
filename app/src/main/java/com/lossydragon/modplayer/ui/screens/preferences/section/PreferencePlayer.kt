@@ -1,9 +1,11 @@
-package com.lossydragon.modplayer.ui.preferences.section
+package com.lossydragon.modplayer.ui.screens.preferences.section
 
+import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.material3.ExperimentalMaterial3ExpressiveApi
 import androidx.compose.material3.ListItemColors
 import androidx.compose.material3.ListItemDefaults
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
@@ -11,29 +13,41 @@ import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
+import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.platform.LocalView
+import androidx.compose.ui.tooling.preview.Preview
+import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
-import com.alorma.compose.settings.ui.SettingsSlider
 import com.alorma.compose.settings.ui.expressive.SettingsMenuLink
 import com.lossydragon.modplayer.db.AppPreferences
-import com.lossydragon.modplayer.ui.preferences.components.FlagItem
-import com.lossydragon.modplayer.ui.preferences.components.MultiChoiceAlertDialog
-import com.lossydragon.modplayer.ui.preferences.components.PreferenceItem
-import com.lossydragon.modplayer.ui.preferences.components.PreferenceSection
-import com.lossydragon.modplayer.ui.preferences.components.SingleChoiceAlertDialog
+import com.lossydragon.modplayer.ui.screens.preferences.components.FlagItem
+import com.lossydragon.modplayer.ui.screens.preferences.components.MultiChoiceAlertDialog
+import com.lossydragon.modplayer.ui.screens.preferences.components.PreferenceItem
+import com.lossydragon.modplayer.ui.screens.preferences.components.PreferenceSection
+import com.lossydragon.modplayer.ui.screens.preferences.components.SettingsSlider
+import com.lossydragon.modplayer.ui.screens.preferences.components.SingleChoiceAlertDialog
+import com.lossydragon.modplayer.ui.theme.AppTheme
 import kotlinx.collections.immutable.persistentListOf
-import kotlinx.coroutines.flow.onEach
 import kotlinx.coroutines.launch
 import org.helllabs.libxmp.Xmp
 import org.koin.compose.koinInject
-import timber.log.Timber
+
+private fun flagsSubtitle(flags: Int, items: List<FlagItem>): String =
+    items.filter { (flags and it.flag) != 0 }
+        .joinToString(", ") { it.title }
+        .ifEmpty { "None" }
 
 @OptIn(ExperimentalMaterial3ExpressiveApi::class)
 @Composable
 fun PreferencePlayer(
     colors: ListItemColors
 ) {
-    val prefs: AppPreferences = koinInject()
     val scope = rememberCoroutineScope()
+    val prefs = if (LocalView.current.isInEditMode) {
+        AppPreferences(LocalContext.current)
+    } else {
+        koinInject<AppPreferences>()
+    }
 
     val sampleRateOptions = remember {
         persistentListOf(
@@ -95,6 +109,7 @@ fun PreferencePlayer(
                 style = MaterialTheme.typography.headlineSmall
             )
         },
+        verticalArrangement = Arrangement.spacedBy(4.dp),
         content = {
             SettingsMenuLink(
                 title = { Text(text = "Sample Rate") },
@@ -114,19 +129,28 @@ fun PreferencePlayer(
                 title = { Text(text = "Buffer Milliseconds") },
                 subtitle = { Text(text = bufferMs.toString()) },
                 colors = colors,
-                steps = 10,
+                steps = ((Xmp.MAX_BUFFER_MS - Xmp.MIN_BUFFER_MS) / 40) - 1, // = 22
                 valueRange = Xmp.MIN_BUFFER_MS.toFloat()..Xmp.MAX_BUFFER_MS.toFloat(),
                 value = bufferMs.toFloat(),
                 onValueChange = { value ->
                     scope.launch { prefs.setBufferMs(value.toInt()) }
                 },
-                // shapes = ListItemDefaults.segmentedShapes(1, 2),
+                shapes = ListItemDefaults.segmentedShapes(1, 2),
             )
         }
     )
 }
 
-private fun flagsSubtitle(flags: Int, items: List<FlagItem>): String =
-    items.filter { (flags and it.flag) != 0 }
-        .joinToString(", ") { it.title }
-        .ifEmpty { "None" }
+@OptIn(ExperimentalMaterial3ExpressiveApi::class)
+@Preview
+@Composable
+private fun Preview() {
+    AppTheme {
+        val colors = ListItemDefaults.segmentedColors(
+            containerColor = MaterialTheme.colorScheme.surfaceContainer,
+        )
+        Surface {
+            PreferencePlayer(colors)
+        }
+    }
+}

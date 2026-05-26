@@ -1,17 +1,18 @@
-package com.lossydragon.modplayer.ui.preferences
+package com.lossydragon.modplayer.ui.screens.preferences
 
 import androidx.activity.compose.BackHandler
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.*
+import androidx.compose.ui.platform.*
 import androidx.lifecycle.viewmodel.navigation3.rememberViewModelStoreNavEntryDecorator
 import androidx.navigation3.runtime.entryProvider
 import androidx.navigation3.runtime.rememberNavBackStack
 import androidx.navigation3.runtime.rememberSaveableStateHolderNavEntryDecorator
 import androidx.navigation3.ui.NavDisplay
 import com.lossydragon.modplayer.ui.NavKeyPreferences
+import com.lossydragon.modplayer.util.shareLink
 import kotlinx.collections.immutable.toPersistentList
-import kotlinx.collections.immutable.toPersistentSet
 import org.helllabs.libxmp.Xmp
 
 @Composable
@@ -37,6 +38,7 @@ fun NavPreferences(
             entry<NavKeyPreferences.Preferences> {
                 PreferencesScreen(
                     modifier = modifier,
+                    snackbarHostState = snackbarHostState,
                     onBack = onBack,
                     onFormats = { backStack.add(NavKeyPreferences.Formats) },
                     onAbout = { backStack.add(NavKeyPreferences.About) }
@@ -45,17 +47,16 @@ fun NavPreferences(
             entry<NavKeyPreferences.About> {
                 //   onBack = backStack::removeLastOrNull,
             }
-
             entry<NavKeyPreferences.Formats> {
+                val context = LocalContext.current
+                val formats = remember { Xmp.getFormats().toPersistentList() }
                 PreferencesFormats(
                     modifier = modifier,
-                    onBack = { backStack.removeLastOrNull() },
-                    formatList = Xmp.getFormats().toPersistentList(),
-                    onClick = {
-                        TODO()
-                    }
+                    snackbarHostState = snackbarHostState,
+                    onBack = backStack::removeLastOrNull,
+                    formatList = formats,
+                    onClick = context::shareLink
                 )
-                //   onBack = backStack::removeLastOrNull,
             }
         }
     )

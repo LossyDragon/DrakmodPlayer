@@ -15,7 +15,7 @@ fun Long.formatSize(): String = when {
     else -> "${"%.1f".format(this / 1_048_576.0)} MB"
 }
 
-/** Strips HTML tags and decodes HTML entities. */
+/** Returns displayable styled text from the provided HTML string. */
 fun String.fromHtml(): String =
     Html.fromHtml(this, Html.FROM_HTML_MODE_LEGACY).toString().trim()
 

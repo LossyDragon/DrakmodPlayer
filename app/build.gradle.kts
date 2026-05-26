@@ -75,26 +75,28 @@ android {
 dependencies {
     implementation(project(":libxmp"))
 
-    debugImplementation(libs.compose.ui.tooling.preview)
     implementation(platform(libs.compose.bom))
-    implementation(libs.bundles.compose)
-    implementation(libs.kotlinx.immutable)
-    implementation(libs.materialKolor)
-    implementation(libs.compose.placeholder) // TODO try out
-    implementation(libs.reorderable)
     implementation(platform(libs.koin.bom))
+
+    debugImplementation(libs.compose.ui.tooling.preview)
+
+    ksp(libs.room.compiler)
+
+    // implementation(libs.compose.placeholder) // TODO try out
+    implementation("com.github.alorma.compose-settings:ui-tiles-expressive:3.1.0")
+    implementation("com.github.skydoves:colorpicker-compose:1.1.4")
+    implementation(libs.bundles.compose)
     implementation(libs.bundles.koin)
+    implementation(libs.bundles.ktor)
     implementation(libs.bundles.nav3)
+    implementation(libs.datastore.preferences)
+    implementation(libs.kotlinx.immutable)
+    implementation(libs.kotlinx.serialization.json)
+    implementation(libs.materialKolor)
     implementation(libs.media3.common)
     implementation(libs.media3.session)
-    implementation(libs.timber)
-    implementation(libs.room.runtime)
+    implementation(libs.reorderable)
     implementation(libs.room.ktx)
-    ksp(libs.room.compiler)
-    implementation(libs.bundles.ktor)
-    implementation(libs.datastore.preferences)
-    implementation(libs.kotlinx.serialization.json)
-
-    implementation("com.github.alorma.compose-settings:ui-tiles-expressive:3.1.0")
-
+    implementation(libs.room.runtime)
+    implementation(libs.timber)
 }

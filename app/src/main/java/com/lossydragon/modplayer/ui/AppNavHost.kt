@@ -8,11 +8,11 @@ import com.lossydragon.modplayer.ui.screens.player.PlayerScreen
 
 @Composable
 fun AppNavHost(onBack: () -> Unit) {
-    val rootBackStack = rememberNavBackStack(NavKeyRoot.Main)
+    val backStack = rememberNavBackStack(NavKeyRoot.Main)
 
     NavDisplay(
-        backStack = rootBackStack,
-        onBack = { rootBackStack.removeLastOrNull() },
+        backStack = backStack,
+        onBack = { backStack.removeLastOrNull() },
         entryDecorators = listOf(
             rememberSaveableStateHolderNavEntryDecorator(),
             rememberViewModelStoreNavEntryDecorator(),
@@ -21,15 +21,15 @@ fun AppNavHost(onBack: () -> Unit) {
             entry<NavKeyRoot.Main> {
                 MainNavigation(
                     onNavigateToPlayer = {
-                        if (rootBackStack.lastOrNull() !is NavKeyRoot.Player) {
-                            rootBackStack.add(NavKeyRoot.Player)
+                        if (backStack.lastOrNull() !is NavKeyRoot.Player) {
+                            backStack.add(NavKeyRoot.Player)
                         }
                     },
                     onBack = onBack,
                 )
             }
             entry<NavKeyRoot.Player> {
-                PlayerScreen(onBack = rootBackStack::removeLastOrNull)
+                PlayerScreen(onBack = backStack::removeLastOrNull)
             }
         }
     )

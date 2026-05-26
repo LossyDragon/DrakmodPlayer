@@ -1,21 +1,12 @@
-package com.lossydragon.modplayer.ui.preferences
+package com.lossydragon.modplayer.ui.screens.preferences
 
-import androidx.compose.foundation.clickable
-import androidx.compose.foundation.combinedClickable
-import androidx.compose.foundation.layout.fillMaxSize
-import androidx.compose.foundation.layout.padding
-import androidx.compose.foundation.lazy.LazyColumn
-import androidx.compose.foundation.lazy.items
-import androidx.compose.foundation.lazy.rememberLazyListState
-import androidx.compose.material3.CenterAlignedTopAppBar
-import androidx.compose.material3.ExperimentalMaterial3ExpressiveApi
-import androidx.compose.material3.ListItem
-import androidx.compose.material3.ListItemDefaults
-import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.Scaffold
-import androidx.compose.material3.Text
-import androidx.compose.runtime.Composable
-import androidx.compose.ui.Modifier
+import androidx.compose.foundation.layout.*
+import androidx.compose.foundation.lazy.*
+import androidx.compose.material3.*
+import androidx.compose.runtime.*
+import androidx.compose.ui.*
+import androidx.compose.ui.hapticfeedback.*
+import androidx.compose.ui.platform.*
 import com.lossydragon.modplayer.ui.components.BackButton
 import kotlinx.collections.immutable.ImmutableList
 
@@ -23,11 +14,13 @@ import kotlinx.collections.immutable.ImmutableList
 @Composable
 internal fun PreferencesFormats(
     modifier: Modifier = Modifier,
+    snackbarHostState: SnackbarHostState,
     onBack: () -> Unit,
     formatList: ImmutableList<String>,
     onClick: (String) -> Unit
 ) {
     val listState = rememberLazyListState()
+    val haptics = LocalHapticFeedback.current
 
     Scaffold(
         modifier = modifier,
@@ -49,7 +42,10 @@ internal fun PreferencesFormats(
                         key = { it },
                         itemContent = { item ->
                             ListItem(
-                                onClick = { onClick(item) },
+                                onClick = {
+                                    haptics.performHapticFeedback(HapticFeedbackType.LongPress)
+                                    onClick(item)
+                                },
                                 shapes = ListItemDefaults.shapes(
                                     shape = MaterialTheme.shapes.small,
                                     focusedShape = MaterialTheme.shapes.small,

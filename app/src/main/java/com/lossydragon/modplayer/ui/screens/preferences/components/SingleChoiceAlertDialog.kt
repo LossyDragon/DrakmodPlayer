@@ -1,4 +1,4 @@
-package com.lossydragon.modplayer.ui.preferences.components
+package com.lossydragon.modplayer.ui.screens.preferences.components
 
 import androidx.compose.foundation.layout.Column
 import androidx.compose.material3.AlertDialog

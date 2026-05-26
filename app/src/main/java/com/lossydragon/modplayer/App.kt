@@ -12,7 +12,7 @@ class App : Application() {
     private class ReleaseTree : Timber.Tree() {
         override fun log(priority: Int, tag: String?, message: String, t: Throwable?) {
             if (priority == Log.DEBUG) return
-            Log.println(priority, "Dragon Mod Player", message)
+            Log.println(priority, "Mod Player", message)
         }
     }
 
@@ -26,10 +26,6 @@ class App : Application() {
             modules(appModule)
         }
 
-        if (BuildConfig.DEBUG) {
-            Timber.plant(Timber.DebugTree())
-        } else {
-            Timber.plant(ReleaseTree())
-        }
+        Timber.plant(if (BuildConfig.DEBUG) Timber.DebugTree() else ReleaseTree())
     }
 }
