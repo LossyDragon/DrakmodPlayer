@@ -62,15 +62,12 @@ class AppPreferences(context: Context) {
 
     /* Application */
     fun getAppThemeAmoledFlow() = flow(appThemeAmoled, false)
-    suspend fun getAppThemeAmoled() = get(appThemeAmoled, false)
     suspend fun setAppThemeAmoled(v: Boolean) = set(appThemeAmoled, v)
 
     fun getAppThemeStyleFlow() = flow(appThemeStyle, PaletteStyle.Vibrant.ordinal)
-    suspend fun getAppThemeStyle() = get(appThemeStyle, PaletteStyle.Vibrant.ordinal)
     suspend fun setAppThemeStyle(v: Int) = set(appThemeStyle, v)
 
     fun getThemeColorFlow() = flow(appThemeColor, seed.toArgb())
-    suspend fun getThemeColor() = get(appThemeColor, seed.toArgb())
     suspend fun setThemeColor(v: Int) = set(appThemeColor, v)
 
     /* File Browser */
@@ -80,20 +77,17 @@ class AppPreferences(context: Context) {
 
     /* Player */
     fun getSampleRateFlow() = flow(sampleRate, Xmp.DEFAULT_SAMPLE_RATE)
-    suspend fun getSampleRate() = get(sampleRate, Xmp.DEFAULT_SAMPLE_RATE)
     suspend fun setSampleRate(v: Int) = set(sampleRate, v)
 
+    fun getPlayerFlagsFlow() = flow(playerFlags, 0)
+    suspend fun setPlayerFlags(v: Int) = set(playerFlags, v)
+
     fun getBufferMsFlow() = flow(bufferMs, Xmp.DEFAULT_BUFFER_MS)
-    suspend fun getBufferMs() = get(bufferMs, Xmp.DEFAULT_BUFFER_MS)
     suspend fun setBufferMs(v: Int) = set(bufferMs, v)
 
     fun getDefaultPanFlow() = flow(defaultPan, Xmp.DEFAULT_PAN_SEPARATION)
     suspend fun getDefaultPan() = get(defaultPan, Xmp.DEFAULT_PAN_SEPARATION)
     suspend fun setDefaultPan(v: Int) = set(defaultPan, v)
-
-    fun getVolumeBoostFlow() = flow(volumeBoost, Xmp.DEFAULT_VOLUME_BOOST)
-    suspend fun getVolumeBoost() = get(volumeBoost, Xmp.DEFAULT_VOLUME_BOOST)
-    suspend fun setVolumeBoost(v: Int) = set(volumeBoost, v)
 
     fun getStereoMixFlow() = flow(stereoMix, Xmp.DEFAULT_STEREO_MIX)
     suspend fun getStereoMix() = get(stereoMix, Xmp.DEFAULT_STEREO_MIX)
@@ -103,15 +97,15 @@ class AppPreferences(context: Context) {
     suspend fun getDspEffect() = get(dspEffects, Xmp.XMP_DSP_LOWPASS)
     suspend fun setDspEffect(v: Int) = set(dspEffects, v)
 
-    fun getPlayerVolumeFlow() = flow(playerVolume, Xmp.DEFAULT_PLAYER_VOLUME)
-    suspend fun getPlayerVolume() = get(playerVolume, Xmp.DEFAULT_PLAYER_VOLUME)
-    suspend fun setPlayerVolume(v: Int) = set(playerVolume, v)
-
     fun getInterpolationTypeFlow() = flow(interpolationType, Xmp.DEFAULT_INTERPOLATION)
     suspend fun getInterpolationType() = get(interpolationType, Xmp.DEFAULT_INTERPOLATION)
     suspend fun setInterpolationType(v: Int) = set(interpolationType, v)
 
-    fun getPlayerFlagsFlow() = flow(playerFlags, 0)
-    suspend fun getPlayerFlags() = get(playerFlags, 0)
-    suspend fun setPlayerFlags(v: Int) = set(playerFlags, v)
+    fun getPlayerVolumeFlow() = flow(playerVolume, Xmp.DEFAULT_PLAYER_VOLUME)
+    suspend fun getPlayerVolume() = get(playerVolume, Xmp.DEFAULT_PLAYER_VOLUME)
+    suspend fun setPlayerVolume(v: Int) = set(playerVolume, v)
+
+    fun getVolumeBoostFlow() = flow(volumeBoost, Xmp.DEFAULT_VOLUME_BOOST)
+    suspend fun getVolumeBoost() = get(volumeBoost, Xmp.DEFAULT_VOLUME_BOOST)
+    suspend fun setVolumeBoost(v: Int) = set(volumeBoost, v)
 }

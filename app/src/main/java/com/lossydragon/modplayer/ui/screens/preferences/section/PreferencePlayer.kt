@@ -76,6 +76,10 @@ fun PreferencePlayer(
         .collectAsStateWithLifecycle(initialValue = Xmp.DEFAULT_BUFFER_MS)
     val flags by prefs.getPlayerFlagsFlow()
         .collectAsStateWithLifecycle(initialValue = 0)
+    val pan by prefs.getDefaultPanFlow()
+        .collectAsStateWithLifecycle(Xmp.DEFAULT_PAN_SEPARATION)
+    val mix by prefs.getStereoMixFlow()
+        .collectAsStateWithLifecycle(Xmp.DEFAULT_STEREO_MIX)
 
     var isSampleRateShowing by remember { mutableStateOf(false) }
     if (isSampleRateShowing) {
@@ -137,6 +141,36 @@ fun PreferencePlayer(
                 },
                 shapes = ListItemDefaults.segmentedShapes(1, 2),
             )
+            SettingsSlider(
+                title = { Text(text = "Default Pan Separation") },
+                subtitle = { Text(text = "$pan%") },
+                colors = colors,
+                steps = 10,
+                valueRange = 0f..100f,
+                value = pan.toFloat(),
+                onValueChange = { value ->
+                    scope.launch { prefs.setDefaultPan(value.toInt()) }
+                },
+                shapes = ListItemDefaults.segmentedShapes(1, 2),
+            )
+            SettingsSlider(
+                title = { Text(text = "Stereo Mixing") },
+                subtitle = { Text(text = "$mix%") },
+                colors = colors,
+                steps = 0,
+                valueRange = -100f..100f,
+                value = mix.toFloat(),
+                onValueChange = { value ->
+                    scope.launch { prefs.setStereoMix(value.toInt()) }
+                },
+                shapes = ListItemDefaults.segmentedShapes(1, 2),
+            )
+
+            // TODO: DSP Effects
+            // TODO: Interpolation Type
+            // TODO: Player Volume,
+            // TODO: Volume Boost
+            // TODO segmented shapes value
         }
     )
 }

@@ -10,16 +10,14 @@ import androidx.compose.ui.*
 import androidx.compose.ui.platform.*
 import androidx.compose.ui.tooling.preview.*
 import com.lossydragon.modplayer.db.AppPreferences
-import com.lossydragon.modplayer.di.appModule
 import com.lossydragon.modplayer.ui.components.BackButton
+import com.lossydragon.modplayer.ui.screens.preferences.section.PreferenceBrowser
 import com.lossydragon.modplayer.ui.screens.preferences.section.PreferenceInfo
 import com.lossydragon.modplayer.ui.screens.preferences.section.PreferenceInterface
 import com.lossydragon.modplayer.ui.screens.preferences.section.PreferencePlayer
 import com.lossydragon.modplayer.ui.theme.AppTheme
 import kotlinx.coroutines.launch
-import org.koin.android.ext.koin.androidContext
 import org.koin.compose.koinInject
-import org.koin.core.context.startKoin
 
 @OptIn(ExperimentalMaterial3ExpressiveApi::class)
 @Composable
@@ -108,6 +106,7 @@ internal fun PreferencesScreen(
                     .verticalScroll(scrollState),
                 content = {
                     PreferenceInterface(colors)
+                    PreferenceBrowser(colors)
                     PreferencePlayer(colors)
                     PreferenceInfo(
                         colors = colors,

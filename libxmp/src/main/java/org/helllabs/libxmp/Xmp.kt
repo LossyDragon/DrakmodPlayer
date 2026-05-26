@@ -61,7 +61,7 @@ object Xmp {
 
     const val DEFAULT_BUFFER_MS = 400
     const val DEFAULT_SAMPLE_RATE = 44100
-    const val DEFAULT_PAN_SEPARATION = 50
+    const val DEFAULT_PAN_SEPARATION = 100
     const val DEFAULT_PLAYER_VOLUME = 100
     const val DEFAULT_STEREO_MIX = 70
     const val DEFAULT_VOLUME_BOOST = 1

@@ -47,9 +47,9 @@ internal fun PreferencesFormats(
                                     onClick(item)
                                 },
                                 shapes = ListItemDefaults.shapes(
-                                    shape = MaterialTheme.shapes.small,
-                                    focusedShape = MaterialTheme.shapes.small,
-                                    pressedShape = MaterialTheme.shapes.small,
+                                    shape = MaterialTheme.shapes.extraSmall,
+                                    focusedShape = MaterialTheme.shapes.extraSmall,
+                                    pressedShape = MaterialTheme.shapes.extraSmall,
                                 ),
                                 content = { Text(text = item) }
                             )
