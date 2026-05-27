@@ -5,9 +5,11 @@ import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.*
 import androidx.compose.ui.semantics.*
+import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.*
 import com.alorma.compose.settings.ui.core.LocalSettingsGroupEnabled
 import com.alorma.compose.settings.ui.expressive.SettingsTileDefaults
+import com.lossydragon.modplayer.ui.theme.AppTheme
 
 @OptIn(ExperimentalMaterial3ExpressiveApi::class)
 @Composable
@@ -22,6 +24,7 @@ fun SettingsSlider(
     onValueChangeFinished: (() -> Unit)? = null,
     icon: @Composable (() -> Unit)? = null,
     subtitle: @Composable (() -> Unit)? = null,
+    action: (@Composable () -> Unit)? = null,
     sliderColors: SliderColors = SliderDefaults.colors(),
     colors: ListItemColors = SettingsTileDefaults.colors(),
     shapes: ListItemShapes = SettingsTileDefaults.shapes(),
@@ -55,5 +58,35 @@ fun SettingsSlider(
         },
         colors = colors,
         elevation = elevation,
+        trailingContent = action,
     )
+}
+
+@OptIn(ExperimentalMaterial3ExpressiveApi::class)
+@Preview
+@Composable
+private fun Preview() {
+    AppTheme {
+        Surface {
+            Column(
+                verticalArrangement = Arrangement.spacedBy(4.dp)
+            ) {
+                SettingsSlider(
+                    value = 0.5f,
+                    onValueChange = {},
+                    title = { Text("Beans") },
+                    subtitle = { Text("Beans") },
+                    enabled = true,
+                )
+
+                SettingsSlider(
+                    value = 0.5f,
+                    onValueChange = {},
+                    title = { Text("Beans") },
+                    subtitle = { Text("Beans") },
+                    enabled = false,
+                )
+            }
+        }
+    }
 }

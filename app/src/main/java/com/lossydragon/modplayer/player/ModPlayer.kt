@@ -34,6 +34,7 @@ import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.runBlocking
+import kotlinx.serialization.json.Json
 import org.helllabs.libxmp.Xmp
 import org.helllabs.libxmp.model.ModInfo
 import timber.log.Timber
@@ -186,6 +187,7 @@ class ModPlayer(
         applyQueueOrder(startAt)
         invalidateState()
         loadAndStartAt(currentIndex)
+        persistQueue()
     }
 
     private fun applyQueueOrder(startAt: Int = 0) {
@@ -215,7 +217,7 @@ class ModPlayer(
         invalidateState()
     }
 
-    private fun loadAndStartAt(index: Int) {
+    private fun loadAndStartAt(index: Int, seekToMs: Long? = null) {
         val file = queue.getOrNull(index) ?: return
 
         Thread {
@@ -233,6 +235,12 @@ class ModPlayer(
                 }
 
                 engine.start()
+
+                if (seekToMs != null && seekToMs > 0L) {
+                    engine.seek(seekToMs.toInt())
+                    pendingSeekPositionMs = seekToMs
+                }
+
                 mainHandler.post { invalidateState() }
             } else {
                 mainHandler.post { skipUnplayable() }
@@ -256,6 +264,7 @@ class ModPlayer(
         pendingSeekPositionMs = -1L
         invalidateState()
         loadAndStartAt(currentIndex)
+        persistQueue()
     }
 
     private fun clearQueue() {
@@ -265,6 +274,7 @@ class ModPlayer(
         currentIndex = 0
         currentIndexFlow.value = 0
         queueFlow.value = emptyList()
+        persistQueue()
         invalidateState()
     }
 
@@ -335,6 +345,7 @@ class ModPlayer(
     private fun startPositionUpdates() {
         positionUpdateJob?.cancel()
         positionUpdateJob = scope.launch {
+            var lastPersist = 0L
             while (true) {
                 delay(500L.milliseconds)
                 if (pendingSeekPositionMs >= 0 &&
@@ -343,6 +354,12 @@ class ModPlayer(
                     pendingSeekPositionMs = -1L
                 }
                 invalidateState()
+
+                val now = System.currentTimeMillis()
+                if (now - lastPersist > 5_000) {
+                    persistQueue()
+                    lastPersist = now
+                }
             }
         }
     }
@@ -417,6 +434,7 @@ class ModPlayer(
     override fun handleSetRepeatMode(repeatMode: Int): ListenableFuture<*> {
         this.repeatMode = repeatMode
         invalidateState()
+        persistQueue()
         return Futures.immediateVoidFuture()
     }
 
@@ -463,6 +481,7 @@ class ModPlayer(
 
         isReordering = false
         invalidateState()
+        persistQueue()
 
         return Futures.immediateVoidFuture()
     }
@@ -559,6 +578,47 @@ class ModPlayer(
     fun releaseEngine() {
         scope.cancel("Releasing Engine")
         Thread { engine.stop() }.start()
+    }
+
+    private fun persistQueue() {
+        scope.launch {
+            if (originalQueue.isEmpty()) {
+                prefs.clearQueueState()
+                return@launch
+            }
+            prefs.saveQueueState(
+                json = Json.encodeToString(originalQueue.toList()),
+                index = currentIndex,
+                shuffle = shuffleModeEnabled,
+                repeat = repeatMode,
+                positionMs = engine.positionMs.value,
+            )
+        }
+    }
+
+    suspend fun restoreQueue(): Boolean {
+        val state = prefs.getQueueState() ?: return false
+        val files = try {
+            Json.decodeFromString<List<ModuleFile>>(state.json)
+        } catch (e: Exception) {
+            Timber.e(e, "Failed to restore queue")
+            prefs.clearQueueState()
+            return false
+        }
+        if (files.isEmpty()) return false
+
+        originalQueue.clear()
+        originalQueue.addAll(files)
+        this.shuffleModeEnabled = state.shuffle
+        this.repeatMode = state.repeat
+        applyQueueOrder(state.index)
+
+        if (prefs.getAutoResume()) {
+            loadAndStartAt(currentIndex, seekToMs = state.positionMs.takeIf { it > 0L })
+        }
+
+        invalidateState()
+        return true
     }
 
     /** Builds a [androidx.media3.common.MediaItem] with placeholder metadata for initial queue population. */

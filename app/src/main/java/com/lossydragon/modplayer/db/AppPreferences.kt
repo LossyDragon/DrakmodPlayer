@@ -9,8 +9,10 @@ import androidx.datastore.preferences.core.booleanPreferencesKey
 import androidx.datastore.preferences.core.edit
 import androidx.datastore.preferences.core.emptyPreferences
 import androidx.datastore.preferences.core.intPreferencesKey
+import androidx.datastore.preferences.core.longPreferencesKey
 import androidx.datastore.preferences.core.stringPreferencesKey
 import androidx.datastore.preferences.preferencesDataStore
+import com.lossydragon.modplayer.model.QueueState
 import com.lossydragon.modplayer.ui.theme.seed
 import com.materialkolor.PaletteStyle
 import kotlinx.coroutines.flow.Flow
@@ -34,7 +36,6 @@ class AppPreferences(context: Context) {
     private val appThemeStyle = intPreferencesKey("app_theme_style")
     private val appThemeAmoled = booleanPreferencesKey("app_theme_amoled")
     private val appThemeColor = intPreferencesKey("app_theme_color")
-
     private val lastDirectoryUri = stringPreferencesKey("last_directory_uri")
     private val sampleRate = intPreferencesKey("sample_rate")
     private val bufferMs = intPreferencesKey("buffer_ms")
@@ -45,6 +46,12 @@ class AppPreferences(context: Context) {
     private val playerVolume = intPreferencesKey("player_volume")
     private val interpolationType = intPreferencesKey("interpolation_type")
     private val playerFlags = intPreferencesKey("player_flags")
+    private val autoResume = booleanPreferencesKey("auto_resume")
+    private val queueJson = stringPreferencesKey("queue_json")
+    private val queueIndex = intPreferencesKey("queue_index")
+    private val queueShuffle = booleanPreferencesKey("queue_shuffle")
+    private val queueRepeat = intPreferencesKey("queue_repeat")
+    private val queuePositionMs = longPreferencesKey("queue_position_ms")
 
     private fun <T> flow(key: Preferences.Key<T>, default: T): Flow<T> =
         dataStore.data.map { it[key] ?: default }
@@ -86,26 +93,59 @@ class AppPreferences(context: Context) {
     suspend fun setBufferMs(v: Int) = set(bufferMs, v)
 
     fun getDefaultPanFlow() = flow(defaultPan, Xmp.DEFAULT_PAN_SEPARATION)
-    suspend fun getDefaultPan() = get(defaultPan, Xmp.DEFAULT_PAN_SEPARATION)
     suspend fun setDefaultPan(v: Int) = set(defaultPan, v)
 
     fun getStereoMixFlow() = flow(stereoMix, Xmp.DEFAULT_STEREO_MIX)
-    suspend fun getStereoMix() = get(stereoMix, Xmp.DEFAULT_STEREO_MIX)
     suspend fun setStereoMix(v: Int) = set(stereoMix, v)
 
     fun getDspEffectFlow() = flow(dspEffects, Xmp.XMP_DSP_LOWPASS)
-    suspend fun getDspEffect() = get(dspEffects, Xmp.XMP_DSP_LOWPASS)
     suspend fun setDspEffect(v: Int) = set(dspEffects, v)
 
     fun getInterpolationTypeFlow() = flow(interpolationType, Xmp.DEFAULT_INTERPOLATION)
-    suspend fun getInterpolationType() = get(interpolationType, Xmp.DEFAULT_INTERPOLATION)
     suspend fun setInterpolationType(v: Int) = set(interpolationType, v)
 
     fun getPlayerVolumeFlow() = flow(playerVolume, Xmp.DEFAULT_PLAYER_VOLUME)
-    suspend fun getPlayerVolume() = get(playerVolume, Xmp.DEFAULT_PLAYER_VOLUME)
     suspend fun setPlayerVolume(v: Int) = set(playerVolume, v)
 
     fun getVolumeBoostFlow() = flow(volumeBoost, Xmp.DEFAULT_VOLUME_BOOST)
-    suspend fun getVolumeBoost() = get(volumeBoost, Xmp.DEFAULT_VOLUME_BOOST)
     suspend fun setVolumeBoost(v: Int) = set(volumeBoost, v)
+
+    /* Playback */
+    fun getAutoResumeFlow() = flow(autoResume, false)
+    suspend fun getAutoResume() = get(autoResume, false)
+    suspend fun setAutoResume(v: Boolean) = set(autoResume, v)
+
+    suspend fun saveQueueState(
+        json: String,
+        index: Int,
+        shuffle: Boolean,
+        repeat: Int,
+        positionMs: Long
+    ) = dataStore.edit {
+        it[queueJson] = json
+        it[queueIndex] = index
+        it[queueShuffle] = shuffle
+        it[queueRepeat] = repeat
+        it[queuePositionMs] = positionMs
+    }
+
+    suspend fun getQueueState(): QueueState? {
+        val data = dataStore.data.firstOrNull() ?: return null
+        val json = data[queueJson]?.takeIf { it.isNotBlank() } ?: return null
+        return QueueState(
+            json = json,
+            index = data[queueIndex] ?: 0,
+            shuffle = data[queueShuffle] ?: false,
+            repeat = data[queueRepeat] ?: 0,
+            positionMs = data[queuePositionMs] ?: 0L,
+        )
+    }
+
+    suspend fun clearQueueState() = dataStore.edit {
+        it.remove(queueJson)
+        it.remove(queueIndex)
+        it.remove(queueShuffle)
+        it.remove(queueRepeat)
+        it.remove(queuePositionMs)
+    }
 }

@@ -38,13 +38,11 @@ val appModule = module {
 
     // Database
     single {
-        // TODO: remove fallbackToDestructiveMigration
         Room.databaseBuilder(
             androidContext(),
             AppDatabase::class.java,
             Constants.ROOM_DATABASE_NAME,
-        ).fallbackToDestructiveMigration(true)
-            .build()
+        ).build()
     }
     single { get<AppDatabase>().moduleMetadataDao() }
     single { get<AppDatabase>().downloadHistoryDao() }

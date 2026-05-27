@@ -12,6 +12,7 @@ import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.cancel
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
+import kotlinx.coroutines.flow.distinctUntilChanged
 import kotlinx.coroutines.flow.launchIn
 import kotlinx.coroutines.flow.onEach
 import org.helllabs.libxmp.Xmp
@@ -104,15 +105,44 @@ class PlayerEngine(
     private var playerFlags: Int = 0
 
     init {
-        prefs.getSampleRateFlow().onEach { sampleRate = it }.launchIn(scope)
-        prefs.getBufferMsFlow().onEach { bufferMs = it }.launchIn(scope)
-        prefs.getDefaultPanFlow().onEach { defaultPan = it }.launchIn(scope)
-        prefs.getVolumeBoostFlow().onEach { volumeBoost = it }.launchIn(scope)
-        prefs.getStereoMixFlow().onEach { stereoMix = it }.launchIn(scope)
-        prefs.getDspEffectFlow().onEach { dspEffect = it }.launchIn(scope)
-        prefs.getPlayerVolumeFlow().onEach { playerVolume = it }.launchIn(scope)
-        prefs.getInterpolationTypeFlow().onEach { interpolationType = it }.launchIn(scope)
-        prefs.getPlayerFlagsFlow().onEach { playerFlags = it }.launchIn(scope)
+        prefs.getSampleRateFlow().distinctUntilChanged().onEach { sampleRate = it }.launchIn(scope)
+        prefs.getBufferMsFlow().distinctUntilChanged().onEach { bufferMs = it }.launchIn(scope)
+        prefs.getDefaultPanFlow().distinctUntilChanged().onEach {
+            defaultPan = it
+        }.launchIn(scope)
+        prefs.getVolumeBoostFlow().distinctUntilChanged().onEach {
+            volumeBoost = it
+            if (initialized) Xmp.setPlayer(Xmp.XMP_PLAYER_AMP, it)
+        }.launchIn(scope)
+        prefs.getStereoMixFlow().distinctUntilChanged().onEach {
+            stereoMix = it
+            if (initialized) Xmp.setPlayer(Xmp.XMP_PLAYER_MIX, it)
+        }.launchIn(scope)
+        prefs.getDspEffectFlow().distinctUntilChanged().onEach {
+            dspEffect = it
+            if (initialized) Xmp.setPlayer(Xmp.XMP_PLAYER_DSP, it)
+        }.launchIn(scope)
+        prefs.getPlayerVolumeFlow().distinctUntilChanged().onEach {
+            playerVolume = it
+            if (initialized) Xmp.setPlayer(Xmp.XMP_PLAYER_VOLUME, it)
+        }.launchIn(scope)
+        prefs.getInterpolationTypeFlow().distinctUntilChanged().onEach {
+            interpolationType = it
+            if (initialized) Xmp.setPlayer(Xmp.XMP_PLAYER_INTERP, it)
+        }.launchIn(scope)
+        prefs.getPlayerFlagsFlow().distinctUntilChanged().onEach {
+            playerFlags = it
+            if (initialized) {
+                // A500 can update live via CFLAGS
+                val cflags = Xmp.getPlayer(Xmp.XMP_PLAYER_CFLAGS)
+                val newCflags = if ((it and Xmp.XMP_FLAGS_A500) != 0) {
+                    cflags or Xmp.XMP_FLAGS_A500
+                } else {
+                    cflags and Xmp.XMP_FLAGS_A500.inv()
+                }
+                Xmp.setPlayer(Xmp.XMP_PLAYER_CFLAGS, newCflags)
+            }
+        }.launchIn(scope)
     }
 
     /** Switches to sequence [index]. Updates duration and resets position. Returns false if invalid. */
@@ -151,6 +181,7 @@ class PlayerEngine(
 
         val preLoadMask = Xmp.XMP_FLAGS_VBLANK or Xmp.XMP_FLAGS_FX9BUG or Xmp.XMP_FLAGS_FIXLOOP
         Xmp.setPlayer(Xmp.XMP_PLAYER_FLAGS, playerFlags and preLoadMask)
+        Xmp.setPlayer(Xmp.XMP_PLAYER_DEFPAN, defaultPan)
 
         val modInfo = ModInfo()
         val result = Xmp.loadFromFd(context, file.uri, modInfo)
@@ -186,6 +217,10 @@ class PlayerEngine(
 
         Xmp.releaseModule()
 
+        val preLoadMask = Xmp.XMP_FLAGS_VBLANK or Xmp.XMP_FLAGS_FX9BUG or Xmp.XMP_FLAGS_FIXLOOP
+        Xmp.setPlayer(Xmp.XMP_PLAYER_FLAGS, playerFlags and preLoadMask)
+        Xmp.setPlayer(Xmp.XMP_PLAYER_DEFPAN, defaultPan)
+
         val modInfo = ModInfo()
         val result = Xmp.loadFromFd(context, file.uri, modInfo)
         if (result != 0) {
@@ -209,9 +244,6 @@ class PlayerEngine(
 
         stopRequest = false
         paused = false
-
-        Timber.i("Set default pan to $defaultPan")
-        Xmp.setPlayer(Xmp.XMP_PLAYER_DEFPAN, defaultPan)
 
         if (Xmp.startPlayer(sampleRate) != 0) {
             Timber.e("Xmp.startPlayer() failed")

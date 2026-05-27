@@ -8,6 +8,7 @@ import org.helllabs.libxmp.model.ChannelInfo
 import org.helllabs.libxmp.model.FrameInfo
 import org.helllabs.libxmp.model.ModInfo
 import org.helllabs.libxmp.model.ModVars
+import kotlin.math.abs
 
 /**
  * https://github.com/libxmp/libxmp/blob/master/docs/libxmp.rst
@@ -54,6 +55,25 @@ object Xmp {
     const val XMP_DSP_NONE = 0
     const val XMP_DSP_LOWPASS = (1 shl 0)       /* Lowpass filter effect */
 
+    /* error codes */
+    enum class XmpResult(val code: Int) {
+        OK(0),
+        END(1),
+        INTERNAL(2),
+        FORMAT(3),
+        LOAD(4),
+        DEPACK(5),
+        SYSTEM(6),
+        INVALID(7),
+        STATE(8),
+        UNKNOWN(-1);
+
+        companion object {
+            fun fromCode(code: Int): XmpResult =
+                entries.firstOrNull { it.code == abs(code) } ?: UNKNOWN
+        }
+    }
+
     // Default Values
 
     val volumeBoostRange = 0..3
@@ -99,7 +119,7 @@ object Xmp {
 
     external fun seek(time: Int): Int
 
-    external fun setPlayer(parm: Int, value: Int)
+    private external fun setPlayerNative(parm: Int, value: Int): Int
 
     external fun startPlayer(rate: Int): Int
 
@@ -128,6 +148,11 @@ object Xmp {
     external fun getModType(): String
 
     external fun getModVars(vars: ModVars)
+
+    fun setPlayer(parm: Int, value: Int) {
+        val res = setPlayerNative(parm, value)
+        Log.d(TAG, "setPlayer($parm, $value) = ${XmpResult.fromCode(res)}($res)")
+    }
 
     external fun getPatternRow(
         pat: Int,

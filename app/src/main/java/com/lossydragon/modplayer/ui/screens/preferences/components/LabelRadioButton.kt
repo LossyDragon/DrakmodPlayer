@@ -1,7 +1,11 @@
 package com.lossydragon.modplayer.ui.screens.preferences.components
 
+import androidx.compose.foundation.layout.*
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
+import androidx.compose.ui.tooling.preview.*
+import androidx.compose.ui.unit.*
+import com.lossydragon.modplayer.ui.theme.AppTheme
 
 @OptIn(ExperimentalMaterial3ExpressiveApi::class)
 @Composable
@@ -19,4 +23,25 @@ internal fun LabelRadioButton(
         supportingContent = { Text(text = item.description) },
         trailingContent = { RadioButton(selected = isSelected, onClick = null) },
     )
+}
+
+@Preview
+@Composable
+private fun Preview() {
+    AppTheme {
+        Column(
+            verticalArrangement = Arrangement.spacedBy(4.dp),
+        ) {
+            LabelRadioButton(
+                item = PreferenceItem("Beans", "Beans", "Beans"),
+                isSelected = true,
+                onClick = {},
+            )
+            LabelRadioButton(
+                item = PreferenceItem("Beans", "Beans", "Beans"),
+                isSelected = false,
+                onClick = {},
+            )
+        }
+    }
 }

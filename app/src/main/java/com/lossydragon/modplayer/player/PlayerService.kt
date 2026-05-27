@@ -1,10 +1,7 @@
 package com.lossydragon.modplayer.player
 
 import android.app.PendingIntent
-import android.app.Service
 import android.content.ContentResolver
-import android.content.Context
-import android.content.ContextWrapper
 import android.content.Intent
 import android.net.Uri
 import android.provider.DocumentsContract
@@ -24,6 +21,10 @@ import com.lossydragon.modplayer.MainActivity
 import com.lossydragon.modplayer.R
 import com.lossydragon.modplayer.core.AutoMediaId
 import com.lossydragon.modplayer.db.AppPreferences
+import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.SupervisorJob
+import kotlinx.coroutines.launch
 import kotlinx.coroutines.runBlocking
 import org.helllabs.libxmp.Xmp
 import org.helllabs.libxmp.model.ModInfo
@@ -41,6 +42,8 @@ class PlayerService : MediaLibraryService() {
         const val NOTIFICATION_ID = 669
         const val CHANNEL_ID = "669"
     }
+
+    private val scope = CoroutineScope(Dispatchers.Default + SupervisorJob())
 
     private val player: ModPlayer by inject()
     private val prefs: AppPreferences by inject()
@@ -142,6 +145,10 @@ class PlayerService : MediaLibraryService() {
                 Timber.e("Foreground service start not allowed")
             }
         })
+
+        scope.launch(Dispatchers.Main) {
+            player.restoreQueue()
+        }
     }
 
     override fun onGetSession(controllerInfo: MediaSession.ControllerInfo) = mediaLibrarySession
