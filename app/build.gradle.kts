@@ -55,7 +55,17 @@ android {
         val apiKey = project.property("modArchiveApiKey") as String
         buildConfigField("String", "API_KEY", apiKey)
     }
-
+    signingConfigs {
+        create("release") {
+            val keystorePath = System.getenv("RELEASE_KEYSTORE_PATH")
+            if (!keystorePath.isNullOrBlank()) {
+                storeFile = file(keystorePath)
+                storePassword = System.getenv("RELEASE_KEYSTORE_PASSWORD")
+                keyAlias = System.getenv("RELEASE_KEY_ALIAS")
+                keyPassword = System.getenv("RELEASE_KEY_PASSWORD")
+            }
+        }
+    }
     buildTypes {
         debug {
             applicationIdSuffix = ".debug"
@@ -65,6 +75,9 @@ android {
         release {
             optimization {
                 enable = false
+            }
+            if (System.getenv("RELEASE_KEYSTORE_PATH").isNullOrBlank().not()) {
+                signingConfig = signingConfigs.getByName("release")
             }
         }
     }
