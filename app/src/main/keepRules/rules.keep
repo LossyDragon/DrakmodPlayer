@@ -10,3 +10,13 @@
 #-keepclassmembers class fqcn.of.javascript.interface.for.webview {
 #   public *;
 #}
+
+# Keep @Serializable classes' generated serializers
+-if @kotlinx.serialization.Serializable class **
+-keepclassmembers class <1> {
+    public static **$Companion Companion;
+}
+
+-keepclasseswithmembernames class **$$serializer {
+    <fields>;
+}

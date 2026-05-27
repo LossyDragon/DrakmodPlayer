@@ -2,11 +2,12 @@ import org.jetbrains.kotlin.gradle.dsl.JvmTarget
 
 plugins {
     alias(libs.plugins.android.application)
+    alias(libs.plugins.dependency.analysis)
+    alias(libs.plugins.gradle.kotlinter)
     alias(libs.plugins.kotlin.compiler)
     alias(libs.plugins.kotlin.serialization)
-    alias(libs.plugins.gradle.kotlinter)
-    alias(libs.plugins.stability.analyzer)
     alias(libs.plugins.ksp)
+    alias(libs.plugins.stability.analyzer)
 }
 
 kotlin {
@@ -18,6 +19,17 @@ kotlin {
 
 ksp {
     arg("room.schemaLocation", "$projectDir/schemas")
+}
+
+dependencyAnalysis {
+    issues {
+        onUnusedDependencies {
+            exclude(
+                "com.github.skydoves:compose-stability-runtime",
+                "com.github.alorma.compose-settings:ui-tiles",
+            )
+        }
+    }
 }
 
 android {
@@ -72,6 +84,8 @@ android {
     }
 }
 
+
+
 dependencies {
     implementation(project(":libxmp"))
 
@@ -80,23 +94,19 @@ dependencies {
 
     debugImplementation(libs.compose.ui.tooling.preview)
 
+    lintChecks(libs.compose.lint.checks)
+
     ksp(libs.room.compiler)
 
-    // implementation(libs.compose.placeholder) // TODO try out
-    implementation("com.github.alorma.compose-settings:ui-tiles-expressive:3.1.0")
-    implementation("com.github.skydoves:colorpicker-compose:1.1.4")
     implementation(libs.bundles.compose)
     implementation(libs.bundles.koin)
     implementation(libs.bundles.ktor)
+    implementation(libs.bundles.media3)
     implementation(libs.bundles.nav3)
-    implementation(libs.datastore.preferences)
-    implementation(libs.kotlinx.immutable)
-    implementation(libs.kotlinx.serialization.json)
+    implementation(libs.bundles.room)
+    implementation(libs.bundles.serialization)
+    implementation(libs.colorpicker.compose)
     implementation(libs.materialKolor)
-    implementation(libs.media3.common)
-    implementation(libs.media3.session)
     implementation(libs.reorderable)
-    implementation(libs.room.ktx)
-    implementation(libs.room.runtime)
     implementation(libs.timber)
 }
