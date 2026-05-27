@@ -32,7 +32,7 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v4
         with:
-          fetch-depth: 2
+          submodules: recursive
 
       - name: Diff versionCode
         id: diff
