@@ -11,9 +11,12 @@ import androidx.compose.runtime.saveable.*
 import androidx.compose.ui.*
 import androidx.compose.ui.focus.*
 import androidx.compose.ui.platform.*
+import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.input.*
 import androidx.compose.ui.tooling.preview.*
 import androidx.compose.ui.unit.*
+import com.lossydragon.modplayer.R
+import com.lossydragon.modplayer.core.Constants
 import com.lossydragon.modplayer.model.SearchType
 import com.lossydragon.modplayer.ui.components.BackButton
 import com.lossydragon.modplayer.ui.theme.AppTheme
@@ -33,6 +36,7 @@ fun DownloadSearchScreen(
     modifier: Modifier = Modifier,
     onHistory: () -> Unit
 ) {
+    val resource = LocalResources.current
     val focusRequester = remember { FocusRequester() }
     val focusManager = LocalFocusManager.current
     val scope = rememberCoroutineScope()
@@ -50,7 +54,7 @@ fun DownloadSearchScreen(
         modifier = modifier,
         topBar = {
             CenterAlignedTopAppBar(
-                title = { Text(text = "Search") },
+                title = { Text(text = stringResource(R.string.title_download)) },
                 navigationIcon = { BackButton(onBack = onBack) }
             )
         },
@@ -61,11 +65,11 @@ fun DownloadSearchScreen(
                     scope.launch {
                         if (!hasApiKey) {
                             snackbarHostState.showSnackbar(
-                                message = "No API key used to search."
+                                message = resource.getString(R.string.snack_no_api)
                             )
                         } else if (query.length < 3) {
                             snackbarHostState.showSnackbar(
-                                message = "At least 3 characters required to search"
+                                message = resource.getString(R.string.snack_query_too_short)
                             )
                         } else {
                             onSearch(query, type)
@@ -73,8 +77,13 @@ fun DownloadSearchScreen(
                         }
                     }
                 },
-                text = { Text(text = "Search") },
-                icon = { Icon(imageVector = Icons.Default.Search, contentDescription = null) }
+                text = { Text(text = stringResource(R.string.search)) },
+                icon = {
+                    Icon(
+                        imageVector = Icons.Default.Search,
+                        contentDescription = stringResource(R.string.desc_search_button)
+                    )
+                }
             )
         },
         bottomBar = {
@@ -89,8 +98,8 @@ fun DownloadSearchScreen(
                         content = {
                             Text(
                                 text = annotatedLinkString(
-                                    text = "Powered by The Mod Archive",
-                                    url = "https://modarchive.org/"
+                                    text = stringResource(R.string.search_api_credits),
+                                    url = Constants.TMA_BASE_URL,
                                 ),
                             )
                         }
@@ -121,7 +130,7 @@ fun DownloadSearchScreen(
                     },
                     isError = hasInteracted && query.length < 3,
                     singleLine = true,
-                    label = { Text(text = "Search") },
+                    label = { Text(text = stringResource(R.string.search)) },
                     keyboardOptions = KeyboardOptions(imeAction = ImeAction.Search),
                     keyboardActions = KeyboardActions(
                         onSearch = {
@@ -131,7 +140,7 @@ fun DownloadSearchScreen(
                             } else {
                                 scope.launch {
                                     snackbarHostState.showSnackbar(
-                                        message = "At least 3 characters required to search"
+                                        message = resource.getString(R.string.snack_query_too_short)
                                     )
                                 }
                             }
@@ -148,13 +157,13 @@ fun DownloadSearchScreen(
                     content = {
                         toggleableItem(
                             checked = type == SearchType.TITLE,
-                            label = "Title or Filename",
+                            label = resource.getString(R.string.search_selection_title),
                             onCheckedChange = { type = SearchType.TITLE },
                             weight = 1f,
                         )
                         toggleableItem(
                             checked = type == SearchType.ARTIST,
-                            label = "Artist",
+                            label = resource.getString(R.string.search_selection_artist),
                             onCheckedChange = { type = SearchType.ARTIST },
                             weight = 1f,
                         )
@@ -180,7 +189,7 @@ fun DownloadSearchScreen(
                                             modifier = Modifier.size(18.dp)
                                         )
                                         Spacer(modifier = Modifier.width(6.dp))
-                                        Text(text = "Random")
+                                        Text(text = stringResource(R.string.random))
                                     }
                                 )
                             },
@@ -197,7 +206,7 @@ fun DownloadSearchScreen(
                                             contentDescription = null,
                                         )
                                         Spacer(modifier = Modifier.width(6.dp))
-                                        Text(text = "History")
+                                        Text(text = stringResource(R.string.history))
                                     }
                                 )
                             },

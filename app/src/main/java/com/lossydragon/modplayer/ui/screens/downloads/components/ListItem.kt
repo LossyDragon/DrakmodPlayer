@@ -6,9 +6,11 @@ import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.*
 import androidx.compose.ui.graphics.*
+import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.style.*
 import androidx.compose.ui.tooling.preview.*
 import androidx.compose.ui.unit.*
+import com.lossydragon.modplayer.R
 import com.lossydragon.modplayer.model.Artist
 import com.lossydragon.modplayer.model.ArtistInfo
 import com.lossydragon.modplayer.model.Module
@@ -27,7 +29,7 @@ internal fun ArtistListItem(alias: String, onClick: () -> Unit) {
         ),
         content = {
             Text(
-                text = alias.ifEmpty { "(untitled)" },
+                text = alias.ifEmpty { stringResource(R.string.untitled) },
                 style = MaterialTheme.typography.bodyLarge
             )
         },
@@ -66,7 +68,7 @@ internal fun ModuleListItem(module: Module, onClick: () -> Unit) {
         },
         content = {
             Text(
-                text = module.songtitle.ifBlank { "(untitled)" }.fromHtml(),
+                text = module.songtitle.fromHtml().ifBlank { stringResource(R.string.untitled) },
                 maxLines = 1,
                 overflow = TextOverflow.Ellipsis
             )

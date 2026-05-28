@@ -3,6 +3,7 @@ package com.lossydragon.modplayer.core
 object Constants {
     const val ROOM_DATABASE_NAME: String = "xmp_database"
     const val HTTP_BASE_URL: String = "https://api.modarchive.org"
+    const val TMA_BASE_URL: String = "https://modarchive.org/"
     val UNSUPPORTED_EXTENSIONS = setOf("ahx", "hvl", "mo3")
     val SKIP_EXTENSIONS = setOf(
         "txt", "pdf", "doc", "docx", "rtf", "nfo", "diz", "me",

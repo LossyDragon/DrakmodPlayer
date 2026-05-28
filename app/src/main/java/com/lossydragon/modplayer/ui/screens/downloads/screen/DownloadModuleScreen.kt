@@ -8,12 +8,15 @@ import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.*
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.platform.LocalResources
+import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.style.*
 import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.tooling.preview.PreviewParameter
 import androidx.compose.ui.tooling.preview.PreviewParameterProvider
 import androidx.compose.ui.unit.*
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
+import com.lossydragon.modplayer.R
 import com.lossydragon.modplayer.model.DownloadStatus
 import com.lossydragon.modplayer.model.Module
 import com.lossydragon.modplayer.model.ModuleResult
@@ -52,21 +55,26 @@ internal fun DownloadModuleScreen(
         AlertDialog(
             onDismissRequest = { showDeleteDialog = false },
             icon = { Icon(Icons.Default.Delete, null) },
-            title = { Text("Delete Module") },
-            text = { Text("Delete ${state.result?.module?.filename}?") },
+            title = { Text(text = stringResource(R.string.dialog_title_delete_module)) },
+            text = {
+                val name = state.result?.module?.filename
+                    .orEmpty()
+                    .ifEmpty { stringResource(R.string.untitled) }
+                Text(text = stringResource(R.string.dialog_message_delete_module, name))
+            },
             confirmButton = {
                 TextButton(
                     onClick = {
                         state.result?.module?.let { viewModel.deleteModule(it) }
                         showDeleteDialog = false
                     },
-                    content = { Text("Delete") }
+                    content = { Text(text = stringResource(R.string.delete)) }
                 )
             },
             dismissButton = {
                 TextButton(
                     onClick = { showDeleteDialog = false },
-                    content = { Text("Cancel") }
+                    content = { Text(text = stringResource(R.string.cancel)) }
                 )
             }
         )
@@ -93,13 +101,18 @@ private fun DownloadModuleContent(
     modifier: Modifier = Modifier,
     onPlay: (Module) -> Unit
 ) {
+    val resource = LocalResources.current
     Scaffold(
         modifier = modifier,
         topBar = {
             CenterAlignedTopAppBar(
                 title = {
                     Text(
-                        text = if (state.isRandom) "Random Module" else "Module Details",
+                        text = if (state.isRandom) {
+                            stringResource(R.string.title_download_random)
+                        } else {
+                            stringResource(R.string.title_download_module)
+                        },
                         maxLines = 1,
                         overflow = TextOverflow.Ellipsis,
                     )
@@ -119,13 +132,18 @@ private fun DownloadModuleContent(
                     }
                     state.result?.module?.infopage?.let { url ->
                         val context = LocalContext.current
-                        val module = state.result.module
-                        fun Module.shareText() = "${songtitle.ifBlank { filename }} " +
-                            "(by $artist) from The Mod Archive:\n$infopage"
-
                         if (url.isNotBlank()) {
                             IconButton(
-                                onClick = { context.shareLink(message = module.shareText()) },
+                                onClick = {
+                                    val module = state.result.module
+                                    fun Module.shareText() = resource.getString(
+                                        R.string.module_download_share,
+                                        songtitle.ifBlank { filename },
+                                        artist,
+                                        infopage
+                                    )
+                                    context.shareLink(message = module.shareText())
+                                },
                                 content = {
                                     Icon(
                                         imageVector = Icons.Default.Share,
@@ -165,18 +183,18 @@ private fun DownloadModuleContent(
                             val isDownloading = state.downloadStatus is DownloadStatus.Loading ||
                                 state.downloadStatus is DownloadStatus.Progress
                             val buttonLabel = when {
-                                state.isLoading -> "Loading..."
+                                state.isLoading -> stringResource(R.string.loading)
 
                                 isDownloading -> when (val s = state.downloadStatus) {
                                     is DownloadStatus.Progress -> "%.0f%%".format(s.percent)
-                                    else -> "Downloading..."
+                                    else -> stringResource(R.string.downloading)
                                 }
 
-                                state.moduleExists -> "Play"
+                                state.moduleExists -> stringResource(R.string.play)
 
-                                module?.isSupported == false -> "Unsupported"
+                                module?.isSupported == false -> stringResource(R.string.unsupported)
 
-                                else -> "Download"
+                                else -> stringResource(R.string.download)
                             }
 
                             Button(
@@ -199,7 +217,7 @@ private fun DownloadModuleContent(
                                 shape = MaterialTheme.shapes.small,
                                 enabled = !state.isLoading && !isDownloading,
                                 onClick = onRandomModule,
-                                content = { Text(text = "Random") }
+                                content = { Text(text = stringResource(R.string.random)) }
                             )
                         }
                     )
@@ -219,7 +237,12 @@ private fun DownloadModuleContent(
                         MessageBox(
                             text = it,
                             actions = {
-                                TextButton(onClick = onBack, content = { Text(text = "Go Back") })
+                                TextButton(
+                                    onClick = onBack,
+                                    content = {
+                                        Text(text = stringResource(R.string.desc_back_button))
+                                    }
+                                )
                             }
                         )
                     }

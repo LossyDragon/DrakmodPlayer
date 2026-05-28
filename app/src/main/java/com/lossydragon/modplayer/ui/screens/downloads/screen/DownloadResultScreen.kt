@@ -7,10 +7,12 @@ import androidx.compose.material.icons.automirrored.filled.*
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.*
+import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.style.*
 import androidx.compose.ui.tooling.preview.*
 import androidx.compose.ui.unit.*
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
+import com.lossydragon.modplayer.R
 import com.lossydragon.modplayer.model.ArtistResult
 import com.lossydragon.modplayer.model.DownloadSearchState
 import com.lossydragon.modplayer.model.Item
@@ -71,7 +73,7 @@ private fun DownloadScreenContent(
             CenterAlignedTopAppBar(
                 title = {
                     Text(
-                        text = state.title.ifBlank { "Results" },
+                        text = state.title.ifBlank { stringResource(R.string.results) },
                         maxLines = 1,
                         overflow = TextOverflow.Ellipsis
                     )
@@ -93,7 +95,10 @@ private fun DownloadScreenContent(
                 MessageBox(
                     text = it,
                     actions = {
-                        TextButton(onClick = onBack, content = { Text(text = "Go Back") })
+                        TextButton(
+                            onClick = onBack,
+                            content = { Text(text = stringResource(R.string.desc_back_button)) }
+                        )
                     }
                 )
             }
@@ -119,9 +124,14 @@ private fun DownloadScreenContent(
                         )
                     } else {
                         MessageBox(
-                            text = "No modules found.",
+                            text = stringResource(R.string.message_no_modules),
                             actions = {
-                                TextButton(onClick = onBack, content = { Text(text = "Go Back") })
+                                TextButton(
+                                    onClick = onBack,
+                                    content = {
+                                        Text(text = stringResource(R.string.desc_back_button))
+                                    }
+                                )
                             }
                         )
                     }
@@ -145,9 +155,14 @@ private fun DownloadScreenContent(
                         )
                     } else {
                         MessageBox(
-                            text = "No artists found.",
+                            text = stringResource(R.string.message_no_artists),
                             actions = {
-                                TextButton(onClick = onBack, content = { Text(text = "Go Back") })
+                                TextButton(
+                                    onClick = onBack,
+                                    content = {
+                                        Text(text = stringResource(R.string.desc_back_button))
+                                    }
+                                )
                             }
                         )
                     }

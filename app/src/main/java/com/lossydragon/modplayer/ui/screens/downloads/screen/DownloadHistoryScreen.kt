@@ -7,8 +7,10 @@ import androidx.compose.material.icons.filled.*
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.*
+import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.tooling.preview.*
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
+import com.lossydragon.modplayer.R
 import com.lossydragon.modplayer.model.Artist
 import com.lossydragon.modplayer.model.ArtistInfo
 import com.lossydragon.modplayer.model.Module
@@ -36,21 +38,21 @@ internal fun DownloadHistoryScreen(
         AlertDialog(
             onDismissRequest = { showClearDialog = false },
             icon = { Icon(imageVector = Icons.Default.DeleteForever, contentDescription = null) },
-            title = { Text(text = "Clear History") },
-            text = { Text(text = "Clear your module search history?") },
+            title = { Text(text = stringResource(R.string.dialog_title_clear_history)) },
+            text = { Text(text = stringResource(R.string.dialog_message_clear_history)) },
             confirmButton = {
                 TextButton(
                     onClick = {
                         viewModel.clear()
                         showClearDialog = false
                     },
-                    content = { Text(text = "Clear") }
+                    content = { Text(text = stringResource(R.string.clear)) }
                 )
             },
             dismissButton = {
                 TextButton(
                     onClick = { showClearDialog = false },
-                    content = { Text(text = "Cancel") }
+                    content = { Text(text = stringResource(R.string.cancel)) }
                 )
             }
         )
@@ -77,7 +79,7 @@ private fun DownloadHistoryContent(
         modifier = modifier,
         topBar = {
             CenterAlignedTopAppBar(
-                title = { Text(text = "History") },
+                title = { Text(text = stringResource(R.string.title_history)) },
                 navigationIcon = { BackButton(onBack = onBack) },
                 actions = {
                     if (history.isNotEmpty()) {
@@ -86,7 +88,7 @@ private fun DownloadHistoryContent(
                             content = {
                                 Icon(
                                     imageVector = Icons.Default.ClearAll,
-                                    contentDescription = null
+                                    contentDescription = stringResource(R.string.desc_clear_history)
                                 )
                             }
                         )
@@ -103,9 +105,14 @@ private fun DownloadHistoryContent(
             content = {
                 if (history.isEmpty()) {
                     MessageBox(
-                        text = "No items stored in history ",
+                        text = stringResource(R.string.message_no_history),
                         actions = {
-                            TextButton(onClick = onBack, content = { Text(text = "Go Back") })
+                            TextButton(
+                                onClick = onBack,
+                                content = {
+                                    Text(text = stringResource(R.string.desc_back_button))
+                                }
+                            )
                         }
                     )
                 } else {

@@ -33,11 +33,31 @@ internal fun ChipList(
     onAudioInfo: () -> Unit
 ) {
     val assistChips = persistentListOf(
-        ChipItem("Show Subsongs", Icons.Default.FormatListNumbered, onShowDurations),
-        ChipItem("Mod Info", Icons.Default.Info, onModInfo),
-        ChipItem("Mod Instruments", Icons.AutoMirrored.Filled.List, onShowSongInstruments),
-        ChipItem("Song Message", Icons.AutoMirrored.Filled.Comment, onShowSongMessage),
-        ChipItem("Audio Info (Oboe)", Icons.Default.BugReport, onAudioInfo),
+        ChipItem(
+            label = "Show Subsongs",
+            icon = Icons.Default.FormatListNumbered,
+            onClick = onShowDurations
+        ),
+        ChipItem(
+            label = "Mod Info",
+            icon = Icons.Default.Info,
+            onClick = onModInfo
+        ),
+        ChipItem(
+            label = "Mod Instruments",
+            icon = Icons.AutoMirrored.Filled.List,
+            onClick = onShowSongInstruments
+        ),
+        ChipItem(
+            label = "Song Message",
+            icon = Icons.AutoMirrored.Filled.Comment,
+            onClick = onShowSongMessage
+        ),
+        ChipItem(
+            label = "Audio Info (Oboe)",
+            icon = Icons.Default.BugReport,
+            onClick = onAudioInfo
+        ),
     )
 
     LazyRow(

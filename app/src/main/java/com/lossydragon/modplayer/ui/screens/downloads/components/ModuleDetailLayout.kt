@@ -7,11 +7,14 @@ import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.runtime.saveable.*
 import androidx.compose.ui.*
+import androidx.compose.ui.platform.LocalResources
+import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.*
 import androidx.compose.ui.text.font.*
 import androidx.compose.ui.text.style.*
 import androidx.compose.ui.tooling.preview.*
 import androidx.compose.ui.unit.*
+import com.lossydragon.modplayer.R
 import com.lossydragon.modplayer.model.Artist
 import com.lossydragon.modplayer.model.ArtistInfo
 import com.lossydragon.modplayer.model.License
@@ -29,6 +32,7 @@ internal fun ModuleDetailLayout(
     moduleResult: ModuleResult,
     modifier: Modifier = Modifier
 ) {
+    val resource = LocalResources.current
     val expandTextColor = MaterialTheme.colorScheme.primary
 
     val module = moduleResult.module
@@ -51,29 +55,35 @@ internal fun ModuleDetailLayout(
                             color = expandTextColor,
                             fontStyle = FontStyle.Italic
                         ),
-                        block = { append(" Show Less") }
+                        block = {
+                            val text = resource.getString(R.string.show_less)
+                            append(text)
+                        }
                     )
                 }
             }
 
             !isExpanded && textLayoutResultState!!.hasVisualOverflow -> {
                 val lastCharIndex = textLayoutResultState!!.getLineEnd(1, true)
-                val showMoreString = "Show More"
+                val showMoreString = resource.getString(R.string.show_more)
                 val adjustedText = module.license.description
                     .take(lastCharIndex)
                     .dropLast(showMoreString.length)
                     .dropLastWhile { it == ' ' || it == '.' }
 
                 licenseText = buildAnnotatedString {
-                    append("$adjustedText... ")
+                    val text = resource.getString(
+                        R.string.module_detail_adjusted_text,
+                        adjustedText
+                    )
+                    append(text)
                     withStyle(
                         style = SpanStyle(
                             color = expandTextColor,
                             fontStyle = FontStyle.Italic
-                        )
-                    ) {
-                        append(showMoreString)
-                    }
+                        ),
+                        block = { append(showMoreString) }
+                    )
                 }
             }
         }
@@ -96,7 +106,7 @@ internal fun ModuleDetailLayout(
         }
 
         val size = module.bytes.toLong().formatSize()
-        val info = "${module.format} by ${module.artist} ($size)"
+        val info = stringResource(R.string.module_detail_by, module.format, module.artist, size)
 
         Spacer(modifier = Modifier.height(10.dp))
         // Title
@@ -115,7 +125,7 @@ internal fun ModuleDetailLayout(
         )
         Spacer(modifier = Modifier.height(10.dp))
         // License
-        HeaderText(text = "License")
+        HeaderText(text = stringResource(R.string.module_detail_license))
         Spacer(modifier = Modifier.height(5.dp))
         // Licence Link
         Text(
@@ -143,14 +153,14 @@ internal fun ModuleDetailLayout(
         // Comment
         if (module.comment.isNotEmpty()) {
             // Song Message
-            HeaderText(text = "Song Message")
+            HeaderText(text = stringResource(R.string.module_detail_song_message))
             Spacer(modifier = Modifier.height(10.dp))
             // Song Message Content
             MonoSpaceText(text = module.formattedComment)
             Spacer(modifier = Modifier.height(10.dp))
         }
         // Instruments
-        HeaderText(text = "Instruments")
+        HeaderText(text = stringResource(R.string.module_detail_instruments))
         Spacer(modifier = Modifier.height(10.dp))
         // Instruments Content
         MonoSpaceText(text = module.formattedInstruments)
@@ -158,7 +168,7 @@ internal fun ModuleDetailLayout(
         // Sponsor
         if (moduleResult.hasSponsor) {
             val sponsor = moduleResult.sponsor.details
-            HeaderText(text = "Sponsor")
+            HeaderText(text = stringResource(R.string.module_detail_sponsor))
             Spacer(modifier = Modifier.height(10.dp))
             // Sponsor Content
             Text(
