@@ -51,7 +51,6 @@
             android:name=".player.PlayerService"
             android:exported="true"
             android:foregroundServiceType="mediaPlayback"
-            android:permission="android.permission.MEDIA_CONTENT_CONTROL"
             android:stopWithTask="false">
             <intent-filter>
                 <action android:name="androidx.media3.session.MediaLibraryService" />
