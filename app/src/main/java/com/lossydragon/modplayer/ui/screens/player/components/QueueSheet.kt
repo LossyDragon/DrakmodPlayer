@@ -48,7 +48,7 @@ internal fun QueueSheet(
                 contentAlignment = Alignment.Center,
                 content = {
                     Text(
-                        text = stringResource(R.string.title_queue_sheet),
+                        text = stringResource(R.string.title_queue_sheet, queue.size),
                         style = MaterialTheme.typography.titleMedium,
                     )
                     IconButton(

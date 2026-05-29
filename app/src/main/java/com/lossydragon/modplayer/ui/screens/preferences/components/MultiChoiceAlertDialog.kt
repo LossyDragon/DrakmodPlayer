@@ -1,5 +1,6 @@
 package com.lossydragon.modplayer.ui.screens.preferences.components
 
+import androidx.annotation.StringRes
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
@@ -26,8 +27,8 @@ import kotlinx.collections.immutable.ImmutableList
 
 internal data class FlagItem(
     val flag: Int,
-    val title: String,
-    val description: String
+    @param:StringRes val title: Int,
+    @param:StringRes val description: Int
 )
 
 @Composable
@@ -47,8 +48,8 @@ internal fun MultiChoiceAlertDialog(
                 items.forEach { item ->
                     val checked = (working and item.flag) != 0
                     LabelCheckbox(
-                        title = item.title,
-                        description = item.description,
+                        title = stringResource(item.title),
+                        description = stringResource(item.description),
                         checked = checked,
                         onCheckedChange = { isChecked ->
                             working = if (isChecked) {

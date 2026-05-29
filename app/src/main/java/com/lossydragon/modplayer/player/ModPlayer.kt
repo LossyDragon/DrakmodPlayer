@@ -1,6 +1,5 @@
 package com.lossydragon.modplayer.player
 
-import android.content.ContentResolver
 import android.content.Context
 import android.media.AudioAttributes
 import android.media.AudioFocusRequest
@@ -22,8 +21,6 @@ import com.google.common.util.concurrent.ListenableFuture
 import com.lossydragon.modplayer.R
 import com.lossydragon.modplayer.db.AppPreferences
 import com.lossydragon.modplayer.model.ModuleFile
-import kotlin.math.abs
-import kotlin.time.Duration.Companion.milliseconds
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
@@ -38,6 +35,8 @@ import kotlinx.serialization.json.Json
 import org.helllabs.libxmp.Xmp
 import org.helllabs.libxmp.model.ModInfo
 import timber.log.Timber
+import kotlin.math.abs
+import kotlin.time.Duration.Companion.milliseconds
 
 /**
  * Media3 [androidx.media3.common.SimpleBasePlayer] backed by [PlayerEngine].

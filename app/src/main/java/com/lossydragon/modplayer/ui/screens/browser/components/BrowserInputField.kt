@@ -3,13 +3,12 @@ package com.lossydragon.modplayer.ui.screens.browser.components
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.text.input.*
 import androidx.compose.material.icons.*
-import androidx.compose.material.icons.automirrored.filled.*
 import androidx.compose.material.icons.filled.*
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.*
 import androidx.compose.ui.graphics.*
-import androidx.compose.ui.res.stringResource
+import androidx.compose.ui.res.*
 import androidx.compose.ui.tooling.preview.*
 import com.lossydragon.modplayer.R
 import com.lossydragon.modplayer.model.BrowserSortOrder

@@ -26,59 +26,45 @@ private fun Int.toPerfModeKey() = when (this) {
     else -> "lowlatency"
 }
 
-private fun String.toPerfModeInt() = when (this) {
-    "none" -> Xmp.OBOE_PERFMODE_NONE
-    "powersaving" -> Xmp.OBOE_PERFMODE_POWERSAVING
-    else -> Xmp.OBOE_PERFMODE_LOWLATENCY
-}
-
 private fun Int.toAudioApiKey() = when (this) {
     Xmp.OBOE_AUDIO_API_AAUDIO -> "aaudio"
     Xmp.OBOE_AUDIO_API_OPENSLES -> "opensles"
     else -> "unspecified"
 }
 
-private fun String.toAudioApiInt() = when (this) {
-    "aaudio" -> Xmp.OBOE_AUDIO_API_AAUDIO
-    "opensles" -> Xmp.OBOE_AUDIO_API_OPENSLES
-    else -> Xmp.OBOE_AUDIO_API_UNSPECIFIED
-}
-
-// TODO localize
 private val perfModeOptions = persistentListOf(
     PreferenceItem(
         key = "lowlatency",
-        title = "Low Latency (Default)",
-        description = "Minimizes audio latency. Best for real-time playback but uses more battery."
+        title = R.string.pref_audio_perf_item_lowlatency,
+        description = R.string.pref_audio_perf_item_lowlatency_desc
     ),
     PreferenceItem(
         key = "none",
-        title = "None",
-        description = "No particular performance target. Balanced between latency and battery."
+        title = R.string.pref_audio_perf_item_none,
+        description = R.string.pref_audio_perf_item_none_desc
     ),
     PreferenceItem(
         key = "powersaving",
-        title = "Power Saving",
-        description = "Prioritizes battery life over latency. May introduce audio buffering."
+        title = R.string.pref_audio_perf_item_power_saving,
+        description = R.string.pref_audio_perf_item_power_saving_desc
     ),
 )
 
-// TODO localize
 private val apiOptions = persistentListOf(
     PreferenceItem(
         key = "unspecified",
-        title = "Unspecified (Default)",
-        description = "Lets Oboe choose the best available API. Recommended for most devices."
+        title = R.string.pref_audio_api_item_unspecified,
+        description = R.string.pref_audio_api_item_unspecified_desc
     ),
     PreferenceItem(
         key = "aaudio",
-        title = "AAudio",
-        description = "Modern low-latency Android audio API. Available on Android 8.0+ (API 26+)."
+        title = R.string.pref_audio_api_item_aaudio,
+        description = R.string.pref_audio_api_item_aaudio_desc
     ),
     PreferenceItem(
         key = "opensles",
-        title = "OpenSL ES",
-        description = "Legacy audio API. Deprecated in Android 13 but may help on older or problematic devices."
+        title = R.string.pref_audio_api_item_opensles,
+        description = R.string.pref_audio_api_item_opensles_desc
     ),
 )
 
@@ -105,6 +91,11 @@ fun PreferenceOboe(
             selectedItemKey = perfMode.toPerfModeKey(),
             items = perfModeOptions,
             onItemSelected = { key ->
+                fun String.toPerfModeInt() = when (this) {
+                    "none" -> Xmp.OBOE_PERFMODE_NONE
+                    "powersaving" -> Xmp.OBOE_PERFMODE_POWERSAVING
+                    else -> Xmp.OBOE_PERFMODE_LOWLATENCY
+                }
                 isPerfModeShowing = false
                 key?.let { scope.launch { prefs.setOboePerfMode(it.toPerfModeInt()) } }
             },
@@ -117,6 +108,11 @@ fun PreferenceOboe(
             selectedItemKey = audioApi.toAudioApiKey(),
             items = apiOptions,
             onItemSelected = { key ->
+                fun String.toAudioApiInt() = when (this) {
+                    "aaudio" -> Xmp.OBOE_AUDIO_API_AAUDIO
+                    "opensles" -> Xmp.OBOE_AUDIO_API_OPENSLES
+                    else -> Xmp.OBOE_AUDIO_API_UNSPECIFIED
+                }
                 isAudioApiShowing = false
                 key?.let { scope.launch { prefs.setOboeAudioApi(it.toAudioApiInt()) } }
             },
@@ -137,9 +133,8 @@ fun PreferenceOboe(
                 title = { Text(text = stringResource(R.string.pref_performance_mode)) },
                 subtitle = { Text(text = stringResource(R.string.pref_performance_mode_desc)) },
                 action = {
-                    Text(
-                        text = perfModeOptions.find { it.key == perfMode.toPerfModeKey() }!!.title
-                    )
+                    val text = perfModeOptions.find { it.key == perfMode.toPerfModeKey() }!!.title
+                    Text(text = stringResource(text))
                 },
                 colors = colors,
                 shapes = ListItemDefaults.segmentedShapes(0, 3),
@@ -149,7 +144,8 @@ fun PreferenceOboe(
                 title = { Text(text = stringResource(R.string.pref_audio_api)) },
                 subtitle = { Text(text = stringResource(R.string.pref_audio_api_desc)) },
                 action = {
-                    Text(text = apiOptions.find { it.key == audioApi.toAudioApiKey() }!!.title)
+                    val text = apiOptions.find { it.key == audioApi.toAudioApiKey() }!!.title
+                    Text(text = stringResource(text))
                 },
                 colors = colors,
                 shapes = ListItemDefaults.segmentedShapes(2, 3),

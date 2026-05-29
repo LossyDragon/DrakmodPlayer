@@ -33,52 +33,51 @@ import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.launch
 import org.koin.compose.koinInject
 
-// TODO localize
 private val styleItems = persistentListOf(
     PreferenceItem(
         key = PaletteStyle.TonalSpot.name,
-        title = "Tonal Spot",
-        description = "Calm, sedated colors"
+        title = R.string.pref_style_item_tonal,
+        description = R.string.pref_style_item_tonal_desc
     ),
     PreferenceItem(
         key = PaletteStyle.Neutral.name,
-        title = "Neutral",
-        description = "Slightly more chromatic than monochrome"
+        title = R.string.pref_style_item_neutral,
+        description = R.string.pref_style_item_neutral_desc
     ),
     PreferenceItem(
         key = PaletteStyle.Vibrant.name,
-        title = "Vibrant",
-        description = "Loud, maximum colorfulness"
+        title = R.string.pref_style_item_vibrant,
+        description = R.string.pref_style_item_vibrant_desc
     ),
     PreferenceItem(
         key = PaletteStyle.Expressive.name,
-        title = "Expressive",
-        description = "Playful, hue does not appear in theme"
+        title = R.string.pref_style_item_expressive,
+        description = R.string.pref_style_item_expressive_desc
     ),
     PreferenceItem(
         key = PaletteStyle.Rainbow.name,
-        title = "Rainbow",
-        description = "Playful, hue does not appear in theme"
+        title = R.string.pref_style_item_rainbow,
+        description = R.string.pref_style_item_rainbow_desc
     ),
     PreferenceItem(
         key = PaletteStyle.FruitSalad.name,
-        title = "Fruit Salad",
-        description = "Playful, hue does not appear in theme"
+        title = R.string.pref_style_item_fruit,
+        description = R.string.pref_style_item_fruit_desc
     ),
     PreferenceItem(
         key = PaletteStyle.Monochrome.name,
-        title = "Monochrome",
-        description = "Purely black, white, and gray"
+        title = R.string.pref_style_item_monocrhome,
+        description = R.string.pref_style_item_monocrhome_desc
     ),
     PreferenceItem(
         key = PaletteStyle.Fidelity.name,
-        title = "Fidelity",
-        description = "Source color placed in primaryContainer"
+        title = R.string.pref_style_item_fidelity,
+        description = R.string.pref_style_item_fidelity_desc
     ),
     PreferenceItem(
         key = PaletteStyle.Content.name,
-        title = "Content",
-        description = "Source color with analogous tertiary"
+        title = R.string.pref_style_item_content,
+        description = R.string.pref_style_item_content_desc
     ),
 )
 

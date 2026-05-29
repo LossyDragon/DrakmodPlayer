@@ -6,50 +6,18 @@ import androidx.activity.compose.BackHandler
 import androidx.activity.compose.LocalActivity
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
-import androidx.compose.animation.AnimatedVisibility
-import androidx.compose.animation.Crossfade
-import androidx.compose.animation.core.animateDpAsState
-import androidx.compose.animation.fadeIn
-import androidx.compose.animation.fadeOut
-import androidx.compose.animation.slideInVertically
-import androidx.compose.animation.slideOutVertically
-import androidx.compose.foundation.layout.Arrangement
-import androidx.compose.foundation.layout.Box
-import androidx.compose.foundation.layout.fillMaxSize
-import androidx.compose.foundation.layout.padding
-import androidx.compose.foundation.lazy.LazyColumn
-import androidx.compose.foundation.lazy.items
-import androidx.compose.foundation.lazy.itemsIndexed
-import androidx.compose.foundation.lazy.rememberLazyListState
-import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.automirrored.filled.ArrowBack
-import androidx.compose.material3.CenterAlignedTopAppBar
-import androidx.compose.material3.ExperimentalMaterial3ExpressiveApi
-import androidx.compose.material3.Icon
-import androidx.compose.material3.IconButton
-import androidx.compose.material3.Scaffold
-import androidx.compose.material3.SnackbarHost
-import androidx.compose.material3.SnackbarHostState
-import androidx.compose.material3.Surface
-import androidx.compose.material3.Text
-import androidx.compose.material3.TextButton
-import androidx.compose.material3.TopAppBar
-import androidx.compose.runtime.Composable
-import androidx.compose.runtime.LaunchedEffect
-import androidx.compose.runtime.getValue
-import androidx.compose.runtime.mutableStateOf
-import androidx.compose.runtime.remember
-import androidx.compose.runtime.rememberCoroutineScope
-import androidx.compose.runtime.setValue
-import androidx.compose.ui.Alignment
-import androidx.compose.ui.Modifier
-import androidx.compose.ui.hapticfeedback.HapticFeedbackType
-import androidx.compose.ui.platform.LocalHapticFeedback
-import androidx.compose.ui.res.stringResource
-import androidx.compose.ui.tooling.preview.Preview
-import androidx.compose.ui.tooling.preview.PreviewParameter
-import androidx.compose.ui.tooling.preview.PreviewParameterProvider
-import androidx.compose.ui.unit.dp
+import androidx.compose.animation.*
+import androidx.compose.animation.core.*
+import androidx.compose.foundation.layout.*
+import androidx.compose.foundation.lazy.*
+import androidx.compose.material3.*
+import androidx.compose.runtime.*
+import androidx.compose.ui.*
+import androidx.compose.ui.hapticfeedback.*
+import androidx.compose.ui.platform.*
+import androidx.compose.ui.res.*
+import androidx.compose.ui.tooling.preview.*
+import androidx.compose.ui.unit.*
 import androidx.core.net.toUri
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.lifecycle.viewmodel.navigation3.rememberViewModelStoreNavEntryDecorator
@@ -188,15 +156,19 @@ private fun PlaylistListScreen(
     onDismissExport: () -> Unit,
     onRenamePlaylist: (PlaylistEntity, String, String) -> Unit
 ) {
-    val hasModule = playerState.currentModule != null
+    val scope = rememberCoroutineScope()
+    val resource = LocalResources.current
 
+    val hasModule by remember(playerState.currentModule) {
+        mutableStateOf(playerState.currentModule != null)
+    }
     var isFabExpanded by remember { mutableStateOf(false) }
 
-    val scope = rememberCoroutineScope()
     val showSnackBar: (String) -> Unit = {
         scope.launch { snackbarHostState.showSnackbar(message = it) }
     }
 
+    // TODO localize
     // Import result snackbar
     LaunchedEffect(state.importResult) {
         state.importResult?.let { result ->
@@ -205,7 +177,10 @@ private fun PlaylistListScreen(
                 append("${result.entriesImported} entries")
                 if (result.skipped > 0) append(", ${result.skipped} skipped")
             }
-            snackbarHostState.showSnackbar(message = message, actionLabel = "Close")
+            snackbarHostState.showSnackbar(
+                message = message,
+                actionLabel = resource.getString(R.string.close)
+            )
             onDismissImport()
         }
     }
@@ -213,7 +188,8 @@ private fun PlaylistListScreen(
     // Export success snackbar
     LaunchedEffect(state.exportSuccess) {
         if (state.exportSuccess) {
-            snackbarHostState.showSnackbar("Playlists exported successfully")
+            val text = resource.getString(R.string.snack_export_ok)
+            snackbarHostState.showSnackbar(text)
             onDismissExport()
         }
     }
@@ -271,7 +247,8 @@ private fun PlaylistListScreen(
         contract = ActivityResultContracts.OpenDocument(),
         onResult = { uri ->
             if (uri == null) {
-                showSnackBar("Import Cancelled")
+                val text = resource.getString(R.string.snack_import_cancelled)
+                showSnackBar(text)
                 return@rememberLauncherForActivityResult
             }
             onImport(uri)
@@ -283,7 +260,8 @@ private fun PlaylistListScreen(
         contract = ActivityResultContracts.CreateDocument("application/json"),
         onResult = { uri ->
             if (uri == null) {
-                showSnackBar("Export Cancelled")
+                val text = resource.getString(R.string.snack_export_cancelled)
+                showSnackBar(text)
                 return@rememberLauncherForActivityResult
             }
             onExport(uri)
@@ -374,7 +352,7 @@ private fun PlaylistListScreen(
                     } else if (state.playlists.isEmpty()) {
                         MessageBox(
                             modifier = Modifier.padding(padding),
-                            text = "No Playlists found",
+                            text = stringResource(R.string.message_no_playlists),
                         )
                     } else {
                         LazyColumn(
@@ -488,7 +466,9 @@ private fun PlaylistEntriesScreen(
                     content = { ProgressbarIndicator(isLoading = true) }
                 )
 
-                state.entries.isEmpty() -> MessageBox(text = "No entries in this playlist")
+                state.entries.isEmpty() -> MessageBox(
+                    text = stringResource(R.string.message_no_playlist_items)
+                )
 
                 else -> {
                     LazyColumn(

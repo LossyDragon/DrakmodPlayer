@@ -1,6 +1,7 @@
 package com.lossydragon.modplayer
 
 import android.Manifest
+import android.annotation.SuppressLint
 import android.content.ComponentName
 import android.os.Bundle
 import androidx.activity.ComponentActivity
@@ -57,6 +58,7 @@ class MainActivity : ComponentActivity() {
         setEdgeToEdgeConfig()
 
         requestNotificationPermission {
+            @SuppressLint("InlinedApi")
             notificationPermission.launch(Manifest.permission.POST_NOTIFICATIONS)
         }
         requestWriteStoragePermission {

@@ -5,11 +5,10 @@ import android.net.Uri
 import androidx.core.net.toUri
 import com.lossydragon.modplayer.db.entity.PlaylistEntity
 import com.lossydragon.modplayer.db.entity.PlaylistEntryEntity
-import java.time.Instant
 import kotlinx.serialization.Serializable
-import kotlinx.serialization.encodeToString
 import kotlinx.serialization.json.Json
 import timber.log.Timber
+import java.time.Instant
 
 @Serializable
 data class PlaylistExport(

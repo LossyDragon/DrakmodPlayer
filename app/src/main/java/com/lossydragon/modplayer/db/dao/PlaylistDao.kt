@@ -3,7 +3,6 @@ package com.lossydragon.modplayer.db.dao
 import androidx.room.Dao
 import androidx.room.Insert
 import androidx.room.Query
-import androidx.room.Update
 import com.lossydragon.modplayer.db.entity.PlaylistEntity
 import com.lossydragon.modplayer.db.entity.PlaylistEntryEntity
 import kotlinx.coroutines.flow.Flow

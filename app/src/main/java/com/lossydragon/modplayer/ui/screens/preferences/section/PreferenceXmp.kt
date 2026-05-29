@@ -46,6 +46,93 @@ private fun formatFlagsLabel(flags: Int): String {
     return parts.joinToString(", ")
 }
 
+private val sampleRateOptions = persistentListOf(
+    PreferenceItem(
+        key = "8000",
+        title = R.string.pref_sample_item_8000,
+        description = R.string.pref_sample_item_8000_desc
+    ),
+    PreferenceItem(
+        key = "22050",
+        title = R.string.pref_sample_item_22050,
+        description = R.string.pref_sample_item_22050_desc
+    ),
+    PreferenceItem(
+        key = "44100",
+        title = R.string.pref_sample_item_44100,
+        description = R.string.pref_sample_item_44100_desc
+    ),
+    PreferenceItem(
+        key = "48000",
+        title = R.string.pref_sample_item_48000,
+        description = R.string.pref_sample_item_48000_desc
+    ),
+)
+
+private val flagItems = persistentListOf(
+    FlagItem(
+        flag = Xmp.XMP_FLAGS_VBLANK,
+        title = R.string.pref_flags_item_vblank,
+        description = R.string.pref_flags_item_vblank_desc
+    ),
+    FlagItem(
+        flag = Xmp.XMP_FLAGS_FX9BUG,
+        title = R.string.pref_flags_item_fx9,
+        description = R.string.pref_flags_item_fx9_desc
+    ),
+    FlagItem(
+        flag = Xmp.XMP_FLAGS_FIXLOOP,
+        title = R.string.pref_flags_item_fix_loop,
+        description = R.string.pref_flags_item_fix_loop_desc
+    ),
+    FlagItem(
+        flag = Xmp.XMP_FLAGS_A500,
+        title = R.string.pref_flags_item_a500,
+        description = R.string.pref_flags_item_a500_desc
+    ),
+)
+
+private val interpOptions = persistentListOf(
+    PreferenceItem(
+        key = Xmp.XMP_INTERP_NEAREST.toString(),
+        title = R.string.pref_interp_item_nearest,
+        description = R.string.pref_interp_item_nearest_desc
+    ),
+    PreferenceItem(
+        key = Xmp.XMP_INTERP_LINEAR.toString(),
+        title = R.string.pref_interp_item_linear,
+        description = R.string.pref_interp_item_linear_desc
+    ),
+    PreferenceItem(
+        key = Xmp.XMP_INTERP_SPLINE.toString(),
+        title = R.string.pref_interp_item_spline,
+        description = R.string.pref_interp_item_spline_desc
+    ),
+)
+
+private val formatOptions = persistentListOf(
+    FlagItem(
+        flag = Xmp.XMP_FORMAT_8BIT,
+        title = R.string.pref_format_item_8bit,
+        description = R.string.pref_format_item_8bit_desc
+    ),
+    FlagItem(
+        flag = Xmp.XMP_FORMAT_UNSIGNED,
+        title = R.string.pref_format_item_unsigned,
+        description = R.string.pref_format_item_unsigned_desc
+    ),
+    FlagItem(
+        flag = Xmp.XMP_FORMAT_MONO,
+        title = R.string.pref_format_item_mono,
+        description = R.string.pref_format_item_mono_desc
+    ),
+    FlagItem(
+        flag = Xmp.XMP_FORMAT_32BIT,
+        title = R.string.pref_format_item_32bit,
+        description = R.string.pref_format_item_32bit_desc
+    ),
+)
+
 @OptIn(ExperimentalMaterial3ExpressiveApi::class)
 @Composable
 fun PreferenceXmp(
@@ -56,62 +143,6 @@ fun PreferenceXmp(
         AppPreferences(LocalContext.current)
     } else {
         koinInject<AppPreferences>()
-    }
-
-    // TODO localize
-    val sampleRateOptions = remember {
-        persistentListOf(
-            PreferenceItem(key = "8000", title = "8000 Hz", description = "Telephone quality"),
-            PreferenceItem(key = "22050", title = "22050 Hz", description = "Low quality"),
-            PreferenceItem(key = "44100", title = "44100 Hz", description = "CD quality"),
-            PreferenceItem(key = "48000", title = "48000 Hz", description = "DVD quality"),
-        )
-    }
-    // TODO localize
-    val flagItems = remember {
-        persistentListOf(
-            FlagItem(
-                flag = Xmp.XMP_FLAGS_VBLANK,
-                title = "VBlank timing",
-                description = "Use vblank timing"
-            ),
-            FlagItem(
-                flag = Xmp.XMP_FLAGS_FX9BUG,
-                title = "FX9 bug",
-                description = "Emulate Protracker 2.x FX9 bug"
-            ),
-            FlagItem(
-                flag = Xmp.XMP_FLAGS_FIXLOOP,
-                title = "Fix loop",
-                description = "Halve sample loop values"
-            ),
-            FlagItem(
-                flag = Xmp.XMP_FLAGS_A500,
-                title = "Amiga 500 mixer",
-                description = "Use Paula mixer for Amiga modules"
-            ),
-        )
-    }
-
-    // TODO localize
-    val interpOptions = remember {
-        persistentListOf(
-            PreferenceItem(
-                key = Xmp.XMP_INTERP_NEAREST.toString(),
-                title = "Nearest",
-                description = "Nearest neighbor — sharp, low CPU"
-            ),
-            PreferenceItem(
-                key = Xmp.XMP_INTERP_LINEAR.toString(),
-                title = "Linear",
-                description = "Linear interpolation (default)"
-            ),
-            PreferenceItem(
-                key = Xmp.XMP_INTERP_SPLINE.toString(),
-                title = "Spline",
-                description = "Cubic spline — smoothest, highest CPU"
-            ),
-        )
     }
 
     val sampleRate by prefs.getSampleRateFlow()
@@ -177,12 +208,7 @@ fun PreferenceXmp(
         // TODO localize
         MultiChoiceAlertDialog(
             currentFlags = formatFlags,
-            items = persistentListOf(
-                FlagItem(Xmp.XMP_FORMAT_8BIT, "8-bit output", "Takes precedence over 32-bit"),
-                FlagItem(Xmp.XMP_FORMAT_UNSIGNED, "Unsigned samples", "Mix to unsigned samples"),
-                FlagItem(Xmp.XMP_FORMAT_MONO, "Mono output", "Mix to mono instead of stereo"),
-                FlagItem(Xmp.XMP_FORMAT_32BIT, "32-bit output", "Ignored if 8-bit is enabled"),
-            ),
+            items = formatOptions,
             onConfirm = { newFlags ->
                 val sanitized = if ((newFlags and Xmp.XMP_FORMAT_8BIT) != 0) {
                     // 8-bit wins, clear 32-bit
@@ -313,7 +339,7 @@ fun PreferenceXmp(
             )
             SettingsSlider(
                 title = { Text(text = stringResource(R.string.pref_pan)) },
-                subtitle = { Text(text = stringResource(R.string.pref_pan_desc),) },
+                subtitle = { Text(text = stringResource(R.string.pref_pan_desc)) },
                 action = { Text(text = stringResource(R.string.value_percent, pan)) },
                 colors = colors,
                 steps = 4,
