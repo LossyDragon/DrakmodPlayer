@@ -68,6 +68,12 @@ class PlayerEngine(
     val numSequences: Int
         get() = modVars.numSequence
 
+    private var channelSnapshots = Array(64) {
+        ChannelSnapshot(0, 0, 0, 0, 0, 0)
+    }
+    private var channelSnapshotList = channelSnapshots.toImmutableList()
+    private var lastNumCh = -1
+
     @Volatile
     var paused = false
         private set
@@ -375,7 +381,12 @@ class PlayerEngine(
                 }.toList().toImmutableList()
             }.toList().toImmutableList()
 
-            PatternData(patternIndex, numRows, numChannels, cells)
+            PatternData(
+                cells = cells,
+                numChannels = numChannels,
+                numRows = numRows,
+                patternIndex = patternIndex,
+            )
         }
 
     private fun clearPatternCache() = patternCache.clear()
@@ -403,6 +414,25 @@ class PlayerEngine(
                 val timeMs = Xmp.time()
                 val numCh = modVars.numChannels.coerceIn(0, 64)
 
+                // Only reallocate the list when channel count changes
+                if (numCh != lastNumCh) {
+                    channelSnapshots = Array(numCh) { ChannelSnapshot(0, 0, 0, 0, 0, 0) }
+                    lastNumCh = numCh
+                }
+
+                // Mutate snapshots in place
+                for (i in 0 until numCh) {
+                    channelSnapshots[i] = ChannelSnapshot(
+                        volume = channelInfo.volumes[i],
+                        finalVol = channelInfo.finalVols[i],
+                        pan = channelInfo.pans[i],
+                        instrument = channelInfo.instruments[i],
+                        note = channelInfo.keys[i],
+                        period = channelInfo.periods[i],
+                    )
+                }
+                channelSnapshotList = channelSnapshots.toImmutableList()
+
                 frameFlow.value = FrameSnapshot(
                     position = frameInfo.pos,
                     pattern = frameInfo.pattern,
@@ -412,16 +442,7 @@ class PlayerEngine(
                     bpm = frameInfo.bpm,
                     timeMs = timeMs,
                     totalTimeMs = modVars.seqDuration,
-                    channels = Array(numCh) { i ->
-                        ChannelSnapshot(
-                            volume = channelInfo.volumes[i],
-                            finalVol = channelInfo.finalVols[i],
-                            pan = channelInfo.pans[i],
-                            instrument = channelInfo.instruments[i],
-                            note = channelInfo.keys[i],
-                            period = channelInfo.periods[i],
-                        )
-                    }.toImmutableList(),
+                    channels = channelSnapshotList,
                 )
 
                 positionMs.value = timeMs.toLong()

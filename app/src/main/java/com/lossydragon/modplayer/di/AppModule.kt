@@ -28,6 +28,9 @@ import org.koin.core.module.dsl.viewModel
 import org.koin.dsl.module
 
 val appModule = module {
+    // Core
+    single { AppPreferences(androidContext()) }
+
     // ViewModels
     viewModel { DownloadViewModel(get()) }
     viewModel { FileBrowserViewModel(androidContext(), get(), get()) }
@@ -66,5 +69,4 @@ val appModule = module {
     // Media Player
     single { PlayerEngine(androidContext(), get()) }
     single { ModPlayer(androidContext(), get(), get()) }
-    single { AppPreferences(androidContext()) }
 }

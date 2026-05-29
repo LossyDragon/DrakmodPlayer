@@ -1,9 +1,9 @@
 package com.lossydragon.modplayer.model
 
 data class QueueState(
-    val json: String,
     val index: Int,
-    val shuffle: Boolean,
+    val json: String,
+    val positionMs: Long,
     val repeat: Int,
-    val positionMs: Long
+    val shuffle: Boolean
 )

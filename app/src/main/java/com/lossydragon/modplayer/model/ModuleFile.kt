@@ -16,9 +16,9 @@ import kotlinx.serialization.Serializable
 data class ModuleFile(
     @Serializable(with = UriSerializer::class)
     val uri: Uri,
-    val name: String,
-    val sizeBytes: Long,
     val extension: String,
+    val name: String,
     val resolvedName: String = "",
-    val resolvedType: String = ""
+    val resolvedType: String = "",
+    val sizeBytes: Long
 )

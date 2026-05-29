@@ -1,39 +1,42 @@
 package com.lossydragon.modplayer.player.model
 
+import androidx.compose.runtime.Immutable
 import kotlinx.collections.immutable.ImmutableList
 import kotlinx.collections.immutable.persistentListOf
 
 fun emptyPatternData() = PatternData(
-    patternIndex = -1,
-    numRows = 0,
-    numChannels = 0,
     cells = persistentListOf(persistentListOf()),
+    numChannels = 0,
+    numRows = 0,
+    patternIndex = -1,
 )
 
+@Immutable
 data class PatternData(
-    val patternIndex: Int,
-    val numRows: Int,
+    val cells: ImmutableList<ImmutableList<NoteCell>>,
     val numChannels: Int,
-    val cells: ImmutableList<ImmutableList<NoteCell>>
+    val numRows: Int,
+    val patternIndex: Int
 )
 
+@Immutable
 data class NoteCell(
-    val note: Int,
-    val instrument: Int,
+    val fxParam: Int,
     val fxType: Int,
-    val fxParam: Int
+    val instrument: Int,
+    val note: Int
 ) {
     val isEmpty: Boolean
         get() = note == 0 && instrument == 0 && fxType < 0
 
-    val noteStr: String = when {
-        note == 0 -> "---"
+    val noteStr: String = when (note) {
+        0 -> "---"
 
-        note == 0x80 -> "==="
+        0x80 -> "==="
 
-        note == 0x81 -> "^^^"
+        0x81 -> "^^^"
 
-        note in 1..127 -> {
+        in 1..127 -> {
             val n = note - 1
             "${NOTE_NAMES[n % 12]}${n / 12}"
         }

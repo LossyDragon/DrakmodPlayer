@@ -12,23 +12,23 @@ enum class BrowserSortOrder { NAME, TYPE, SIZE }
 
 @Immutable
 data class FileItem(
-    val name: String,
-    val uri: Uri,
     val isDirectory: Boolean,
-    val size: Long
+    val name: String,
+    val size: Long,
+    val uri: Uri
 )
 
 @Immutable
 data class BrowserUiState(
-    val currentPath: String = "",
-    val files: ImmutableList<ModuleFile> = persistentListOf(),
-    val directories: ImmutableList<FileItem> = persistentListOf(),
     val breadcrumbs: ImmutableList<String> = persistentListOf(),
-    val isLoading: Boolean = true,
+    val currentPath: String = "",
+    val directories: ImmutableList<FileItem> = persistentListOf(),
+    val error: String? = null,
+    val files: ImmutableList<ModuleFile> = persistentListOf(),
+    val filterQuery: String = "",
     val hasStorageAccess: Boolean = false,
+    val isLoading: Boolean = true,
     val isShuffle: Boolean = false,
     val repeatMode: Int = Player.REPEAT_MODE_OFF,
-    val error: String? = null,
-    val sortOrder: BrowserSortOrder = BrowserSortOrder.NAME,
-    val filterQuery: String = ""
+    val sortOrder: BrowserSortOrder = BrowserSortOrder.NAME
 )

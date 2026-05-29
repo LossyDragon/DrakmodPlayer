@@ -45,7 +45,7 @@ class PlaylistRepository(private val dao: PlaylistDao) {
     }
 
     suspend fun getAllPlaylistsOnce(): List<PlaylistEntity> =
-        dao.getAllPlaylistsOnce() // add non-Flow version to DAO
+        dao.getAllPlaylistsOnce()
 
     suspend fun getEntriesRaw(playlistId: Long): List<PlaylistEntryEntity> =
         dao.getEntries(playlistId)

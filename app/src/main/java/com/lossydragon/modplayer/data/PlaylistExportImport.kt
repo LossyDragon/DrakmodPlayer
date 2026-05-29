@@ -101,7 +101,7 @@ fun readImportFromUri(
         stream.readBytes().toString(Charsets.UTF_8)
     } ?: error("Could not open input stream for $inputUri")
 
-    json.decodeFromString<PlaylistExport>(jsonString)
+    json.decodeFromString(jsonString)
 }
 
 /**
