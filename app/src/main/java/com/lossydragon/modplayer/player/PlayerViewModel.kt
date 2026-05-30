@@ -11,7 +11,6 @@ import com.lossydragon.modplayer.db.AppPreferences
 import com.lossydragon.modplayer.model.ModuleFile
 import com.lossydragon.modplayer.model.PlaybackStatus
 import com.lossydragon.modplayer.model.PlayerUiState
-import java.nio.charset.StandardCharsets
 import kotlinx.collections.immutable.ImmutableList
 import kotlinx.collections.immutable.persistentListOf
 import kotlinx.collections.immutable.toImmutableList
@@ -23,8 +22,9 @@ import kotlinx.coroutines.flow.onEach
 import kotlinx.coroutines.flow.update
 import org.helllabs.libxmp.Xmp
 import timber.log.Timber
+import java.nio.charset.StandardCharsets
 
-/** Bridges [androidx.media3.common.Player] state to the UI via [PlayerUiState]. */
+/** Bridges [Player] state to the UI via [PlayerUiState]. */
 @OptIn(UnstableApi::class)
 class PlayerViewModel(
     private val appContext: Context,
@@ -51,11 +51,13 @@ class PlayerViewModel(
             }
         }.launchIn(viewModelScope)
 
-        player.currentSequenceFlow
-            .onEach { state.update { s -> s.copy(currentSequence = it) } }
-            .launchIn(viewModelScope)
+        player.currentSequenceFlow.onEach { seq ->
+            Timber.d("currentSequenceFlow fired, seq=$seq")
+            state.update { it.copy(currentSequence = seq) }
+        }.launchIn(viewModelScope)
 
         player.isPlaying.onEach { playing ->
+            Timber.d("isPlaying fired, isPlaying=$playing")
             state.update {
                 it.copy(
                     status = when {
@@ -69,12 +71,13 @@ class PlayerViewModel(
 
         player.queueFlow.onEach { queue ->
             Timber.d("queueFlow fired, size=${queue.size}")
+            val empty = queue.isEmpty()
             state.update {
                 it.copy(
                     queue = queue.toImmutableList(),
-                    currentModule = if (queue.isEmpty()) null else it.currentModule,
-                    status = if (queue.isEmpty()) PlaybackStatus.IDLE else it.status,
-                    frame = if (queue.isEmpty()) null else it.frame,
+                    currentModule = if (empty) null else it.currentModule,
+                    status = if (empty) PlaybackStatus.IDLE else it.status,
+                    frame = if (empty) null else it.frame,
                 )
             }
         }.launchIn(viewModelScope)
@@ -96,31 +99,6 @@ class PlayerViewModel(
             Timber.d("moduleLoadedFlow fired")
             syncModuleInfo()
         }.launchIn(viewModelScope)
-    }
-
-    private fun ModuleFile.displayName() =
-        resolvedName.ifBlank { name.ifBlank { "(Untitled)" } }
-
-    private fun ModuleFile.displayType() =
-        resolvedType.ifBlank { extension.uppercase().ifBlank { "???" } }
-
-    private fun ensureServiceRunning() {
-        val intent = Intent(appContext, PlayerService::class.java)
-        appContext.startService(intent)
-    }
-
-    private fun syncModuleInfo() {
-        state.update {
-            it.copy(
-                sequenceDurations = player.sequenceDurations.toImmutableList(),
-                currentSequence = 0,
-                numPatterns = player.numPatterns,
-                numChannels = player.numChannels,
-                numInstruments = player.numInstruments,
-                numSamples = player.numSamples,
-                numSequences = player.numSequences,
-            )
-        }
     }
 
     /** Returns a formatted string of current Oboe audio stream statistics. */
@@ -147,7 +125,6 @@ class PlayerViewModel(
                 moduleType = file.displayType(),
             )
         }
-
         ensureServiceRunning()
         player.loadQueue(listOf(file), startAt = 0)
     }
@@ -161,9 +138,8 @@ class PlayerViewModel(
     ) {
         if (files.isEmpty()) return
 
-        val startAt = if (isShuffle) files.indices.random() else startAt
-
-        val startIndex = startAt.coerceIn(0, files.lastIndex)
+        val startIndex = (if (isShuffle) files.indices.random() else startAt)
+            .coerceIn(0, files.lastIndex)
 
         state.update {
             it.copy(
@@ -177,19 +153,17 @@ class PlayerViewModel(
         }
 
         ensureServiceRunning()
+
         player.loadQueue(
             files = files.toList(),
             startAt = startIndex,
             shuffle = isShuffle,
-            repeatMode = repeatMode,
+            repeatMode = repeatMode
         )
     }
 
-    fun togglePlayPause() = if (state.value.status == PlaybackStatus.PLAYING) {
-        player.pause()
-    } else {
-        player.play()
-    }
+    fun togglePlayPause() =
+        if (state.value.status == PlaybackStatus.PLAYING) player.pause() else player.play()
 
     fun seek(posMs: Long) = player.seekTo(player.currentMediaItemIndex, posMs)
 
@@ -244,7 +218,31 @@ class PlayerViewModel(
 
     fun closeModComment() = state.update { it.copy(songMessage = "") }
 
+    fun getPatternData(patternIndex: Int) = player.getPatternData(patternIndex)
+
     suspend fun getLastDirectoryUri(): String? = prefs.getLastDirectoryUri()
 
-    fun getPatternData(patternIndex: Int) = player.getPatternData(patternIndex)
+    private fun ModuleFile.displayName() =
+        resolvedName.ifBlank { name.ifBlank { "(Untitled)" } }
+
+    private fun ModuleFile.displayType() =
+        resolvedType.ifBlank { extension.uppercase().ifBlank { "???" } }
+
+    private fun ensureServiceRunning() =
+        Intent(appContext, PlayerService::class.java).also(appContext::startService)
+
+    private fun syncModuleInfo() {
+        state.update {
+            it.copy(
+                sequenceDurations = player.sequenceDurations.toImmutableList(),
+                currentSequence = 0,
+                numPatterns = player.numPatterns,
+                numChannels = player.numChannels,
+                numInstruments = player.numInstruments,
+                numSamples = player.numSamples,
+                numSequences = player.numSequences,
+            )
+        }
+    }
+
 }
