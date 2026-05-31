@@ -1,6 +1,4 @@
-# Dragon Mod Player
-
-> ⚠️ **Dragon Mod Player** is a working title — final name pending whenever I can brain. 
+# Drakmod Player (Drake Mod Player)
 
 A modern Android player for tracker music files — MOD, XM, IT, S3M, and dozens more. Built with Jetpack Compose, Media3, and Oboe for low-latency native audio playback.
 
