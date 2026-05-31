@@ -194,6 +194,7 @@ static char *buffer = nullptr;
 static int actual_channels = 2;
 static int buffer_num;
 static int buffer_size;
+static int effective_format_flags = 0;
 static pthread_mutex_t mutex;
 static std::atomic<float> volume_scale(1.0f);
 static std::atomic<int32_t> underrun_count(0);
@@ -316,12 +317,24 @@ void close_audio() {
     pthread_mutex_destroy(&mutex);
 }
 
+int get_effective_format_flags() {
+    return effective_format_flags;
+}
+
 int open_audio(int rate, int latency, int performance_mode, int channel_count, int audio_api,
                int format_flags) {
     if (pthread_mutex_init(&mutex, nullptr) != 0) {
         LOG_ERROR("Failed to initialize mutex");
         return -1;
     }
+
+    // OpenSL ES only supports I16 and Float — I32 is rejected at stream open time.
+    // Guard against it by stripping the 32-bit flag.
+    if (audio_api == 2 /* OpenSLES */ && (format_flags & (1 << 3))) {
+        LOG_WARN("I32 format not supported by OpenSL ES; falling back to I16");
+        format_flags &= ~(1 << 3);
+    }
+    effective_format_flags = format_flags;
 
     buffer_num = latency / BUFFER_TIME;
 
@@ -456,11 +469,12 @@ int fill_buffer(int looped) {
     // Fill and enqueue buffer at first_free position
     char *b = &buffer[ff * buffer_size];
 
-    // Move first_free forward
+    ret = play_buffer(b, buffer_size, looped);
+
+    // Commit only after play_buffer writes to the slot — advancing first_free
+    // before the fill would let the callback consume an uninitialized buffer.
     int next_first = (ff + 1) % buffer_num;
     atomic_store_int(&first_free, next_first);
-
-    ret = play_buffer(b, buffer_size, looped);
 
     // LOG_INFO("fill_buffer: filled buffer %d, first_free %d->%d, last_free=%d, ret=%d",
     //      ff, ff, next_first, lf, ret);

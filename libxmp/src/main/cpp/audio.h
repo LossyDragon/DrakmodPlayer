@@ -46,6 +46,8 @@ void set_expect_silence(int val);
 
 int get_audio_stats(struct AudioStats* stats);
 
+int get_effective_format_flags(void);
+
 #ifdef __cplusplus
 }
 #endif

@@ -453,11 +453,10 @@ JNIEXPORT jint JNICALL JNI_FUNCTION(deinit)(JNIEnv *env, jobject obj) {
         std::unique_lock<std::mutex> lock = state.lock();
         LOG_DEBUG("deinit() - acquired lock");
         state.setInitialized(false);
+        xmp_free_context(state.getContext());
+        LOG_DEBUG("deinit() - freed context");
     }
-    LOG_DEBUG("deinit() - released lock, set initialized=false");
-
-    xmp_free_context(state.getContext());
-    LOG_DEBUG("deinit() - freed context");
+    LOG_DEBUG("deinit() - released lock");
 
     close_audio();
     LOG_INFO("deinit() completed - tid: %d", get_thread_id());
@@ -492,6 +491,8 @@ JNI_FUNCTION(loadModuleFd)(JNIEnv *env, jobject obj, jint fd, jobject modInfo) {
     jstring type = env->NewStringUTF(ti.type);
     env->SetObjectField(modInfo, g_modInfoIDs.name, name);
     env->SetObjectField(modInfo, g_modInfoIDs.type, type);
+    env->DeleteLocalRef(name);
+    env->DeleteLocalRef(type);
 
     rewind(file.get());
 
@@ -545,11 +546,15 @@ JNI_FUNCTION(testModuleFd)(JNIEnv *env, jobject obj, jint fd, jobject modInfo) {
 
         if (!name || !type) {
             LOG_ERROR("testModuleFd() - failed to create Java strings");
+            env->DeleteLocalRef(name);
+            env->DeleteLocalRef(type);
             return JNI_FALSE;
         }
 
         env->SetObjectField(modInfo, g_modInfoIDs.name, name);
         env->SetObjectField(modInfo, g_modInfoIDs.type, type);
+        env->DeleteLocalRef(name);
+        env->DeleteLocalRef(type);
 
         LOG_DEBUG("testModuleFd() - successfully populated modInfo");
     } else {
@@ -599,7 +604,7 @@ JNIEXPORT jint JNICALL JNI_FUNCTION(startPlayer)(JNIEnv *env, jobject obj, jint 
     state.setLoopCount(0);
     state.setPlaying(true);
 
-    int ret = xmp_start_player(state.getContext(), use_rate, format);
+    int ret = xmp_start_player(state.getContext(), use_rate, get_effective_format_flags());
 
     LOG_INFO("startPlayer() completed - result: %d, tid: %d", ret, get_thread_id());
     return ret;
@@ -974,7 +979,7 @@ JNI_FUNCTION(getPatternRow)(JNIEnv *env, jobject obj, jint pat, jint row, jbyteA
 
     const xmp_module_info &mi = state.getModuleInfo();
 
-    if (pat >= mi.mod->pat) return;
+    if (pat < 0 || pat >= mi.mod->pat) return;
 
     const xmp_pattern *xxp = mi.mod->xxp[pat];
 
@@ -1149,7 +1154,7 @@ JNIEXPORT jboolean JNICALL JNI_FUNCTION(setSequence)(JNIEnv *env, jobject obj, j
     const xmp_module_info &mi = state.getModuleInfo();
 
     if (seq >= mi.num_sequences) return JNI_FALSE;
-    if (mi.seq_data[state.getSequence()].duration <= 0) return JNI_FALSE;
+    if (mi.seq_data[seq].duration <= 0) return JNI_FALSE;
     if (state.getSequence() == seq) return JNI_FALSE;
 
     state.setSequence(seq);
