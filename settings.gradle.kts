@@ -22,5 +22,5 @@ dependencyResolutionManagement {
     }
 }
 
-rootProject.name = "Dragon Mod Player"
+rootProject.name = "Drakmod Player"
 include(":app", ":libxmp")

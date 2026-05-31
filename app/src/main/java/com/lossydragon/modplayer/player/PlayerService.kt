@@ -68,7 +68,7 @@ class PlayerService : MediaLibraryService() {
                 LibraryResult.ofItem(
                     buildBrowsableItem(
                         id = AutoMediaId.ROOT,
-                        title = "Dragon Mod Player",
+                        title = "Drake Mod Player",
                         type = MediaMetadata.MEDIA_TYPE_FOLDER_MIXED,
                     ),
                     params,
