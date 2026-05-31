@@ -218,9 +218,9 @@ class ModPlayer(
         val file = queue.getOrNull(index) ?: return
 
         if (isLoading) return
+        isLoading = true
 
         Thread {
-            isLoading = true
             Timber.d("loadAndStartAt: loading index=$index autoStart=$autoStart file=${file.name}")
             if (engine.loadNext(file)) {
                 Timber.d("loadAndStartAt: loadNext succeeded, autoStart=$autoStart")
@@ -456,7 +456,7 @@ class ModPlayer(
                 if (engine.paused) {
                     Timber.d("handleSetPlayWhenReady: engine initialized, calling resume()")
                     engine.resume()
-                } else {
+                } else if (!engine.endedNaturally) {
                     Timber.d("handleSetPlayWhenReady: engine initialized, calling start()")
                     engine.start()
                 }
@@ -610,6 +610,24 @@ class ModPlayer(
 
     /** Releases coroutine scope and audio engine. Call from [PlayerService.onDestroy]. */
     fun releaseEngine() {
+        // Flush queue state synchronously before cancelling the scope so that any
+        // persistQueue() coroutine that was queued but not yet run isn't lost.
+        if (originalQueue.isNotEmpty()) {
+            val saveIndex = if (shuffleModeEnabled) {
+                queue.getOrNull(currentIndex)?.let { originalQueue.indexOf(it) }?.coerceAtLeast(0) ?: 0
+            } else {
+                currentIndex
+            }
+            runBlocking {
+                prefs.saveQueueState(
+                    json = Json.encodeToString(originalQueue.toList()),
+                    index = saveIndex,
+                    shuffle = shuffleModeEnabled,
+                    repeat = repeatMode,
+                    positionMs = engine.positionMs.value,
+                )
+            }
+        }
         scope.cancel("Releasing Engine")
         Thread { engine.stop() }.start()
     }
@@ -620,9 +638,16 @@ class ModPlayer(
                 prefs.clearQueueState()
                 return@launch
             }
+            // When shuffled, currentIndex is a position in the shuffled queue; translate it
+            // back to an originalQueue index so applyQueueOrder() restores the right track.
+            val saveIndex = if (shuffleModeEnabled) {
+                queue.getOrNull(currentIndex)?.let { originalQueue.indexOf(it) }?.coerceAtLeast(0) ?: 0
+            } else {
+                currentIndex
+            }
             prefs.saveQueueState(
                 json = Json.encodeToString(originalQueue.toList()),
-                index = currentIndex,
+                index = saveIndex,
                 shuffle = shuffleModeEnabled,
                 repeat = repeatMode,
                 positionMs = engine.positionMs.value,
