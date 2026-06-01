@@ -4,9 +4,28 @@ import android.content.ContentResolver
 import android.content.Context
 import android.net.Uri
 import android.provider.DocumentsContract
+import androidx.core.net.toUri
 import com.lossydragon.modplayer.model.Module
 import java.io.OutputStream
 import timber.log.Timber
+
+/**
+ * Checks whether a SAF URI is still accessible.
+ * Queries the content resolver and returns false if the file no longer exists
+ * or the app no longer holds permission.
+ */
+fun ContentResolver.isUriAccessible(uri: String): Boolean = try {
+    this.query(
+        uri.toUri(),
+        arrayOf(DocumentsContract.Document.COLUMN_DOCUMENT_ID),
+        null,
+        null,
+        null,
+    )?.use { it.count >= 0 } ?: false
+} catch (e: Exception) {
+    Timber.w("URI accessibility check failed: $this - ${e.message}")
+    false
+}
 
 /**
  * Finds a child directory by [name] under [parentDocId] in the given [treeUri].

@@ -1,4 +1,4 @@
-package com.lossydragon.modplayer.core
+package com.lossydragon.modplayer.player
 
 import android.net.Uri
 import androidx.core.net.toUri

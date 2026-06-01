@@ -328,6 +328,7 @@ private fun FileBrowserScreenContent(
 /**
  * Preview
  */
+
 private data class BrowserPreviewState(
     val browserState: BrowserUiState,
     val playerState: PlayerUiState,
@@ -400,7 +401,7 @@ private class BrowserPreviewParameter : PreviewParameterProvider<BrowserPreviewS
     override val values = sequenceOf(
         // Normal browsing, no playback
         BrowserPreviewState(
-            description = "Browsing — idle",
+            description = "Browsing - idle",
             browserState = baseBrowserState.copy(
                 isShuffle = true,
                 repeatMode = Player.REPEAT_MODE_ONE
@@ -409,7 +410,7 @@ private class BrowserPreviewParameter : PreviewParameterProvider<BrowserPreviewS
         ),
         // Browsing with mini player visible
         BrowserPreviewState(
-            description = "Browsing — playing",
+            description = "Browsing - playing",
             browserState = baseBrowserState,
             playerState = playingState,
         ),
@@ -437,7 +438,7 @@ private class BrowserPreviewParameter : PreviewParameterProvider<BrowserPreviewS
         ),
         // Filtered results
         BrowserPreviewState(
-            description = "Filtered — 'mod'",
+            description = "Filtered - 'mod'",
             browserState = baseBrowserState.copy(
                 filterQuery = "mod",
                 files = persistentListOf(sampleFiles[2], sampleFiles[3]),

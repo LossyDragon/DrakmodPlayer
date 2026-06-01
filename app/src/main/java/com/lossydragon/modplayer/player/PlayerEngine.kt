@@ -119,7 +119,6 @@ class PlayerEngine(
         }.launchIn(scope)
     }
 
-    /** Switches to sequence [index]. Updates duration and resets position. Returns false if invalid. */
     fun setSequence(index: Int): Boolean {
         val result = Xmp.setSequence(index)
         if (result) {
@@ -131,10 +130,8 @@ class PlayerEngine(
         return result
     }
 
-    /** Returns duration in ms for each sequence. Call after [load]. */
     fun getSequenceDurations(): List<Int> = Xmp.getSeqVars().asList()
 
-    /** Loads [file] into the engine. Returns false on failure. */
     fun load(file: ModuleFile): Boolean {
         clearPatternCache()
 
@@ -144,7 +141,6 @@ class PlayerEngine(
         currentSequenceFlow.value = 0
 
         if (initialized) {
-            // Shouldn't happen — caller should use loadNext()
             softStop()
             Xmp.releaseModule()
         } else {
@@ -197,7 +193,6 @@ class PlayerEngine(
         return true
     }
 
-    /** Loads next [file] without tearing down audio. Use between tracks. */
     fun loadNext(file: ModuleFile): Boolean {
         clearPatternCache()
 
@@ -207,7 +202,7 @@ class PlayerEngine(
         currentSequenceFlow.value = 0
 
         if (!initialized) {
-            // First load — fall back to full init path
+            // fall back to full init path
             return load(file)
         }
 
@@ -235,7 +230,6 @@ class PlayerEngine(
         return true
     }
 
-    /** Starts the render thread and audio stream. */
     fun start() {
         Timber.d("start() called")
         if (!initialized) return
@@ -293,7 +287,6 @@ class PlayerEngine(
         }
     }
 
-    /** Pauses playback — audio stream stopped, position preserved. */
     fun pause() {
         endedNaturally = false
         paused = true
@@ -302,7 +295,6 @@ class PlayerEngine(
         isPlaying.value = false
     }
 
-    /** Resumes from paused state. No-op if not paused. */
     fun resume() {
         if (!paused) return
         paused = false
@@ -319,7 +311,6 @@ class PlayerEngine(
         positionMs.value = posMs.toLong()
     }
 
-    /** Stops playback and releases all native resources. */
     fun stop() {
         endedNaturally = false
         stopRequest = true
@@ -454,7 +445,6 @@ class PlayerEngine(
                     if (playAllSequences) {
                         currentSequence++
                         if (setSequence(currentSequence)) {
-                            // keep playing — don't set endedNaturally
                             Timber.i("renderLoop: advanced to seq $currentSequence")
                             continue
                         }

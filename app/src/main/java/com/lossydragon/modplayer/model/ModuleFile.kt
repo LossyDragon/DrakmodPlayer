@@ -7,8 +7,7 @@ import kotlinx.serialization.Serializable
 
 /**
  * Represents a tracker module file on device storage.
- * [resolvedName] and [resolvedType] are populated from the Room cache
- * via libxmp's test result — empty until indexed.
+ * [resolvedName] and [resolvedType] are populated from the Room cache via test result.
  */
 
 @Serializable

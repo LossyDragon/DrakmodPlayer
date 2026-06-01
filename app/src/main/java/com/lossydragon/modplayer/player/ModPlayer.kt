@@ -39,7 +39,7 @@ import org.helllabs.libxmp.model.ModInfo
 import timber.log.Timber
 
 /**
- * Media3 [androidx.media3.common.SimpleBasePlayer] backed by [PlayerEngine].
+ * Media3 [SimpleBasePlayer] backed by [PlayerEngine].
  * Manages queue, playback lifecycle, audio focus, and Android Auto item resolution.
  */
 @OptIn(UnstableApi::class)
@@ -50,7 +50,7 @@ class ModPlayer(
 ) : SimpleBasePlayer(Looper.getMainLooper()) {
 
     private var repeatMode = REPEAT_MODE_OFF
-    private var shuffleModeEnabled = false
+    private var shuffleMode = false
     private var hasFocus = false
 
     private val artworkUri: Uri by lazy {
@@ -110,13 +110,13 @@ class ModPlayer(
     private fun requestAudioFocus() {
         if (hasFocus) return
 
+        val attributes = AudioAttributes.Builder()
+            .setUsage(AudioAttributes.USAGE_MEDIA)
+            .setContentType(AudioAttributes.CONTENT_TYPE_MUSIC)
+            .build()
+
         val request = AudioFocusRequest.Builder(AudioManager.AUDIOFOCUS_GAIN)
-            .setAudioAttributes(
-                AudioAttributes.Builder()
-                    .setUsage(AudioAttributes.USAGE_MEDIA)
-                    .setContentType(AudioAttributes.CONTENT_TYPE_MUSIC)
-                    .build()
-            )
+            .setAudioAttributes(attributes)
             .setAcceptsDelayedFocusGain(true)
             .setOnAudioFocusChangeListener { change ->
                 when (change) {
@@ -153,7 +153,8 @@ class ModPlayer(
         scope.launch {
             engine.isPlaying.collect { playing ->
                 Timber.i(
-                    "isPlaying collector: playing=$playing endedNaturally=${engine.endedNaturally} idx=$currentIndex/${queue.size}"
+                    "isPlaying collector: playing=$playing " +
+                        "endedNaturally=${engine.endedNaturally} idx=$currentIndex/${queue.size}"
                 )
                 invalidateState()
                 if (playing) {
@@ -170,10 +171,10 @@ class ModPlayer(
     fun loadQueue(
         files: List<ModuleFile>,
         startAt: Int,
-        shuffle: Boolean = shuffleModeEnabled,
+        shuffle: Boolean = shuffleMode,
         repeatMode: Int = this.repeatMode
     ) {
-        this.shuffleModeEnabled = shuffle
+        this.shuffleMode = shuffle
         this.repeatMode = repeatMode
 
         requestAudioFocus()
@@ -189,12 +190,13 @@ class ModPlayer(
 
     private fun applyQueueOrder(startAt: Int = 0) {
         Timber.d(
-            "applyQueueOrder shuffleModeEnabled=$shuffleModeEnabled startAt=$startAt originalQueue.size=${originalQueue.size}"
+            "applyQueueOrder shuffleModeEnabled=$shuffleMode " +
+                "startAt=$startAt originalQueue.size=${originalQueue.size}"
         )
         queue.clear()
         playlist.clear()
 
-        if (shuffleModeEnabled) {
+        if (shuffleMode) {
             val shuffled = originalQueue.toMutableList()
             val first = shuffled.removeAt(startAt.coerceIn(0, shuffled.lastIndex))
             shuffled.shuffle()
@@ -290,16 +292,10 @@ class ModPlayer(
         when {
             repeatMode == REPEAT_MODE_ONE -> navigate(currentIndex)
 
-            repeatMode == REPEAT_MODE_ALL ->
-                navigate(
-                    if (currentIndex + 1 <
-                        queue.size
-                    ) {
-                        currentIndex + 1
-                    } else {
-                        0
-                    }
-                )
+            repeatMode == REPEAT_MODE_ALL -> {
+                val idx = if (currentIndex + 1 < queue.size) currentIndex + 1 else 0
+                navigate(idx)
+            }
 
             currentIndex + 1 < queue.size -> navigate(currentIndex + 1)
 
@@ -415,20 +411,20 @@ class ModPlayer(
             engine.positionMs.value
         }
 
+        val playbackState = when {
+            playlist.isEmpty() -> STATE_IDLE
+            engine.endedNaturally -> STATE_ENDED
+            else -> STATE_READY
+        }
+
         return State.Builder()
             .setAvailableCommands(commands)
             .setPlaylist(playlistItems)
-            .setShuffleModeEnabled(shuffleModeEnabled)
+            .setShuffleModeEnabled(shuffleMode)
             .setRepeatMode(repeatMode)
             .setCurrentMediaItemIndex(currentIndex)
             .setPlayWhenReady(engine.isPlaying.value, PLAY_WHEN_READY_CHANGE_REASON_USER_REQUEST)
-            .setPlaybackState(
-                when {
-                    playlist.isEmpty() -> STATE_IDLE
-                    engine.endedNaturally -> STATE_ENDED
-                    else -> STATE_READY
-                }
-            )
+            .setPlaybackState(playbackState)
             .setContentPositionMs(position)
             .build()
     }
@@ -473,7 +469,7 @@ class ModPlayer(
     }
 
     override fun handleSetShuffleModeEnabled(shuffleModeEnabled: Boolean): ListenableFuture<*> {
-        this.shuffleModeEnabled = shuffleModeEnabled
+        this.shuffleMode = shuffleModeEnabled
 
         if (queue.isEmpty()) {
             invalidateState()
@@ -497,14 +493,16 @@ class ModPlayer(
             currentIndex = 0
         } else {
             queue.addAll(originalQueue)
-            currentIndex = currentFile?.let { originalQueue.indexOf(it) }
-                ?.coerceAtLeast(0) ?: 0
+            currentIndex = currentFile
+                ?.let { originalQueue.indexOf(it) }
+                ?.coerceAtLeast(0)
+                ?: 0
         }
 
         playlist.addAll(queue.map { it.toMediaItem() })
 
-        // Restore real metadata for current track — don't use toRealMetadata()
-        // since Xmp.getModName/Type() may not reflect the current track if called
+        // Restore real metadata for current track.
+        // Xmp.getModName()/getModType() may not reflect the current track if called
         // during shuffle toggle. Use the saved item instead.
         if (currentRealItem != null) {
             playlist[currentIndex] = currentRealItem
@@ -547,7 +545,7 @@ class ModPlayer(
         return Futures.immediateVoidFuture()
     }
 
-    /** Android Auto — resolves selected item to full directory queue. */
+    /** Android Auto - resolves selected item to full directory queue. */
     override fun handleSetMediaItems(
         mediaItems: List<MediaItem>,
         startIndex: Int,
@@ -604,16 +602,19 @@ class ModPlayer(
         }
 
         val resolved = siblings.ifEmpty { files }
-        loadQueue(resolved, resolved.indexOfFirst { it.uri == firstUri }.coerceAtLeast(0))
+        loadQueue(
+            files = resolved,
+            startAt = resolved.indexOfFirst { it.uri == firstUri }.coerceAtLeast(0)
+        )
+
         return Futures.immediateVoidFuture()
     }
 
-    /** Releases coroutine scope and audio engine. Call from [PlayerService.onDestroy]. */
     fun releaseEngine() {
         // Flush queue state synchronously before cancelling the scope so that any
         // persistQueue() coroutine that was queued but not yet run isn't lost.
         if (originalQueue.isNotEmpty()) {
-            val saveIndex = if (shuffleModeEnabled) {
+            val saveIndex = if (shuffleMode) {
                 queue.getOrNull(currentIndex)
                     ?.let { originalQueue.indexOf(it) }
                     ?.coerceAtLeast(0)
@@ -625,7 +626,7 @@ class ModPlayer(
                 prefs.saveQueueState(
                     json = Json.encodeToString(originalQueue.toList()),
                     index = saveIndex,
-                    shuffle = shuffleModeEnabled,
+                    shuffle = shuffleMode,
                     repeat = repeatMode,
                     positionMs = engine.positionMs.value,
                 )
@@ -643,7 +644,7 @@ class ModPlayer(
             }
             // When shuffled, currentIndex is a position in the shuffled queue; translate it
             // back to an originalQueue index so applyQueueOrder() restores the right track.
-            val saveIndex = if (shuffleModeEnabled) {
+            val saveIndex = if (shuffleMode) {
                 queue.getOrNull(currentIndex)
                     ?.let { originalQueue.indexOf(it) }
                     ?.coerceAtLeast(0)
@@ -654,7 +655,7 @@ class ModPlayer(
             prefs.saveQueueState(
                 json = Json.encodeToString(originalQueue.toList()),
                 index = saveIndex,
-                shuffle = shuffleModeEnabled,
+                shuffle = shuffleMode,
                 repeat = repeatMode,
                 positionMs = engine.positionMs.value,
             )
@@ -674,7 +675,7 @@ class ModPlayer(
 
         originalQueue.clear()
         originalQueue.addAll(files)
-        this.shuffleModeEnabled = state.shuffle
+        this.shuffleMode = state.shuffle
         this.repeatMode = state.repeat
         applyQueueOrder(state.index)
 
@@ -690,7 +691,7 @@ class ModPlayer(
 
     fun getPatternData(patternIndex: Int) = engine.getPatternData(patternIndex)
 
-    /** Builds a [androidx.media3.common.MediaItem] with placeholder metadata for initial queue population. */
+    /** Builds a [MediaItem] with placeholder metadata for initial queue population. */
     private fun ModuleFile.toMediaItem(): MediaItem =
         MediaItem.Builder()
             .setUri(uri)
@@ -705,7 +706,7 @@ class ModPlayer(
             )
             .build()
 
-    /** Builds [androidx.media3.common.MediaMetadata] from libxmp after the module is loaded — includes real duration. */
+    /** Builds [MediaMetadata] from libxmp after the module is loaded */
     private fun ModuleFile.toRealMetadata(duration: Long): MediaMetadata =
         MediaMetadata.Builder()
             .setTitle(Xmp.getModName().ifBlank { resolvedName.ifBlank { name } })

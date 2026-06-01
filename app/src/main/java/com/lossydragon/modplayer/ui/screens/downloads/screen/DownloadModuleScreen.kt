@@ -155,7 +155,6 @@ private fun DownloadModuleContent(
         bottomBar = {
             BottomAppBar {
                 Column(modifier = Modifier.fillMaxWidth()) {
-                    // Progress bar — only visible while downloading
                     when (val status = state.downloadStatus) {
                         is DownloadStatus.Progress -> LinearProgressIndicator(
                             progress = { status.percent / 100f },

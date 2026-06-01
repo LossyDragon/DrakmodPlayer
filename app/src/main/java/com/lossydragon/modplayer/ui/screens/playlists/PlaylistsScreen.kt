@@ -605,12 +605,12 @@ private class PlaylistListPreviewParameter : PreviewParameterProvider<PlaylistPr
             playerState = PlayerUiState(),
         ),
         PlaylistPreviewState(
-            description = "Playlists — idle",
+            description = "Playlists - idle",
             playlistsState = PlaylistsUiState(playlists = samplePlaylists),
             playerState = PlayerUiState(),
         ),
         PlaylistPreviewState(
-            description = "Playlists — playing",
+            description = "Playlists - playing",
             playlistsState = PlaylistsUiState(playlists = samplePlaylists),
             playerState = playingState,
         ),
@@ -637,7 +637,7 @@ private class PlaylistEntriesPreviewParameter : PreviewParameterProvider<Playlis
             playerState = PlayerUiState(),
         ),
         PlaylistPreviewState(
-            description = "Entries — idle",
+            description = "Entries - idle",
             playlistsState = PlaylistsUiState(
                 playlists = samplePlaylists,
                 selectedPlaylist = samplePlaylists[0],
@@ -646,7 +646,7 @@ private class PlaylistEntriesPreviewParameter : PreviewParameterProvider<Playlis
             playerState = PlayerUiState(),
         ),
         PlaylistPreviewState(
-            description = "Entries — playing",
+            description = "Entries - playing",
             playlistsState = PlaylistsUiState(
                 playlists = samplePlaylists,
                 selectedPlaylist = samplePlaylists[1],

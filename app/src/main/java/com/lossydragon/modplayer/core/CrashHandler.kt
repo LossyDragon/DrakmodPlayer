@@ -88,7 +88,7 @@ class CrashHandler(
 
     private fun writeToDownloads(fileName: String, content: String) {
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
-            // Android 10+ — use MediaStore (no permissions needed)
+            // Android 10+ uses MediaStore. No permissions needed.
             val values = ContentValues().apply {
                 put(MediaStore.Downloads.DISPLAY_NAME, fileName)
                 put(MediaStore.Downloads.MIME_TYPE, "text/plain")
@@ -110,7 +110,7 @@ class CrashHandler(
                 resolver.update(it, values, null, null)
             }
         } else {
-            // Android 9 and below — direct file write (needs WRITE_EXTERNAL_STORAGE permission)
+            // Android 9 and below needs WRITE_EXTERNAL_STORAGE permission.
             val downloadsDir = File(
                 Environment.getExternalStoragePublicDirectory(Environment.DIRECTORY_DOWNLOADS),
                 CRASH_FOLDER
@@ -122,7 +122,7 @@ class CrashHandler(
 
     private fun cleanupOldCrashFiles() {
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
-            // Query MediaStore for our crash files and delete the oldest beyond the limit
+            // Query MediaStore for crash files and delete the oldest beyond the limit
             val resolver = context.contentResolver
             val projection = arrayOf(
                 MediaStore.Downloads._ID,
@@ -154,7 +154,7 @@ class CrashHandler(
                 }
             }
         } else {
-            // Android 9 and below — direct file cleanup
+            // Android 9 and below uses direct file cleanup
             val downloadsDir = File(
                 Environment.getExternalStoragePublicDirectory(Environment.DIRECTORY_DOWNLOADS),
                 CRASH_FOLDER

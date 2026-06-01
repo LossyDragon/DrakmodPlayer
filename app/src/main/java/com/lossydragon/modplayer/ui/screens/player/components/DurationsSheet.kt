@@ -89,7 +89,7 @@ private fun DurationItem(
     val minutes = duration / 60000
     val seconds = (duration / 1000) % 60
     val label = if (index == 0) "Main Song" else "Sub Song $index"
-    val timeText = "%d:%02d — %s".format(minutes, seconds, label)
+    val timeText = "%d:%02d - %s".format(minutes, seconds, label)
 
     val background = if (isCurrentItem) {
         MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.3f)
@@ -144,7 +144,7 @@ private fun Preview() {
             DurationsSheet(
                 sheetState = sheetState,
                 sequenceDurations = listOf(
-                    183_000, // 3:03 — Main Song
+                    183_000, // 3:03 - Main Song
                     94_000, // 1:34
                     211_000, // 3:31
                     57_000, // 0:57

@@ -119,7 +119,7 @@ fun PatternView(
     val textMeasurer = rememberTextMeasurer()
     val textCache = remember { mutableMapOf<String, TextLayoutResult>() }
 
-    // Clear cache when font size changes (zoom) — stale measurements become wrong size
+    // Clear cache when font size changes (zoom) - stale measurements become wrong size
     LaunchedEffect(fontSize) {
         textCache.clear()
     }
@@ -135,7 +135,7 @@ fun PatternView(
         )
     }
 
-    // Cache key suffix — concat once, append per text
+    // Cache key suffix - concat once, append per text
     val styleKey = remember(fontSize) { "|${baseStyle.fontSize}" }
 
     // Measure one sample cell to derive exact channel slot width
@@ -180,17 +180,17 @@ fun PatternView(
     ) {
         if (pattern.numRows == 0 || pattern.numChannels == 0) return@Canvas
 
-        // Solid background
+        // Canvas background
         drawRect(color = colors.background, size = size)
 
-        // --- HEADER BAR (channel numbers) ---
+        // Header background
         drawRect(
             color = colors.headerBackground,
             topLeft = Offset.Zero,
             size = Size(size.width, headerHeight),
         )
 
-        // Channel header labels — clipped so panned-out labels don't bleed into row-number column
+        // Channel header labels
         clipRect(
             left = rowNumberWidth,
             top = 0f,
@@ -224,17 +224,16 @@ fun PatternView(
         val lastVisibleRow = ((size.height - scrollY) / rowHeight).toInt()
             .coerceAtMost(pattern.numRows - 1)
 
-        // Row number column background (drawn before clipped section so it spans the full height)
+        // Row number column background
         drawRect(
             color = colors.rowNumberBackground,
             topLeft = Offset(0f, gridTop),
             size = Size(rowNumberWidth, size.height - gridTop),
         )
 
-        // Pre-pick which array of pre-formatted row texts to use
         val rowTexts = if (showRowNumbers) renderState.rowTextsDec else renderState.rowTextsHex
 
-        // Row numbers — clipped to row-number column only
+        // Row numbers
         clipRect(
             left = 0f,
             top = gridTop,
@@ -257,7 +256,7 @@ fun PatternView(
             }
         }
 
-        // Channel cells — clipped to area right of row numbers, below header
+        // Channel cells
         clipRect(
             left = rowNumberWidth,
             top = gridTop,
@@ -267,7 +266,7 @@ fun PatternView(
             for (row in firstVisibleRow..lastVisibleRow) {
                 val rowY = row * rowHeight + scrollY
 
-                // Beat tint (right of row column only)
+                // Beat tint
                 if (row % 4 == 0) {
                     drawRect(
                         color = colors.beat,
@@ -275,6 +274,7 @@ fun PatternView(
                         size = Size(size.width - rowNumberWidth, rowHeight),
                     )
                 }
+
                 if (row == currentRow) {
                     drawRect(
                         color = colors.currentRow,
@@ -328,11 +328,10 @@ private fun DrawScope.drawCell(
         drawCachedText(measurer, cache, styleKey, cell.instrumentStr, style, insColor, cursorX, y)
     cursorX += insLayout.size.width + gap
 
-    // Effect column — split into type (1 char) and param (2 chars) for separate colors
+    // Effect column
     if (cell.fxType < 0) {
         drawCachedText(measurer, cache, styleKey, "...", style, colors.empty, cursorX, y)
     } else {
-        // Avoid substring allocations — split via fixed cached prefix/suffix
         val typeChar = cell.effectTypeChar
         val paramStr = cell.effectParamStr
         val typeLayout = drawCachedText(

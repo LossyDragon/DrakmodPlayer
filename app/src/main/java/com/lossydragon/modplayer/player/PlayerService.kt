@@ -18,7 +18,6 @@ import com.google.common.util.concurrent.Futures
 import com.google.common.util.concurrent.ListenableFuture
 import com.lossydragon.modplayer.MainActivity
 import com.lossydragon.modplayer.R
-import com.lossydragon.modplayer.core.AutoMediaId
 import com.lossydragon.modplayer.db.AppPreferences
 import com.lossydragon.modplayer.model.ModuleFile
 import kotlinx.coroutines.CoroutineScope
@@ -245,7 +244,7 @@ class PlayerService : MediaLibraryService() {
             PendingIntent.FLAG_IMMUTABLE or PendingIntent.FLAG_UPDATE_CURRENT,
         )
 
-    /** Root level — File Browser and Playlists. */
+    /** Root level - File Browser and Playlists. */
     private fun getRootChildren(): ImmutableList<MediaItem> = ImmutableList.of(
         buildBrowsableItem(
             AutoMediaId.FILE_BROWSER,

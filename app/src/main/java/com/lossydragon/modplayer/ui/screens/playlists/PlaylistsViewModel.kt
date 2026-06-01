@@ -226,7 +226,6 @@ class PlaylistsViewModel(
 
     fun dismissExportSuccess() = state.update { it.copy(exportSuccess = false) }
 
-    // Playback — play selected playlist
     fun playPlaylist(startAt: Int = 0, isShuffle: Boolean = false) {
         val entries = state.value.entries
         if (entries.isEmpty()) return
