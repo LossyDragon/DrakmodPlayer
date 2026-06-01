@@ -11,8 +11,8 @@ import com.lossydragon.modplayer.db.AppPreferences
 import com.lossydragon.modplayer.model.ModuleFile
 import com.lossydragon.modplayer.model.PlaybackStatus
 import com.lossydragon.modplayer.model.PlayerUiState
+import java.nio.charset.StandardCharsets
 import kotlinx.collections.immutable.ImmutableList
-import kotlinx.collections.immutable.persistentListOf
 import kotlinx.collections.immutable.toImmutableList
 import kotlinx.collections.immutable.toPersistentList
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -22,7 +22,6 @@ import kotlinx.coroutines.flow.onEach
 import kotlinx.coroutines.flow.update
 import org.helllabs.libxmp.Xmp
 import timber.log.Timber
-import java.nio.charset.StandardCharsets
 
 /** Bridges [Player] state to the UI via [PlayerUiState]. */
 @OptIn(UnstableApi::class)
@@ -202,14 +201,6 @@ class PlayerViewModel(
         state.update { it.copy(playAllSequences = new) }
     }
 
-    fun getModInstruments(): Boolean {
-        val songInstruments = Xmp.getInstruments().toPersistentList()
-        state.update { it.copy(songInstruments = songInstruments) }
-        return songInstruments.isNotEmpty()
-    }
-
-    fun closeModInstruments() = state.update { it.copy(songInstruments = persistentListOf()) }
-
     fun getModComment(): Boolean {
         val songMessageText = String(Xmp.getComment(), StandardCharsets.UTF_8)
         state.update { it.copy(songMessage = songMessageText) }
@@ -241,8 +232,8 @@ class PlayerViewModel(
                 numInstruments = player.numInstruments,
                 numSamples = player.numSamples,
                 numSequences = player.numSequences,
+                songInstruments = Xmp.getInstruments().toPersistentList(),
             )
         }
     }
-
 }

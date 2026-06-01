@@ -23,7 +23,7 @@ extern "C" {
 #include <vector>     // std::vector
 
 namespace {
-    constexpr int MAX_BUFFER_SIZE = 256;
+    constexpr int MAX_BUFFER_SIZE = 1024;
     constexpr int PERIOD_BASE = 13696;
     constexpr int BUFFER_TIME_MS = 40;
     constexpr int MIN_BUFFER_NUM = 3;
@@ -1025,128 +1025,88 @@ JNIEXPORT void JNICALL
 JNI_FUNCTION(getSampleData)(JNIEnv *env, jobject obj, jboolean trigger, jint ins, jint key,
                             jint period, jint chn, jint width, jbyteArray buffer) {
     XmpPlayerState &state = XmpPlayerState::instance();
-    std::unique_lock<std::mutex> lock = state.lock();
 
-    std::array<jbyte, MAX_BUFFER_SIZE> sample_buffer{};
-
-    auto populateBuffer = [&](int size) {
-        env->SetByteArrayRegion(buffer, 0, size, sample_buffer.data());
-    };
-
-    if (!state.isModuleLoaded()) {
-        populateBuffer(width);
-        return;
-    }
-
+    // Clamp before any early exit — keeps SetByteArrayRegion in bounds for every path.
     width = std::min(width, MAX_BUFFER_SIZE);
 
-    // Validate channel index
-    if (chn < 0 || chn >= XMP_MAX_CHANNELS) {
-        populateBuffer(width);
-        return;
-    }
+    // Zero-init covers the non-loop tail and all early-return paths without separate fills.
+    std::array<jbyte, MAX_BUFFER_SIZE> sample_buffer{};
 
-    // Validate all parameters
-    if (period <= 0 || ins < 0 || key < 0 || key >= XMP_MAX_KEYS) {
-        populateBuffer(width);
-        return;
-    }
+    // Compute under lock, then write to the Java array outside — JNI array writes
+    // must not be made while holding a native mutex (GC pin/unpin may be needed).
+    [&]() {
+        std::unique_lock<std::mutex> lock = state.lock();
 
-    const xmp_module_info &mi = state.getModuleInfo();
+        if (!state.isModuleLoaded()) return;
+        if (chn < 0 || chn >= XMP_MAX_CHANNELS) return;
+        if (period <= 0 || ins < 0 || key < 0 || key >= XMP_MAX_KEYS) return;
 
-    if (ins >= mi.mod->ins) {
-        populateBuffer(width);
-        return;
-    }
+        const xmp_module_info &mi = state.getModuleInfo();
+        if (ins >= mi.mod->ins) return;
 
-    xmp_subinstrument *sub = getSubinstrument(mi, ins, key);
-    if (!sub || sub->sid < 0 || sub->sid >= mi.mod->smp) {
-        populateBuffer(width);
-        return;
-    }
+        xmp_subinstrument *sub = getSubinstrument(mi, ins, key);
+        if (!sub || sub->sid < 0 || sub->sid >= mi.mod->smp) return;
 
-    const xmp_sample *xxs = &mi.mod->xxs[sub->sid];
+        const xmp_sample *xxs = &mi.mod->xxs[sub->sid];
+        if (xxs->flg & XMP_SAMPLE_SYNTH || xxs->len == 0 || !xxs->data) return;
 
-    if (xxs->flg & XMP_SAMPLE_SYNTH || xxs->len == 0) {
-        populateBuffer(width);
-        return;
-    }
+        int step = (PERIOD_BASE << 4) / period;
+        int lps = xxs->lps << 5;
+        int lpe = xxs->lpe << 5;
 
-    int step = (PERIOD_BASE << 4) / period;
-    int len = xxs->len << 5;
-    int lps = xxs->lps << 5;
-    int lpe = xxs->lpe << 5;
+        std::array<int, XMP_MAX_CHANNELS> &pos = state.getPosition();
+        int current_pos = pos[chn];
 
-    std::array<int, XMP_MAX_CHANNELS> &pos = state.getPosition();
-    int current_pos = pos[chn];
-
-    // Reset position on trigger or if out of bounds
-    if (trigger == JNI_TRUE || (current_pos >> 5) >= xxs->len) {
-        current_pos = 0;
-    }
-
-    // Calculate transient size
-    int transient_size = 0;
-    if (step > 0) {
-        if (xxs->flg & XMP_SAMPLE_LOOP) {
-            transient_size = (lps - current_pos) / step;
-        } else {
-            transient_size = (len - current_pos) / step;
-        }
-    }
-    transient_size = std::max(0, transient_size);
-
-    int limit = std::min(width, transient_size);
-
-    // Fill buffer
-    if (xxs->flg & XMP_SAMPLE_16BIT) {
-        const auto *data = reinterpret_cast<const short *>(xxs->data);
-
-        // Transient
-        for (int i = 0; i < limit; i++) {
-            sample_buffer[i] = static_cast<jbyte>(data[current_pos >> 5] >> 8);
-            current_pos += step;
+        if (trigger == JNI_TRUE || (current_pos >> 5) >= xxs->len) {
+            current_pos = 0;
         }
 
-        // Loop
-        if (xxs->flg & XMP_SAMPLE_LOOP) {
-            for (int i = limit; i < width; i++) {
+        int transient_size = 0;
+        if (step > 0) {
+            transient_size = (xxs->flg & XMP_SAMPLE_LOOP)
+                             ? (lps - current_pos) / step
+                             : ((xxs->len << 5) - current_pos) / step;
+        }
+        int limit = std::min(width, std::max(0, transient_size));
+
+        if (xxs->flg & XMP_SAMPLE_16BIT) {
+            const auto *data = reinterpret_cast<const short *>(xxs->data);
+            for (int i = 0; i < limit; i++) {
                 sample_buffer[i] = static_cast<jbyte>(data[current_pos >> 5] >> 8);
                 current_pos += step;
-                if (current_pos >= lpe) {
-                    current_pos = lps + current_pos - lpe;
-                    if (current_pos >= lpe) current_pos = lps;
+            }
+            if (xxs->flg & XMP_SAMPLE_LOOP) {
+                for (int i = limit; i < width; i++) {
+                    sample_buffer[i] = static_cast<jbyte>(data[current_pos >> 5] >> 8);
+                    current_pos += step;
+                    if (current_pos >= lpe) {
+                        current_pos = lps + current_pos - lpe;
+                        if (current_pos >= lpe) current_pos = lps;
+                    }
                 }
             }
         } else {
-            std::fill(sample_buffer.begin() + limit, sample_buffer.begin() + width, 0);
-        }
-    } else {
-        const auto *data = reinterpret_cast<const jbyte *>(xxs->data);
-
-        // Transient
-        for (int i = 0; i < limit; i++) {
-            sample_buffer[i] = data[current_pos >> 5];
-            current_pos += step;
-        }
-
-        // Loop
-        if (xxs->flg & XMP_SAMPLE_LOOP) {
-            for (int i = limit; i < width; i++) {
+            const auto *data = reinterpret_cast<const jbyte *>(xxs->data);
+            for (int i = 0; i < limit; i++) {
                 sample_buffer[i] = data[current_pos >> 5];
                 current_pos += step;
-                if (current_pos >= lpe) {
-                    current_pos = lps + current_pos - lpe;
-                    if (current_pos >= lpe) current_pos = lps;
+            }
+            if (xxs->flg & XMP_SAMPLE_LOOP) {
+                for (int i = limit; i < width; i++) {
+                    sample_buffer[i] = data[current_pos >> 5];
+                    current_pos += step;
+                    if (current_pos >= lpe) {
+                        current_pos = lps + current_pos - lpe;
+                        if (current_pos >= lpe) current_pos = lps;
+                    }
                 }
             }
-        } else {
-            std::fill(sample_buffer.begin() + limit, sample_buffer.begin() + width, 0);
         }
-    }
 
-    pos[chn] = current_pos;
-    populateBuffer(width);
+        pos[chn] = current_pos;
+    }();
+
+    env->SetByteArrayRegion(buffer, 0, width, sample_buffer.data());
 }
 
 JNIEXPORT jboolean JNICALL JNI_FUNCTION(setSequence)(JNIEnv *env, jobject obj, jint seq) {

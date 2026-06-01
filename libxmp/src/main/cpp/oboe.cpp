@@ -114,7 +114,7 @@ public:
                     // Signed 8-bit: -128..127 to -32768..32767
                     auto *src8 = reinterpret_cast<int8_t *>(src);
                     for (int i = 0; i < samplesToProcess; i++) {
-                        int16_t s = (int16_t) (src8[i] << 8);
+                        auto s = (int16_t) (src8[i] << 8);
                         dst[i] = (vol >= 0.99f) ? s : (int16_t) (s * vol);
                     }
                 }

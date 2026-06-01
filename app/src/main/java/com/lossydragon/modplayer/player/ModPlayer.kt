@@ -614,7 +614,10 @@ class ModPlayer(
         // persistQueue() coroutine that was queued but not yet run isn't lost.
         if (originalQueue.isNotEmpty()) {
             val saveIndex = if (shuffleModeEnabled) {
-                queue.getOrNull(currentIndex)?.let { originalQueue.indexOf(it) }?.coerceAtLeast(0) ?: 0
+                queue.getOrNull(currentIndex)
+                    ?.let { originalQueue.indexOf(it) }
+                    ?.coerceAtLeast(0)
+                    ?: 0
             } else {
                 currentIndex
             }
@@ -641,7 +644,10 @@ class ModPlayer(
             // When shuffled, currentIndex is a position in the shuffled queue; translate it
             // back to an originalQueue index so applyQueueOrder() restores the right track.
             val saveIndex = if (shuffleModeEnabled) {
-                queue.getOrNull(currentIndex)?.let { originalQueue.indexOf(it) }?.coerceAtLeast(0) ?: 0
+                queue.getOrNull(currentIndex)
+                    ?.let { originalQueue.indexOf(it) }
+                    ?.coerceAtLeast(0)
+                    ?: 0
             } else {
                 currentIndex
             }

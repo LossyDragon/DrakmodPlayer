@@ -31,6 +31,7 @@ import com.lossydragon.modplayer.player.model.FrameSnapshot
 import com.lossydragon.modplayer.player.model.PatternData
 import com.lossydragon.modplayer.player.model.emptyPatternData
 import com.lossydragon.modplayer.ui.components.BackButton
+import com.lossydragon.modplayer.ui.screens.player.components.ChannelView
 import com.lossydragon.modplayer.ui.screens.player.components.ChipList
 import com.lossydragon.modplayer.ui.screens.player.components.DurationsSheet
 import com.lossydragon.modplayer.ui.screens.player.components.PatternInfoRow
@@ -47,6 +48,8 @@ import kotlinx.coroutines.delay
 import kotlinx.coroutines.isActive
 import kotlinx.coroutines.launch
 import org.koin.compose.viewmodel.koinViewModel
+
+// TODO localize hard coded text
 
 private sealed class PlayerAction {
     data class OnQueueClick(val int: Int) : PlayerAction()
@@ -95,6 +98,7 @@ fun PlayerScreen(
     var hasLoadedOnce by remember { mutableStateOf(false) }
     var showAudioInfo by remember { mutableStateOf(false) }
     var audioInfoText by remember { mutableStateOf("") }
+    var showInstruments by remember { mutableStateOf(false) }
     var showModInfo by remember { mutableStateOf(false) }
 
     val patternIndex = state.frame?.pattern ?: -1
@@ -169,9 +173,9 @@ fun PlayerScreen(
         )
     }
 
-    if (state.songInstruments.isNotEmpty()) {
+    if (showInstruments && state.songInstruments.isNotEmpty()) {
         PlayerAlertDialog(
-            onDismissRequest = viewModel::closeModInstruments,
+            onDismissRequest = { showInstruments = false },
             icon = Icons.AutoMirrored.Filled.List,
             title = "Song Instruments",
             content = {
@@ -232,7 +236,9 @@ fun PlayerScreen(
                 PlayerAction.OnAllSequences -> viewModel.toggleAllSequences()
 
                 PlayerAction.OnInstruments -> {
-                    if (!viewModel.getModInstruments()) {
+                    if (state.songInstruments.isNotEmpty()) {
+                        showInstruments = true
+                    } else {
                         scope.launch {
                             snackBarHostState.showSnackbar(
                                 message = "No instruments to display"
@@ -288,6 +294,8 @@ private fun PlayerScreenContent(
     modifier: Modifier = Modifier,
     onAction: (PlayerAction) -> Unit
 ) {
+    var activePlayerView by remember { mutableIntStateOf(0) }
+
     if (state.currentModule == null) {
         Box(
             modifier = Modifier
@@ -331,7 +339,18 @@ private fun PlayerScreenContent(
                 },
                 navigationIcon = { BackButton(onBack = { onAction(PlayerAction.OnBack) }) },
                 actions = {
-                    Spacer(modifier = Modifier.size(48.dp))
+                    IconButton(
+                        onClick = {
+                            activePlayerView++
+                            activePlayerView %= 2
+                        },
+                        content = {
+                            Icon(
+                                imageVector = Icons.Default.ViewCarousel,
+                                contentDescription = null
+                            )
+                        }
+                    )
                 }
             )
         },
@@ -380,22 +399,27 @@ private fun PlayerScreenContent(
             )
         },
         content = { contentPadding ->
-            state.frame?.let {
-                PatternView(
-                    modifier = Modifier
-                        .fillMaxSize()
-                        .padding(contentPadding),
-                    pattern = patternData,
-                    currentRow = state.frame.row,
-                    showRowNumbers = state.showRowNumbers,
-                )
+            Box(
+                modifier = Modifier
+                    .fillMaxSize()
+                    .padding(contentPadding)
+            ) {
+                state.frame?.let { frame ->
+                    when (activePlayerView) {
+                        0 -> PatternView(
+                            modifier = Modifier.fillMaxSize(),
+                            pattern = patternData,
+                            currentRow = frame.row,
+                            showRowNumbers = state.showRowNumbers,
+                        )
 
-                // TODO add a tap to click to choose between current and future screens.
-                // ChannelMeterGrid(
-                //     modifier = Modifier
-                //         .padding(contentPadding),
-                //     channels = it.channels
-                // )
+                        1 -> ChannelView(
+                            modifier = Modifier.fillMaxSize(),
+                            frame = frame,
+                            instrumentNames = state.songInstruments,
+                        )
+                    }
+                }
             }
 
             if (showDurations) {
