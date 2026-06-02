@@ -7,6 +7,7 @@
     <string name="confirm">Confirm</string>
     <string name="create">Create</string>
     <string name="delete">Delete</string>
+    <string name="choose_directory">Choose Directory</string>
     <string name="desc_back_button">Go Back</string>
     <string name="desc_breadcrumb">Breadcrumb Icon</string>
     <string name="desc_clear_history">Clear History Button</string>
@@ -58,7 +59,7 @@
     <string name="module_download_share">%1$s (by %2$s) from The Mod Archive: %3$s</string>
     <string name="name">Name</string>
     <string name="no_folder_selected">No folder selected</string>
-    <string name="no_folder_selected_message">Tap the folder to choose your start location</string>
+    <string name="no_folder_selected_message">To view modules, choose your start location</string>
     <string name="none">None</string>
     <string name="play">Play</string>
     <string name="player_num_of_channels">Number of Channels: %d</string>
@@ -221,4 +222,5 @@
     <string name="mono">mono</string>
     <string name="stereo">stereo</string>
     <string name="unsigned">unsigned</string>
+    <string name="directory">Directory</string>
 </resources>

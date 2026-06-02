@@ -7,12 +7,17 @@ import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.LazyListState
 import androidx.compose.foundation.lazy.items
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.AudioFile
+import androidx.compose.material.icons.filled.Folder
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalLayoutDirection
+import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
 import androidx.core.net.toUri
+import com.lossydragon.modplayer.R
 import com.lossydragon.modplayer.model.BrowserUiState
 import com.lossydragon.modplayer.model.FileItem
 import com.lossydragon.modplayer.model.ModuleFile
@@ -41,15 +46,22 @@ internal fun ModuleList(
                 items = state.directories,
                 key = { it.uri.toString() },
                 itemContent = { dir ->
-                    DirectoryListItem(item = dir, onClick = { onDir(dir) })
+                    BrowserListItem(
+                        title = dir.name,
+                        comment = stringResource(R.string.directory),
+                        leadingIcon = Icons.Default.Folder,
+                        onClick = { onDir(dir) }
+                    )
                 }
             )
             items(
                 items = state.files,
                 key = { it.uri.toString() },
                 itemContent = { file ->
-                    ModuleListItem(
-                        file = file,
+                    BrowserListItem(
+                        title = file.resolvedName.ifBlank { file.name },
+                        comment = file.resolvedType.ifBlank { file.extension },
+                        leadingIcon = Icons.Default.AudioFile,
                         onClick = { onSelect(file) },
                     )
                 }

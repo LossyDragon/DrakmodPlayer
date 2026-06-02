@@ -7,7 +7,7 @@ import androidx.compose.material.icons.filled.*
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.*
-import androidx.compose.ui.res.stringResource
+import androidx.compose.ui.res.*
 import androidx.compose.ui.tooling.preview.*
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.lossydragon.modplayer.R
@@ -16,7 +16,7 @@ import com.lossydragon.modplayer.model.ArtistInfo
 import com.lossydragon.modplayer.model.Module
 import com.lossydragon.modplayer.ui.components.BackButton
 import com.lossydragon.modplayer.ui.components.MessageBox
-import com.lossydragon.modplayer.ui.screens.downloads.components.ModuleListItem
+import com.lossydragon.modplayer.ui.screens.downloads.components.DownloadListItem
 import com.lossydragon.modplayer.ui.screens.downloads.viewmodel.DownloadHistoryViewModel
 import com.lossydragon.modplayer.ui.theme.AppTheme
 import kotlinx.collections.immutable.ImmutableList
@@ -122,8 +122,10 @@ private fun DownloadHistoryContent(
                             items(
                                 items = history,
                                 itemContent = { module ->
-                                    ModuleListItem(
-                                        module = module,
+                                    DownloadListItem(
+                                        text = module.songtitle,
+                                        supportingText = module.artist,
+                                        leadingText = module.format,
                                         onClick = { onModuleClick(module.id) }
                                     )
                                 }

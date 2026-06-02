@@ -23,8 +23,7 @@ import com.lossydragon.modplayer.model.Sponsor
 import com.lossydragon.modplayer.ui.components.BackButton
 import com.lossydragon.modplayer.ui.components.MessageBox
 import com.lossydragon.modplayer.ui.components.ProgressbarIndicator
-import com.lossydragon.modplayer.ui.screens.downloads.components.ArtistListItem
-import com.lossydragon.modplayer.ui.screens.downloads.components.ModuleListItem
+import com.lossydragon.modplayer.ui.screens.downloads.components.DownloadListItem
 import com.lossydragon.modplayer.ui.screens.downloads.viewmodel.DownloadViewModel
 import com.lossydragon.modplayer.ui.theme.AppTheme
 import org.koin.androidx.compose.koinViewModel
@@ -112,8 +111,14 @@ private fun DownloadScreenContent(
                                 items(
                                     items = result.data.module,
                                     itemContent = { module ->
-                                        ModuleListItem(
-                                            module = module,
+                                        DownloadListItem(
+                                            text = module.songtitle,
+                                            supportingText = module.artist,
+                                            leadingText = module.format,
+                                            trailingText = stringResource(
+                                                R.string.size_kb,
+                                                module.sizeKb
+                                            ),
                                             onClick = { onModuleClick(module.id) }
                                         )
                                     }
@@ -143,8 +148,8 @@ private fun DownloadScreenContent(
                                 items(
                                     items = result.data.listItems,
                                     itemContent = { artist ->
-                                        ArtistListItem(
-                                            alias = artist.alias,
+                                        DownloadListItem(
+                                            text = artist.alias,
                                             onClick = { onArtistClick(artist.id) }
                                         )
                                     }
