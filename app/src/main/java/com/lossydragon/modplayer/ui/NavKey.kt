@@ -9,7 +9,7 @@ import androidx.compose.material.icons.outlined.*
 import androidx.compose.ui.graphics.vector.*
 import androidx.navigation3.runtime.NavKey
 import com.lossydragon.modplayer.R
-import com.lossydragon.modplayer.model.SearchType
+import com.lossydragon.modplayer.ui.screens.downloads.viewmodel.SearchType
 import kotlinx.serialization.Serializable
 
 sealed interface NavKeyPlaylists : NavKey {

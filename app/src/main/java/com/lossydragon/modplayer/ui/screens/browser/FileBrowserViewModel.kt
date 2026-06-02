@@ -3,23 +3,53 @@ package com.lossydragon.modplayer.ui.screens.browser
 import android.content.Context
 import android.content.Intent
 import android.net.Uri
-import android.provider.DocumentsContract
+import androidx.compose.runtime.*
 import androidx.core.net.toUri
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
+import androidx.media3.common.Player
 import com.lossydragon.modplayer.core.Constants
 import com.lossydragon.modplayer.data.ModuleMetadataRepository
 import com.lossydragon.modplayer.db.AppPreferences
-import com.lossydragon.modplayer.model.BrowserSortOrder
-import com.lossydragon.modplayer.model.BrowserUiState
-import com.lossydragon.modplayer.model.FileItem
 import com.lossydragon.modplayer.model.ModuleFile
+import com.lossydragon.modplayer.util.queryDirectoryEntries
+import com.lossydragon.modplayer.util.resolveDocId
+import kotlinx.collections.immutable.ImmutableList
+import kotlinx.collections.immutable.persistentListOf
 import kotlinx.collections.immutable.toImmutableList
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
+
+/** UI state and domain models for the SAF file browser. */
+
+enum class BrowserSortOrder { NAME, TYPE, SIZE }
+
+@Immutable
+data class FileItem(
+    val isDirectory: Boolean,
+    val name: String,
+    val size: Long,
+    val uri: Uri
+)
+
+@Immutable
+data class BrowserUiState(
+    val breadcrumbs: ImmutableList<String> = persistentListOf(),
+    val currentPath: String = "",
+    val directories: ImmutableList<FileItem> = persistentListOf(),
+    val error: String? = null,
+    val files: ImmutableList<ModuleFile> = persistentListOf(),
+    val filterQuery: String = "",
+    val hasStorageAccess: Boolean = false,
+    val isFolderTraversal: Boolean = true, // Maybe add an option to turn off traversal.
+    val isLoading: Boolean = true,
+    val isShuffle: Boolean = false,
+    val repeatMode: Int = Player.REPEAT_MODE_OFF,
+    val sortOrder: BrowserSortOrder = BrowserSortOrder.NAME
+)
 
 class FileBrowserViewModel(
     private val appContext: Context,
@@ -32,6 +62,10 @@ class FileBrowserViewModel(
 
     private val dirStack = ArrayDeque<Uri>()
     private var rootTreeUri: Uri? = null
+
+    // Rebuilds only when the directory changes, not on sort/filter
+    private var traversalCacheUri: Uri? = null
+    private var traversalCache: List<ModuleFile> = emptyList()
 
     init {
         viewModelScope.launch {
@@ -117,67 +151,46 @@ class FileBrowserViewModel(
         state.value = state.value.copy(isLoading = true, error = null)
         val filterQuery = state.value.filterQuery
         val sortOrder = state.value.sortOrder
+        val isFolderTraversal = state.value.isFolderTraversal
 
         viewModelScope.launch(Dispatchers.IO) {
             try {
                 val treeRoot = rootTreeUri ?: uri
-                val docId = resolveDocId(uri)
-                val childrenUri = DocumentsContract.buildChildDocumentsUriUsingTree(treeRoot, docId)
+                val entries = appContext.contentResolver
+                    .queryDirectoryEntries(treeRoot, uri.resolveDocId(appContext))
 
                 data class RawFile(val uri: Uri, val name: String, val size: Long, val ext: String)
 
                 val directories = mutableListOf<FileItem>()
                 val rawFiles = mutableListOf<RawFile>()
 
-                appContext.contentResolver.query(
-                    childrenUri,
-                    arrayOf(
-                        DocumentsContract.Document.COLUMN_DOCUMENT_ID,
-                        DocumentsContract.Document.COLUMN_DISPLAY_NAME,
-                        DocumentsContract.Document.COLUMN_MIME_TYPE,
-                        DocumentsContract.Document.COLUMN_SIZE,
-                    ),
-                    null,
-                    null,
-                    null,
-                )?.use { cursor ->
-                    val idCol =
-                        cursor.getColumnIndexOrThrow(DocumentsContract.Document.COLUMN_DOCUMENT_ID)
-                    val nameCol =
-                        cursor.getColumnIndexOrThrow(DocumentsContract.Document.COLUMN_DISPLAY_NAME)
-                    val mimeCol =
-                        cursor.getColumnIndexOrThrow(DocumentsContract.Document.COLUMN_MIME_TYPE)
-                    val sizeCol =
-                        cursor.getColumnIndexOrThrow(DocumentsContract.Document.COLUMN_SIZE)
-
-                    while (cursor.moveToNext()) {
-                        val childId = cursor.getString(idCol)
-                        val name = cursor.getString(nameCol) ?: continue
-                        val mime = cursor.getString(mimeCol) ?: continue
-                        val size = cursor.getLong(sizeCol)
-                        val childUri =
-                            DocumentsContract.buildDocumentUriUsingTree(treeRoot, childId)
-                        val ext = name.substringAfterLast('.', "").lowercase()
-                        val prefix = name.substringBefore('.').lowercase()
-
-                        when {
-                            mime == DocumentsContract.Document.MIME_TYPE_DIR ->
-                                directories.add(
-                                    FileItem(
-                                        name = name,
-                                        uri = childUri,
-                                        isDirectory = true,
-                                        size = 0L
-                                    )
+                for (entry in entries) {
+                    val ext = entry.name.substringAfterLast('.', "").lowercase()
+                    val prefix = entry.name.substringBefore('.').lowercase()
+                    when {
+                        entry.isDirectory ->
+                            directories.add(
+                                FileItem(
+                                    name = entry.name,
+                                    uri = entry.childUri,
+                                    isDirectory = true,
+                                    size = 0L
                                 )
+                            )
 
-                            ext in Constants.UNSUPPORTED_EXTENSIONS ||
-                                prefix in Constants.UNSUPPORTED_EXTENSIONS -> Unit
+                        ext in Constants.UNSUPPORTED_EXTENSIONS ||
+                            prefix in Constants.UNSUPPORTED_EXTENSIONS -> Unit
 
-                            ext !in Constants.SKIP_EXTENSIONS &&
-                                prefix !in Constants.SKIP_EXTENSIONS ->
-                                rawFiles.add(RawFile(childUri, name, size, ext.ifEmpty { prefix }))
-                        }
+                        ext !in Constants.SKIP_EXTENSIONS &&
+                            prefix !in Constants.SKIP_EXTENSIONS ->
+                            rawFiles.add(
+                                RawFile(
+                                    uri = entry.childUri,
+                                    name = entry.name,
+                                    size = entry.size,
+                                    ext = ext.ifEmpty { prefix }
+                                )
+                            )
                     }
                 }
 
@@ -197,7 +210,17 @@ class FileBrowserViewModel(
                     )
                 }
 
-                val filtered = modules.filter { file ->
+                val subdirModules = if (isFolderTraversal) {
+                    if (uri != traversalCacheUri) {
+                        traversalCacheUri = uri
+                        traversalCache = collectSubdirFiles(treeRoot, directories)
+                    }
+                    traversalCache
+                } else {
+                    emptyList()
+                }
+
+                val filtered = (modules + subdirModules).filter { file ->
                     val name = file.resolvedName.ifBlank { file.name }
                     filterQuery.isBlank() || name.contains(filterQuery, ignoreCase = true)
                 }.sortedWith(
@@ -231,65 +254,90 @@ class FileBrowserViewModel(
         }
     }
 
+    private suspend fun collectSubdirFiles(treeRoot: Uri, dirs: List<FileItem>): List<ModuleFile> {
+        val result = mutableListOf<ModuleFile>()
+        for (dir in dirs) {
+            result += collectFilesFromDir(treeRoot, dir.uri)
+        }
+        return result
+    }
+
+    private suspend fun collectFilesFromDir(treeRoot: Uri, uri: Uri): List<ModuleFile> {
+        val entries = appContext.contentResolver
+            .queryDirectoryEntries(treeRoot, uri.resolveDocId(appContext))
+
+        data class RawFile(val uri: Uri, val name: String, val size: Long, val ext: String)
+
+        val subdirUris = mutableListOf<Uri>()
+        val rawFiles = mutableListOf<RawFile>()
+
+        for (entry in entries) {
+            val ext = entry.name.substringAfterLast('.', "").lowercase()
+            val prefix = entry.name.substringBefore('.').lowercase()
+            when {
+                entry.isDirectory -> subdirUris.add(entry.childUri)
+
+                ext in Constants.UNSUPPORTED_EXTENSIONS ||
+                    prefix in Constants.UNSUPPORTED_EXTENSIONS -> Unit
+
+                ext !in Constants.SKIP_EXTENSIONS &&
+                    prefix !in Constants.SKIP_EXTENSIONS ->
+                    rawFiles.add(
+                        RawFile(
+                            entry.childUri,
+                            entry.name,
+                            entry.size,
+                            ext.ifEmpty {
+                                prefix
+                            }
+                        )
+                    )
+            }
+        }
+
+        val cachedMap = db.getByFileNames(rawFiles.map { it.name }).associateBy { it.fileName }
+        val modules = rawFiles.map { raw ->
+            val cached = cachedMap[raw.name]
+            ModuleFile(
+                uri = raw.uri,
+                name = raw.name,
+                sizeBytes = raw.size,
+                extension = raw.ext,
+                resolvedName = cached?.name ?: "",
+                resolvedType = cached?.type ?: "",
+            )
+        }
+
+        return modules + subdirUris.flatMap { collectFilesFromDir(treeRoot, it) }
+    }
+
     private suspend fun indexDirectory(uri: Uri) {
         val treeRoot = rootTreeUri ?: uri
-        val docId = resolveDocId(uri)
-        val childrenUri = DocumentsContract.buildChildDocumentsUriUsingTree(treeRoot, docId)
+        val entries = appContext.contentResolver
+            .queryDirectoryEntries(treeRoot, uri.resolveDocId(appContext))
 
-        appContext.contentResolver.query(
-            childrenUri,
-            arrayOf(
-                DocumentsContract.Document.COLUMN_DOCUMENT_ID,
-                DocumentsContract.Document.COLUMN_DISPLAY_NAME,
-                DocumentsContract.Document.COLUMN_MIME_TYPE,
-                DocumentsContract.Document.COLUMN_SIZE,
-            ),
-            null,
-            null,
-            null,
-        )?.use { cursor ->
-            val idCol = cursor.getColumnIndexOrThrow(DocumentsContract.Document.COLUMN_DOCUMENT_ID)
-            val nameCol = cursor.getColumnIndexOrThrow(
-                DocumentsContract.Document.COLUMN_DISPLAY_NAME
-            )
-            val mimeCol = cursor.getColumnIndexOrThrow(DocumentsContract.Document.COLUMN_MIME_TYPE)
-            val sizeCol = cursor.getColumnIndexOrThrow(DocumentsContract.Document.COLUMN_SIZE)
+        for (entry in entries) {
+            if (entry.isDirectory) continue
+            val ext = entry.name.substringAfterLast('.', "").lowercase()
+            val prefix = entry.name.substringBefore('.').lowercase()
+            when {
+                ext in Constants.UNSUPPORTED_EXTENSIONS ||
+                    prefix in Constants.UNSUPPORTED_EXTENSIONS -> Unit
 
-            while (cursor.moveToNext()) {
-                val childId = cursor.getString(idCol)
-                val name = cursor.getString(nameCol) ?: continue
-                val mime = cursor.getString(mimeCol) ?: continue
-                val size = cursor.getLong(sizeCol)
-                val childUri = DocumentsContract.buildDocumentUriUsingTree(treeRoot, childId)
-                val ext = name.substringAfterLast('.', "").lowercase()
-                val prefix = name.substringBefore('.').lowercase()
-
-                when {
-                    mime == DocumentsContract.Document.MIME_TYPE_DIR -> Unit
-
-                    ext in Constants.UNSUPPORTED_EXTENSIONS ||
-                        prefix in Constants.UNSUPPORTED_EXTENSIONS -> Unit
-
-                    ext !in Constants.SKIP_EXTENSIONS &&
-                        prefix !in Constants.SKIP_EXTENSIONS -> {
-                        if (!db.exists(name, size)) {
-                            db.fetchAndCache(childUri, name, size, ext.ifEmpty { prefix })
-                        }
+                ext !in Constants.SKIP_EXTENSIONS &&
+                    prefix !in Constants.SKIP_EXTENSIONS -> {
+                    if (!db.exists(entry.name, entry.size)) {
+                        db.fetchAndCache(
+                            entry.childUri,
+                            entry.name,
+                            entry.size,
+                            ext.ifEmpty {
+                                prefix
+                            }
+                        )
                     }
                 }
             }
         }
-    }
-
-    private fun resolveDocId(uri: Uri): String = when {
-        DocumentsContract.isTreeUri(uri) &&
-            DocumentsContract.isDocumentUri(appContext, uri) ->
-            DocumentsContract.getDocumentId(uri)
-
-        DocumentsContract.isTreeUri(uri) ->
-            DocumentsContract.getTreeDocumentId(uri)
-
-        else ->
-            DocumentsContract.getDocumentId(uri)
     }
 }

@@ -11,14 +11,14 @@ import androidx.compose.runtime.saveable.*
 import androidx.compose.ui.*
 import androidx.compose.ui.focus.*
 import androidx.compose.ui.platform.*
-import androidx.compose.ui.res.stringResource
+import androidx.compose.ui.res.*
 import androidx.compose.ui.text.input.*
 import androidx.compose.ui.tooling.preview.*
 import androidx.compose.ui.unit.*
 import com.lossydragon.modplayer.R
 import com.lossydragon.modplayer.core.Constants
-import com.lossydragon.modplayer.model.SearchType
 import com.lossydragon.modplayer.ui.components.BackButton
+import com.lossydragon.modplayer.ui.screens.downloads.viewmodel.SearchType
 import com.lossydragon.modplayer.ui.theme.AppTheme
 import com.lossydragon.modplayer.ui.util.annotatedLinkString
 import kotlin.time.Duration.Companion.milliseconds

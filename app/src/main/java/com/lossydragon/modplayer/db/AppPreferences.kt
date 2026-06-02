@@ -1,7 +1,7 @@
 package com.lossydragon.modplayer.db
 
 import android.content.Context
-import androidx.compose.ui.graphics.toArgb
+import androidx.compose.ui.graphics.*
 import androidx.datastore.core.DataStore
 import androidx.datastore.core.handlers.ReplaceFileCorruptionHandler
 import androidx.datastore.preferences.core.Preferences
@@ -12,7 +12,6 @@ import androidx.datastore.preferences.core.intPreferencesKey
 import androidx.datastore.preferences.core.longPreferencesKey
 import androidx.datastore.preferences.core.stringPreferencesKey
 import androidx.datastore.preferences.preferencesDataStore
-import com.lossydragon.modplayer.model.QueueState
 import com.lossydragon.modplayer.ui.theme.seed
 import com.materialkolor.PaletteStyle
 import kotlinx.coroutines.flow.Flow
@@ -20,6 +19,14 @@ import kotlinx.coroutines.flow.firstOrNull
 import kotlinx.coroutines.flow.map
 import org.helllabs.libxmp.Xmp
 import timber.log.Timber
+
+data class QueueState(
+    val index: Int,
+    val json: String,
+    val positionMs: Long,
+    val repeat: Int,
+    val shuffle: Boolean
+)
 
 private val Context.dataStore by preferencesDataStore(
     name = "xmp_prefs",

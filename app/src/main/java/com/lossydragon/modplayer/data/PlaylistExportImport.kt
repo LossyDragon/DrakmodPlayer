@@ -2,9 +2,10 @@ package com.lossydragon.modplayer.data
 
 import android.content.Context
 import android.net.Uri
+import androidx.core.net.toUri
 import com.lossydragon.modplayer.db.entity.PlaylistEntity
 import com.lossydragon.modplayer.db.entity.PlaylistEntryEntity
-import com.lossydragon.modplayer.util.isUriAccessible
+import com.lossydragon.modplayer.util.isAccessible
 import java.time.Instant
 import kotlinx.serialization.Serializable
 import kotlinx.serialization.json.Json
@@ -132,11 +133,12 @@ fun PlaylistExport.toRoomEntities(
 
         val validEntries = importedPlaylist.entries.mapNotNull { entry ->
             totalEntries++
-            if (validateUris && !context.contentResolver.isUriAccessible(entry.uri)) {
+            if (validateUris && !entry.uri.toUri().isAccessible(context)) {
                 Timber.w("Skipping inaccessible URI: ${entry.uri}")
                 skipped++
                 return@mapNotNull null
             }
+            // ID will be set after Room insert — use 0 as placeholder
             PlaylistEntryEntity(
                 playlistId = 0L,
                 position = entry.position,

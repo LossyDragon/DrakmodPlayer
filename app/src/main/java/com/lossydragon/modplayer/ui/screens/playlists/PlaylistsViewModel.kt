@@ -11,7 +11,7 @@ import com.lossydragon.modplayer.data.toRoomEntities
 import com.lossydragon.modplayer.data.writeExportToUri
 import com.lossydragon.modplayer.db.entity.PlaylistEntity
 import com.lossydragon.modplayer.model.ModuleFile
-import com.lossydragon.modplayer.model.PlayerUiState
+import com.lossydragon.modplayer.player.PlayerUiState
 import com.lossydragon.modplayer.player.PlayerViewModel
 import kotlinx.collections.immutable.ImmutableList
 import kotlinx.collections.immutable.persistentListOf

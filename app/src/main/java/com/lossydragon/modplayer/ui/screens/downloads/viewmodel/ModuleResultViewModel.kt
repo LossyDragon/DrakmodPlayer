@@ -8,10 +8,8 @@ import androidx.lifecycle.viewModelScope
 import com.lossydragon.modplayer.data.DownloadHistoryRepository
 import com.lossydragon.modplayer.data.ModArchiveService
 import com.lossydragon.modplayer.db.AppPreferences
-import com.lossydragon.modplayer.model.DownloadStatus
 import com.lossydragon.modplayer.model.Module
-import com.lossydragon.modplayer.model.ModuleResultState
-import com.lossydragon.modplayer.util.getDownloadDir
+import com.lossydragon.modplayer.util.findDownloadedModule
 import com.lossydragon.modplayer.util.getOrCreateOutputFile
 import io.ktor.client.HttpClient
 import io.ktor.client.request.get
@@ -182,27 +180,10 @@ class ModuleResultViewModel(
 
     private suspend fun findModuleUri(module: Module): android.net.Uri? {
         val rootUri = (lastDirectory.firstOrNull() ?: return null).toUri()
-        val dirUri = appContext.getDownloadDir(rootUri, module) ?: return null
-        val dirDocId = DocumentsContract.getDocumentId(dirUri)
-        val filename = module.url.substringAfterLast('#')
-        val childrenUri = DocumentsContract.buildChildDocumentsUriUsingTree(rootUri, dirDocId)
-
-        appContext.contentResolver.query(
-            childrenUri,
-            arrayOf(
-                DocumentsContract.Document.COLUMN_DOCUMENT_ID,
-                DocumentsContract.Document.COLUMN_DISPLAY_NAME,
-            ),
-            null,
-            null,
-            null,
-        )?.use { cursor ->
-            while (cursor.moveToNext()) {
-                if (cursor.getString(1) == filename) {
-                    return DocumentsContract.buildDocumentUriUsingTree(rootUri, cursor.getString(0))
-                }
-            }
-        }
-        return null
+        return appContext.findDownloadedModule(
+            rootUri = rootUri,
+            artist = module.artist,
+            filename = module.url.substringAfterLast('#'),
+        )
     }
 }

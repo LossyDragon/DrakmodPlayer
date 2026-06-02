@@ -18,23 +18,21 @@ import androidx.compose.ui.*
 import androidx.compose.ui.graphics.*
 import androidx.compose.ui.input.nestedscroll.*
 import androidx.compose.ui.platform.*
+import androidx.compose.ui.res.*
 import androidx.compose.ui.tooling.preview.*
 import androidx.compose.ui.unit.*
 import androidx.core.net.toUri
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.media3.common.Player
-import com.lossydragon.modplayer.model.BrowserSortOrder
-import com.lossydragon.modplayer.model.BrowserUiState
-import com.lossydragon.modplayer.model.FileItem
+import com.lossydragon.modplayer.R
 import com.lossydragon.modplayer.model.ModuleFile
-import com.lossydragon.modplayer.model.PlaybackStatus
-import com.lossydragon.modplayer.model.PlayerUiState
+import com.lossydragon.modplayer.player.PlaybackStatus
+import com.lossydragon.modplayer.player.PlayerUiState
 import com.lossydragon.modplayer.player.PlayerViewModel
 import com.lossydragon.modplayer.ui.components.MessageBox
 import com.lossydragon.modplayer.ui.components.ProgressbarIndicator
 import com.lossydragon.modplayer.ui.screens.browser.components.BreadCrumbs
 import com.lossydragon.modplayer.ui.screens.browser.components.BrowserInputField
-import com.lossydragon.modplayer.ui.screens.browser.components.EmptyPrompt
 import com.lossydragon.modplayer.ui.screens.browser.components.ModuleList
 import com.lossydragon.modplayer.ui.screens.player.components.MiniPlayerBar
 import com.lossydragon.modplayer.ui.theme.AppTheme
@@ -301,9 +299,17 @@ private fun FileBrowserScreenContent(
                         .padding(padding)
                 )
 
-                !browserState.hasStorageAccess -> EmptyPrompt(
-                    padding = padding,
-                    onPick = onFolderPick,
+                !browserState.hasStorageAccess -> MessageBox(
+                    modifier = Modifier.padding(padding),
+                    icon = Icons.Default.FolderOpen,
+                    title = stringResource(R.string.no_folder_selected),
+                    text = stringResource(R.string.no_folder_selected_message),
+                    actions = {
+                        TextButton(
+                            onClick = onFolderPick,
+                            content = { Text(text = stringResource(R.string.choose_directory)) }
+                        )
+                    }
                 )
 
                 browserState.files.isEmpty() && browserState.directories.isEmpty() -> MessageBox(

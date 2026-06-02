@@ -6,7 +6,7 @@ import androidx.compose.runtime.*
 import androidx.compose.ui.*
 import androidx.compose.ui.tooling.preview.*
 import androidx.compose.ui.unit.*
-import com.lossydragon.modplayer.model.PlayerUiState
+import com.lossydragon.modplayer.player.PlayerUiState
 import com.lossydragon.modplayer.ui.theme.AppTheme
 import com.lossydragon.modplayer.util.formatMs
 

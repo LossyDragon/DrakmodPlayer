@@ -1,21 +1,20 @@
 package com.lossydragon.modplayer.ui.screens.browser.components
 
-import androidx.compose.foundation.layout.PaddingValues
-import androidx.compose.foundation.layout.calculateEndPadding
-import androidx.compose.foundation.layout.calculateStartPadding
-import androidx.compose.foundation.layout.fillMaxSize
-import androidx.compose.foundation.lazy.LazyColumn
-import androidx.compose.foundation.lazy.LazyListState
-import androidx.compose.foundation.lazy.items
-import androidx.compose.runtime.Composable
-import androidx.compose.ui.Modifier
-import androidx.compose.ui.platform.LocalLayoutDirection
-import androidx.compose.ui.tooling.preview.Preview
-import androidx.compose.ui.unit.dp
+import androidx.compose.foundation.layout.*
+import androidx.compose.foundation.lazy.*
+import androidx.compose.material.icons.*
+import androidx.compose.material.icons.filled.*
+import androidx.compose.runtime.*
+import androidx.compose.ui.*
+import androidx.compose.ui.platform.*
+import androidx.compose.ui.res.*
+import androidx.compose.ui.tooling.preview.*
+import androidx.compose.ui.unit.*
 import androidx.core.net.toUri
-import com.lossydragon.modplayer.model.BrowserUiState
-import com.lossydragon.modplayer.model.FileItem
+import com.lossydragon.modplayer.R
 import com.lossydragon.modplayer.model.ModuleFile
+import com.lossydragon.modplayer.ui.screens.browser.BrowserUiState
+import com.lossydragon.modplayer.ui.screens.browser.FileItem
 import com.lossydragon.modplayer.ui.theme.AppTheme
 import kotlinx.collections.immutable.toImmutableList
 
@@ -41,15 +40,22 @@ internal fun ModuleList(
                 items = state.directories,
                 key = { it.uri.toString() },
                 itemContent = { dir ->
-                    DirectoryListItem(item = dir, onClick = { onDir(dir) })
+                    BrowserListItem(
+                        title = dir.name,
+                        comment = stringResource(R.string.directory),
+                        leadingIcon = Icons.Default.Folder,
+                        onClick = { onDir(dir) }
+                    )
                 }
             )
             items(
                 items = state.files,
                 key = { it.uri.toString() },
                 itemContent = { file ->
-                    ModuleListItem(
-                        file = file,
+                    BrowserListItem(
+                        title = file.resolvedName.ifBlank { file.name },
+                        comment = file.resolvedType.ifBlank { file.extension },
+                        leadingIcon = Icons.Default.AudioFile,
                         onClick = { onSelect(file) },
                     )
                 }

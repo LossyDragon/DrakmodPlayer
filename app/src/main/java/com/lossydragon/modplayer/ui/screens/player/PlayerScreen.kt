@@ -13,7 +13,7 @@ import androidx.compose.material3.SheetValue.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.*
 import androidx.compose.ui.graphics.vector.*
-import androidx.compose.ui.res.stringResource
+import androidx.compose.ui.res.*
 import androidx.compose.ui.text.font.*
 import androidx.compose.ui.text.style.*
 import androidx.compose.ui.tooling.preview.*
@@ -23,8 +23,8 @@ import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.media3.common.Player
 import com.lossydragon.modplayer.R
 import com.lossydragon.modplayer.model.ModuleFile
-import com.lossydragon.modplayer.model.PlaybackStatus
-import com.lossydragon.modplayer.model.PlayerUiState
+import com.lossydragon.modplayer.player.PlaybackStatus
+import com.lossydragon.modplayer.player.PlayerUiState
 import com.lossydragon.modplayer.player.PlayerViewModel
 import com.lossydragon.modplayer.player.model.ChannelSnapshot
 import com.lossydragon.modplayer.player.model.FrameSnapshot

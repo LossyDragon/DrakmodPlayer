@@ -13,14 +13,14 @@ import androidx.compose.ui.tooling.preview.*
 import androidx.compose.ui.unit.*
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.lossydragon.modplayer.R
-import com.lossydragon.modplayer.model.DownloadStatus
 import com.lossydragon.modplayer.model.Module
 import com.lossydragon.modplayer.model.ModuleResult
-import com.lossydragon.modplayer.model.ModuleResultState
 import com.lossydragon.modplayer.ui.components.BackButton
 import com.lossydragon.modplayer.ui.components.MessageBox
 import com.lossydragon.modplayer.ui.components.ProgressbarIndicator
 import com.lossydragon.modplayer.ui.screens.downloads.components.ModuleDetailLayout
+import com.lossydragon.modplayer.ui.screens.downloads.viewmodel.DownloadStatus
+import com.lossydragon.modplayer.ui.screens.downloads.viewmodel.ModuleResultState
 import com.lossydragon.modplayer.ui.screens.downloads.viewmodel.ModuleResultViewModel
 import com.lossydragon.modplayer.ui.theme.AppTheme
 import com.lossydragon.modplayer.util.shareLink

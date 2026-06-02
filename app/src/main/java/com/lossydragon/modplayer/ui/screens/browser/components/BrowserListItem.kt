@@ -1,24 +1,24 @@
 package com.lossydragon.modplayer.ui.screens.browser.components
 
-import android.net.Uri
 import androidx.compose.foundation.layout.*
 import androidx.compose.material.icons.*
 import androidx.compose.material.icons.filled.*
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.*
-import androidx.compose.ui.res.stringResource
+import androidx.compose.ui.graphics.vector.*
 import androidx.compose.ui.text.style.*
 import androidx.compose.ui.tooling.preview.*
-import com.lossydragon.modplayer.R
-import com.lossydragon.modplayer.model.ModuleFile
 import com.lossydragon.modplayer.ui.theme.AppTheme
 
 @OptIn(ExperimentalMaterial3ExpressiveApi::class)
 @Composable
-internal fun ModuleListItem(
-    file: ModuleFile,
-    onClick: () -> Unit
+internal fun BrowserListItem(
+    title: String,
+    comment: String? = null,
+    leadingIcon: ImageVector? = null,
+    onClick: () -> Unit,
+    onTrailingClick: (() -> Unit)? = null
 ) {
     ListItem(
         onClick = onClick,
@@ -30,18 +30,26 @@ internal fun ModuleListItem(
         modifier = Modifier.fillMaxWidth(),
         content = {
             Text(
-                text = file.resolvedName.ifBlank { file.name },
+                text = title,
                 maxLines = 1,
                 overflow = TextOverflow.Ellipsis,
                 modifier = Modifier.fillMaxWidth(),
             )
         },
-        supportingContent = { Text(text = file.resolvedType.ifBlank { file.extension }) },
-        leadingContent = {
-            Icon(
-                imageVector = Icons.Default.AudioFile,
-                contentDescription = stringResource(R.string.desc_module_item, file.resolvedName)
-            )
+        supportingContent = comment?.let { { Text(text = it) } },
+        leadingContent = leadingIcon?.let { { Icon(imageVector = it, contentDescription = null) } },
+        trailingContent = onTrailingClick?.let {
+            {
+                IconButton(
+                    onClick = { it.invoke() },
+                    content = {
+                        Icon(
+                            imageVector = Icons.Default.MoreVert,
+                            contentDescription = null
+                        )
+                    }
+                )
+            }
         },
     )
 }
@@ -51,14 +59,12 @@ internal fun ModuleListItem(
 private fun Preview() {
     AppTheme {
         Surface {
-            ModuleListItem(
-                file = ModuleFile(
-                    uri = Uri.EMPTY,
-                    name = "Preview",
-                    sizeBytes = 123456L,
-                    extension = ".669",
-                ),
+            BrowserListItem(
+                title = "Title Item",
+                comment = "Comment Item",
+                leadingIcon = Icons.Default.AudioFile,
                 onClick = {},
+                onTrailingClick = {},
             )
         }
     }

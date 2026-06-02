@@ -7,8 +7,8 @@ import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.runtime.saveable.*
 import androidx.compose.ui.*
-import androidx.compose.ui.platform.LocalResources
-import androidx.compose.ui.res.stringResource
+import androidx.compose.ui.platform.*
+import androidx.compose.ui.res.*
 import androidx.compose.ui.text.*
 import androidx.compose.ui.text.font.*
 import androidx.compose.ui.text.style.*
@@ -180,6 +180,45 @@ internal fun ModuleDetailLayout(
                 )
             )
             Spacer(modifier = Modifier.height(10.dp))
+        }
+    }
+}
+
+@Composable
+private fun MonoSpaceText(text: String) {
+    Text(
+        modifier = Modifier.padding(start = 10.dp, end = 10.dp),
+        fontFamily = FontFamily.Monospace,
+        fontSize = 14.sp,
+        text = text
+    )
+}
+
+@Composable
+private fun HeaderText(text: String) {
+    Text(
+        fontWeight = FontWeight.Bold,
+        fontStyle = FontStyle.Italic,
+        text = text
+    )
+}
+
+@Preview
+@Composable
+private fun Preview_MonoSpaceText() {
+    AppTheme {
+        Surface {
+            MonoSpaceText(text = stringResource(R.string.app_name))
+        }
+    }
+}
+
+@Preview
+@Composable
+private fun Preview_HeaderText() {
+    AppTheme {
+        Surface {
+            HeaderText(text = stringResource(R.string.app_name))
         }
     }
 }
