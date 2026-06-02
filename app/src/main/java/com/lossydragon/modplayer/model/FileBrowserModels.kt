@@ -27,6 +27,7 @@ data class BrowserUiState(
     val files: ImmutableList<ModuleFile> = persistentListOf(),
     val filterQuery: String = "",
     val hasStorageAccess: Boolean = false,
+    val isFolderTraversal: Boolean = true, // Maybe add an option to turn off traversal.
     val isLoading: Boolean = true,
     val isShuffle: Boolean = false,
     val repeatMode: Int = Player.REPEAT_MODE_OFF,

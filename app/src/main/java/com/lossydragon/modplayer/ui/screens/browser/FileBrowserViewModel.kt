@@ -34,6 +34,10 @@ class FileBrowserViewModel(
     private val dirStack = ArrayDeque<Uri>()
     private var rootTreeUri: Uri? = null
 
+    // Rebuilds only when the directory changes, not on sort/filter
+    private var traversalCacheUri: Uri? = null
+    private var traversalCache: List<ModuleFile> = emptyList()
+
     init {
         viewModelScope.launch {
             prefs.getLastDirectoryUri()?.let { savedUri ->
@@ -118,6 +122,7 @@ class FileBrowserViewModel(
         state.value = state.value.copy(isLoading = true, error = null)
         val filterQuery = state.value.filterQuery
         val sortOrder = state.value.sortOrder
+        val isFolderTraversal = state.value.isFolderTraversal
 
         viewModelScope.launch(Dispatchers.IO) {
             try {
@@ -176,7 +181,17 @@ class FileBrowserViewModel(
                     )
                 }
 
-                val filtered = modules.filter { file ->
+                val subdirModules = if (isFolderTraversal) {
+                    if (uri != traversalCacheUri) {
+                        traversalCacheUri = uri
+                        traversalCache = collectSubdirFiles(treeRoot, directories)
+                    }
+                    traversalCache
+                } else {
+                    emptyList()
+                }
+
+                val filtered = (modules + subdirModules).filter { file ->
                     val name = file.resolvedName.ifBlank { file.name }
                     filterQuery.isBlank() || name.contains(filterQuery, ignoreCase = true)
                 }.sortedWith(
@@ -208,6 +223,63 @@ class FileBrowserViewModel(
                 state.value = state.value.copy(isLoading = false, error = e.message)
             }
         }
+    }
+
+    private suspend fun collectSubdirFiles(treeRoot: Uri, dirs: List<FileItem>): List<ModuleFile> {
+        val result = mutableListOf<ModuleFile>()
+        for (dir in dirs) {
+            result += collectFilesFromDir(treeRoot, dir.uri)
+        }
+        return result
+    }
+
+    private suspend fun collectFilesFromDir(treeRoot: Uri, uri: Uri): List<ModuleFile> {
+        val entries = appContext.contentResolver
+            .queryDirectoryEntries(treeRoot, uri.resolveDocId(appContext))
+
+        data class RawFile(val uri: Uri, val name: String, val size: Long, val ext: String)
+
+        val subdirUris = mutableListOf<Uri>()
+        val rawFiles = mutableListOf<RawFile>()
+
+        for (entry in entries) {
+            val ext = entry.name.substringAfterLast('.', "").lowercase()
+            val prefix = entry.name.substringBefore('.').lowercase()
+            when {
+                entry.isDirectory -> subdirUris.add(entry.childUri)
+
+                ext in Constants.UNSUPPORTED_EXTENSIONS ||
+                    prefix in Constants.UNSUPPORTED_EXTENSIONS -> Unit
+
+                ext !in Constants.SKIP_EXTENSIONS &&
+                    prefix !in Constants.SKIP_EXTENSIONS ->
+                    rawFiles.add(
+                        RawFile(
+                            entry.childUri,
+                            entry.name,
+                            entry.size,
+                            ext.ifEmpty {
+                                prefix
+                            }
+                        )
+                    )
+            }
+        }
+
+        val cachedMap = db.getByFileNames(rawFiles.map { it.name }).associateBy { it.fileName }
+        val modules = rawFiles.map { raw ->
+            val cached = cachedMap[raw.name]
+            ModuleFile(
+                uri = raw.uri,
+                name = raw.name,
+                sizeBytes = raw.size,
+                extension = raw.ext,
+                resolvedName = cached?.name ?: "",
+                resolvedType = cached?.type ?: "",
+            )
+        }
+
+        return modules + subdirUris.flatMap { collectFilesFromDir(treeRoot, it) }
     }
 
     private suspend fun indexDirectory(uri: Uri) {

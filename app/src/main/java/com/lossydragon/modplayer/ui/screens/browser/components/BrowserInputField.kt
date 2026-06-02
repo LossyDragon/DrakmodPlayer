@@ -71,7 +71,7 @@ internal fun BrowserInputField(
                         onClick = onFolderPick,
                         content = {
                             Icon(
-                                imageVector = Icons.Default.FolderOpen,
+                                imageVector = Icons.Default.Folder,
                                 contentDescription = stringResource(R.string.desc_folder_pick)
                             )
                         }
