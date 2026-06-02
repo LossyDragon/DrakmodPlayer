@@ -8,9 +8,7 @@ import androidx.lifecycle.viewModelScope
 import com.lossydragon.modplayer.data.DownloadHistoryRepository
 import com.lossydragon.modplayer.data.ModArchiveService
 import com.lossydragon.modplayer.db.AppPreferences
-import com.lossydragon.modplayer.model.DownloadStatus
 import com.lossydragon.modplayer.model.Module
-import com.lossydragon.modplayer.model.ModuleResultState
 import com.lossydragon.modplayer.util.findDownloadedModule
 import com.lossydragon.modplayer.util.getOrCreateOutputFile
 import io.ktor.client.HttpClient

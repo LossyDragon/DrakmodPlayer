@@ -28,8 +28,8 @@ import androidx.navigation3.ui.NavDisplay
 import com.lossydragon.modplayer.R
 import com.lossydragon.modplayer.db.entity.PlaylistEntity
 import com.lossydragon.modplayer.model.ModuleFile
-import com.lossydragon.modplayer.model.PlaybackStatus
-import com.lossydragon.modplayer.model.PlayerUiState
+import com.lossydragon.modplayer.player.PlaybackStatus
+import com.lossydragon.modplayer.player.PlayerUiState
 import com.lossydragon.modplayer.player.PlayerViewModel
 import com.lossydragon.modplayer.ui.NavKeyPlaylists
 import com.lossydragon.modplayer.ui.components.BackButton

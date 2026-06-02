@@ -3,16 +3,17 @@ package com.lossydragon.modplayer.player
 import android.content.Context
 import android.content.Intent
 import androidx.annotation.OptIn
+import androidx.compose.runtime.*
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import androidx.media3.common.Player
 import androidx.media3.common.util.UnstableApi
 import com.lossydragon.modplayer.db.AppPreferences
 import com.lossydragon.modplayer.model.ModuleFile
-import com.lossydragon.modplayer.model.PlaybackStatus
-import com.lossydragon.modplayer.model.PlayerUiState
+import com.lossydragon.modplayer.player.model.FrameSnapshot
 import java.nio.charset.StandardCharsets
 import kotlinx.collections.immutable.ImmutableList
+import kotlinx.collections.immutable.persistentListOf
 import kotlinx.collections.immutable.toImmutableList
 import kotlinx.collections.immutable.toPersistentList
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -22,6 +23,37 @@ import kotlinx.coroutines.flow.onEach
 import kotlinx.coroutines.flow.update
 import org.helllabs.libxmp.Xmp
 import timber.log.Timber
+
+/** UI state and domain models for the module player. */
+
+enum class PlaybackStatus { IDLE, LOADING, PLAYING, PAUSED }
+
+@Immutable
+data class PlayerUiState(
+    val currentModule: ModuleFile? = null,
+    val currentQueueIndex: Int = 0,
+    val currentSequence: Int = 0,
+    val durationMs: Long = 0L,
+    val errorMessage: String? = null,
+    val frame: FrameSnapshot? = null,
+    val isShuffle: Boolean = false,
+    val moduleName: String = "",
+    val moduleType: String = "",
+    val numChannels: Int = 0,
+    val numInstruments: Int = 0,
+    val numPatterns: Int = 0,
+    val numSamples: Int = 0,
+    val numSequences: Int = 0,
+    val playAllSequences: Boolean = false,
+    val positionMs: Long = 0L,
+    val queue: ImmutableList<ModuleFile> = persistentListOf(),
+    val repeatMode: Int = Player.REPEAT_MODE_OFF,
+    val sequenceDurations: ImmutableList<Int> = persistentListOf(),
+    val showRowNumbers: Boolean = false,
+    val songInstruments: ImmutableList<String> = persistentListOf(),
+    val songMessage: String = "",
+    val status: PlaybackStatus = PlaybackStatus.IDLE
+)
 
 /** Bridges [Player] state to the UI via [PlayerUiState]. */
 @OptIn(UnstableApi::class)

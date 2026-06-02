@@ -25,12 +25,9 @@ import androidx.core.net.toUri
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.media3.common.Player
 import com.lossydragon.modplayer.R
-import com.lossydragon.modplayer.model.BrowserSortOrder
-import com.lossydragon.modplayer.model.BrowserUiState
-import com.lossydragon.modplayer.model.FileItem
 import com.lossydragon.modplayer.model.ModuleFile
-import com.lossydragon.modplayer.model.PlaybackStatus
-import com.lossydragon.modplayer.model.PlayerUiState
+import com.lossydragon.modplayer.player.PlaybackStatus
+import com.lossydragon.modplayer.player.PlayerUiState
 import com.lossydragon.modplayer.player.PlayerViewModel
 import com.lossydragon.modplayer.ui.components.MessageBox
 import com.lossydragon.modplayer.ui.components.ProgressbarIndicator

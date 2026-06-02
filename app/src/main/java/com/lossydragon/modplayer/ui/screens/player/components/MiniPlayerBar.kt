@@ -16,8 +16,8 @@ import androidx.core.net.toUri
 import androidx.media3.common.Player
 import com.lossydragon.modplayer.R
 import com.lossydragon.modplayer.model.ModuleFile
-import com.lossydragon.modplayer.model.PlaybackStatus
-import com.lossydragon.modplayer.model.PlayerUiState
+import com.lossydragon.modplayer.player.PlaybackStatus
+import com.lossydragon.modplayer.player.PlayerUiState
 import com.lossydragon.modplayer.ui.theme.AppTheme
 
 @OptIn(ExperimentalMaterial3ExpressiveApi::class)

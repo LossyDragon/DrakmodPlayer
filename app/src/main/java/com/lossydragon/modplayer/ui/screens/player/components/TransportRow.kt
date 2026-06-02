@@ -1,7 +1,6 @@
 package com.lossydragon.modplayer.ui.screens.player.components
 
 import androidx.compose.foundation.layout.*
-import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.material.icons.*
 import androidx.compose.material.icons.automirrored.filled.*
 import androidx.compose.material.icons.filled.*
@@ -10,7 +9,7 @@ import androidx.compose.runtime.*
 import androidx.compose.ui.*
 import androidx.compose.ui.tooling.preview.*
 import androidx.compose.ui.unit.*
-import com.lossydragon.modplayer.model.PlaybackStatus
+import com.lossydragon.modplayer.player.PlaybackStatus
 import com.lossydragon.modplayer.ui.theme.AppTheme
 
 @OptIn(ExperimentalMaterial3ExpressiveApi::class)

@@ -3,24 +3,53 @@ package com.lossydragon.modplayer.ui.screens.browser
 import android.content.Context
 import android.content.Intent
 import android.net.Uri
+import androidx.compose.runtime.*
 import androidx.core.net.toUri
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
+import androidx.media3.common.Player
 import com.lossydragon.modplayer.core.Constants
 import com.lossydragon.modplayer.data.ModuleMetadataRepository
 import com.lossydragon.modplayer.db.AppPreferences
-import com.lossydragon.modplayer.model.BrowserSortOrder
-import com.lossydragon.modplayer.model.BrowserUiState
-import com.lossydragon.modplayer.model.FileItem
 import com.lossydragon.modplayer.model.ModuleFile
 import com.lossydragon.modplayer.util.queryDirectoryEntries
 import com.lossydragon.modplayer.util.resolveDocId
+import kotlinx.collections.immutable.ImmutableList
+import kotlinx.collections.immutable.persistentListOf
 import kotlinx.collections.immutable.toImmutableList
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
+
+/** UI state and domain models for the SAF file browser. */
+
+enum class BrowserSortOrder { NAME, TYPE, SIZE }
+
+@Immutable
+data class FileItem(
+    val isDirectory: Boolean,
+    val name: String,
+    val size: Long,
+    val uri: Uri
+)
+
+@Immutable
+data class BrowserUiState(
+    val breadcrumbs: ImmutableList<String> = persistentListOf(),
+    val currentPath: String = "",
+    val directories: ImmutableList<FileItem> = persistentListOf(),
+    val error: String? = null,
+    val files: ImmutableList<ModuleFile> = persistentListOf(),
+    val filterQuery: String = "",
+    val hasStorageAccess: Boolean = false,
+    val isFolderTraversal: Boolean = true, // Maybe add an option to turn off traversal.
+    val isLoading: Boolean = true,
+    val isShuffle: Boolean = false,
+    val repeatMode: Int = Player.REPEAT_MODE_OFF,
+    val sortOrder: BrowserSortOrder = BrowserSortOrder.NAME
+)
 
 class FileBrowserViewModel(
     private val appContext: Context,

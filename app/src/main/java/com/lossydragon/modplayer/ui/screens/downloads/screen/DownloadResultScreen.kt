@@ -12,19 +12,19 @@ import androidx.compose.ui.unit.*
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.lossydragon.modplayer.R
 import com.lossydragon.modplayer.model.ArtistResult
-import com.lossydragon.modplayer.model.DownloadSearchState
 import com.lossydragon.modplayer.model.Item
 import com.lossydragon.modplayer.model.Items
 import com.lossydragon.modplayer.model.Module
 import com.lossydragon.modplayer.model.SearchListResult
-import com.lossydragon.modplayer.model.SearchResult
-import com.lossydragon.modplayer.model.SearchType
 import com.lossydragon.modplayer.model.Sponsor
 import com.lossydragon.modplayer.ui.components.BackButton
 import com.lossydragon.modplayer.ui.components.MessageBox
 import com.lossydragon.modplayer.ui.components.ProgressbarIndicator
 import com.lossydragon.modplayer.ui.screens.downloads.components.DownloadListItem
+import com.lossydragon.modplayer.ui.screens.downloads.viewmodel.DownloadSearchState
 import com.lossydragon.modplayer.ui.screens.downloads.viewmodel.DownloadViewModel
+import com.lossydragon.modplayer.ui.screens.downloads.viewmodel.SearchResult
+import com.lossydragon.modplayer.ui.screens.downloads.viewmodel.SearchType
 import com.lossydragon.modplayer.ui.theme.AppTheme
 import org.koin.androidx.compose.koinViewModel
 
