@@ -1,6 +1,7 @@
 package com.lossydragon.modplayer.util
 
 import android.text.Html
+import java.time.Instant
 
 /** Formats milliseconds as `m:ss`. */
 fun Long.formatMs(): String {
@@ -24,5 +25,5 @@ fun Long.toReadableDate(): String {
     val formatter = java.time.format.DateTimeFormatter
         .ofPattern("MMM d, yyyy")
         .withZone(java.time.ZoneId.systemDefault())
-    return formatter.format(java.time.Instant.ofEpochMilli(this))
+    return formatter.format(Instant.ofEpochMilli(this))
 }

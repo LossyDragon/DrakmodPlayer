@@ -5,6 +5,7 @@ import android.net.Uri
 import androidx.core.net.toUri
 import com.lossydragon.modplayer.db.entity.PlaylistEntity
 import com.lossydragon.modplayer.db.entity.PlaylistEntryEntity
+import com.lossydragon.modplayer.util.isAccessible
 import java.time.Instant
 import kotlinx.serialization.Serializable
 import kotlinx.serialization.json.Json
@@ -132,7 +133,7 @@ fun PlaylistExport.toRoomEntities(
 
         val validEntries = importedPlaylist.entries.mapNotNull { entry ->
             totalEntries++
-            if (validateUris && !entry.uri.isUriAccessible(context)) {
+            if (validateUris && !entry.uri.toUri().isAccessible(context)) {
                 Timber.w("Skipping inaccessible URI: ${entry.uri}")
                 skipped++
                 return@mapNotNull null
@@ -158,23 +159,4 @@ fun PlaylistExport.toRoomEntities(
             skipped = skipped,
         )
     )
-}
-
-/**
- * Checks whether a SAF URI is still accessible.
- * Queries the content resolver — returns false if the file no longer exists
- * or the app no longer holds permission.
- */
-private fun String.isUriAccessible(context: Context): Boolean = try {
-    val uri = this.toUri()
-    context.contentResolver.query(
-        uri,
-        arrayOf(android.provider.DocumentsContract.Document.COLUMN_DOCUMENT_ID),
-        null,
-        null,
-        null,
-    )?.use { it.count >= 0 } ?: false
-} catch (e: Exception) {
-    Timber.w("URI accessibility check failed: $this — ${e.message}")
-    false
 }

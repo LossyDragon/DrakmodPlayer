@@ -21,6 +21,7 @@ import com.google.common.util.concurrent.ListenableFuture
 import com.lossydragon.modplayer.R
 import com.lossydragon.modplayer.db.AppPreferences
 import com.lossydragon.modplayer.model.ModuleFile
+import com.lossydragon.modplayer.util.queryDirectoryEntries
 import kotlin.math.abs
 import kotlin.time.Duration.Companion.milliseconds
 import kotlinx.coroutines.CoroutineScope
@@ -568,40 +569,20 @@ class ModPlayer(
         val treeUri = runBlocking { prefs.getLastDirectoryUri() }?.toUri()
             ?: return Futures.immediateVoidFuture()
 
-        val docId = DocumentsContract.getDocumentId(firstUri)
-        val parentDocId = docId.substringBeforeLast('/')
-        val childrenUri = DocumentsContract.buildChildDocumentsUriUsingTree(treeUri, parentDocId)
+        val parentDocId = DocumentsContract.getDocumentId(firstUri).substringBeforeLast('/')
 
-        val siblings = mutableListOf<ModuleFile>()
-        context.contentResolver.query(
-            childrenUri,
-            arrayOf(
-                DocumentsContract.Document.COLUMN_DOCUMENT_ID,
-                DocumentsContract.Document.COLUMN_DISPLAY_NAME,
-                DocumentsContract.Document.COLUMN_MIME_TYPE,
-            ),
-            null,
-            null,
-            DocumentsContract.Document.COLUMN_DISPLAY_NAME,
-        )?.use { cursor ->
-            while (cursor.moveToNext()) {
-                val sibDocId = cursor.getString(0)
-                val name = cursor.getString(1)
-                val mime = cursor.getString(2)
-                if (mime == DocumentsContract.Document.MIME_TYPE_DIR) continue
-                val sibUri = DocumentsContract.buildDocumentUriUsingTree(treeUri, sibDocId)
-                if (Xmp.testFromFd(context, sibUri, ModInfo())) {
-                    siblings.add(
-                        ModuleFile(
-                            uri = sibUri,
-                            name = name,
-                            sizeBytes = 0L,
-                            extension = name.substringAfterLast('.', ""),
-                        )
-                    )
-                }
+        val siblings = context.contentResolver
+            .queryDirectoryEntries(treeUri, parentDocId)
+            .sortedBy { it.name }
+            .filter { !it.isDirectory && Xmp.testFromFd(context, it.childUri, ModInfo()) }
+            .map { entry ->
+                ModuleFile(
+                    uri = entry.childUri,
+                    name = entry.name,
+                    sizeBytes = 0L,
+                    extension = entry.name.substringAfterLast('.', ""),
+                )
             }
-        }
 
         val resolved = siblings.ifEmpty { files }
         loadQueue(resolved, resolved.indexOfFirst { it.uri == firstUri }.coerceAtLeast(0))

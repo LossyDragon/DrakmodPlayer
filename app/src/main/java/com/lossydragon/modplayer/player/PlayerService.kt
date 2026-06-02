@@ -22,6 +22,7 @@ import com.lossydragon.modplayer.R
 import com.lossydragon.modplayer.core.AutoMediaId
 import com.lossydragon.modplayer.db.AppPreferences
 import com.lossydragon.modplayer.model.ModuleFile
+import com.lossydragon.modplayer.util.queryDirectoryEntries
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
@@ -333,13 +334,7 @@ class PlayerService : MediaLibraryService() {
                 treeUri,
                 Intent.FLAG_GRANT_READ_URI_PERMISSION
             )
-            buildChildItems(
-                treeUri,
-                DocumentsContract.buildChildDocumentsUriUsingTree(
-                    treeUri,
-                    DocumentsContract.getTreeDocumentId(treeUri),
-                )
-            )
+            buildChildItems(treeUri, DocumentsContract.getTreeDocumentId(treeUri))
         } catch (e: SecurityException) {
             Timber.e(e, "No permission for $treeUri")
             ImmutableList.of()
@@ -348,93 +343,53 @@ class PlayerService : MediaLibraryService() {
 
     /** Returns children of the directory encoded in [parentId]. */
     private fun getDirectoryChildren(parentId: String): ImmutableList<MediaItem> =
-        buildChildItems(
-            AutoMediaId.treeUriFromDir(parentId),
-            DocumentsContract.buildChildDocumentsUriUsingTree(
-                AutoMediaId.treeUriFromDir(parentId),
-                AutoMediaId.docIdFromDir(parentId),
-            )
-        )
+        buildChildItems(AutoMediaId.treeUriFromDir(parentId), AutoMediaId.docIdFromDir(parentId))
 
-    /**
-     * Queries [childrenUri] and builds browsable dirs and playable modules.
-     * Files are validated via [org.helllabs.libxmp.Xmp.testFromFd] before being included.
-     */
-    private fun buildChildItems(treeUri: Uri, childrenUri: Uri): ImmutableList<MediaItem> {
+    /** Builds browsable dir items and playable module items for [docId], sorted by name. */
+    private fun buildChildItems(treeUri: Uri, docId: String): ImmutableList<MediaItem> {
         val items = mutableListOf<MediaItem>()
-        contentResolver.query(
-            childrenUri,
-            arrayOf(
-                DocumentsContract.Document.COLUMN_DOCUMENT_ID,
-                DocumentsContract.Document.COLUMN_DISPLAY_NAME,
-                DocumentsContract.Document.COLUMN_MIME_TYPE,
-            ),
-            null,
-            null,
-            DocumentsContract.Document.COLUMN_DISPLAY_NAME,
-        )?.use { cursor ->
-            while (cursor.moveToNext()) {
-                val docId = cursor.getString(0)
-                val name = cursor.getString(1)
-                val mime = cursor.getString(2)
-                val childUri = DocumentsContract.buildDocumentUriUsingTree(treeUri, docId)
-
-                when {
-                    mime == DocumentsContract.Document.MIME_TYPE_DIR ->
-                        items.add(
-                            buildBrowsableItem(
-                                AutoMediaId.dir(treeUri, docId),
-                                name,
-                                MediaMetadata.MEDIA_TYPE_FOLDER_MIXED
-                            )
+        for (entry in contentResolver.queryDirectoryEntries(treeUri, docId).sortedBy { it.name }) {
+            when {
+                entry.isDirectory ->
+                    items.add(
+                        buildBrowsableItem(
+                            AutoMediaId.dir(treeUri, entry.docId),
+                            entry.name,
+                            MediaMetadata.MEDIA_TYPE_FOLDER_MIXED
                         )
+                    )
 
-                    Xmp.testFromFd(this, childUri, ModInfo()) ->
-                        items.add(
-                            buildPlayableItem(AutoMediaId.file(childUri.toString()), name, childUri)
+                Xmp.testFromFd(this, entry.childUri, ModInfo()) ->
+                    items.add(
+                        buildPlayableItem(
+                            AutoMediaId.file(entry.childUri.toString()),
+                            entry.name,
+                            entry.childUri
                         )
-                }
+                    )
             }
         }
         return ImmutableList.copyOf(items)
     }
 
-    /**
-     * Recursively collects all playable module files under [docId] as a flat list.
-     * Subdirectory files are appended after the current directory's files.
-     */
+    /** Recursively collects all playable module files under [docId] as a flat list. */
     private fun buildAllItemsFlat(treeUri: Uri, docId: String): List<MediaItem> {
         val files = mutableListOf<MediaItem>()
         val subdirDocIds = mutableListOf<String>()
-        val childrenUri = DocumentsContract.buildChildDocumentsUriUsingTree(treeUri, docId)
+        for (entry in contentResolver.queryDirectoryEntries(treeUri, docId).sortedBy { it.name }) {
+            when {
+                entry.isDirectory -> subdirDocIds.add(entry.docId)
 
-        contentResolver.query(
-            childrenUri,
-            arrayOf(
-                DocumentsContract.Document.COLUMN_DOCUMENT_ID,
-                DocumentsContract.Document.COLUMN_DISPLAY_NAME,
-                DocumentsContract.Document.COLUMN_MIME_TYPE,
-            ),
-            null,
-            null,
-            DocumentsContract.Document.COLUMN_DISPLAY_NAME,
-        )?.use { cursor ->
-            while (cursor.moveToNext()) {
-                val childDocId = cursor.getString(0)
-                val name = cursor.getString(1)
-                val mime = cursor.getString(2)
-                val childUri = DocumentsContract.buildDocumentUriUsingTree(treeUri, childDocId)
-                when {
-                    mime == DocumentsContract.Document.MIME_TYPE_DIR -> subdirDocIds.add(childDocId)
-
-                    Xmp.testFromFd(this, childUri, ModInfo()) ->
-                        files.add(
-                            buildPlayableItem(AutoMediaId.file(childUri.toString()), name, childUri)
+                Xmp.testFromFd(this, entry.childUri, ModInfo()) ->
+                    files.add(
+                        buildPlayableItem(
+                            AutoMediaId.file(entry.childUri.toString()),
+                            entry.name,
+                            entry.childUri
                         )
-                }
+                    )
             }
         }
-
         subdirDocIds.forEach { files += buildAllItemsFlat(treeUri, it) }
         return files
     }

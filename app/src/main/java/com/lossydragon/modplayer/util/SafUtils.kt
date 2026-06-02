@@ -8,14 +8,36 @@ import com.lossydragon.modplayer.model.Module
 import java.io.OutputStream
 import timber.log.Timber
 
+/** A single child entry returned by [queryDirectoryEntries]. */
 data class DirectoryEntry(
     val childUri: Uri,
+    val docId: String,
     val name: String,
     val mime: String,
     val size: Long,
     val isDirectory: Boolean
 )
 
+/**
+ * Returns true if this SAF URI is still accessible.
+ * Returns false if the file no longer exists or the app no longer holds permission.
+ */
+fun Uri.isAccessible(context: Context): Boolean = try {
+    context.contentResolver.query(
+        this,
+        arrayOf(DocumentsContract.Document.COLUMN_DOCUMENT_ID),
+        null,
+        null,
+        null,
+    )?.use { it.count >= 0 } ?: false
+} catch (e: Exception) {
+    Timber.w(e, "URI accessibility check failed: $this")
+    false
+}
+
+/**
+ * Resolves the correct document ID for this URI, handling both tree and document URI forms.
+ */
 fun Uri.resolveDocId(context: Context): String = when {
     DocumentsContract.isTreeUri(this) &&
         DocumentsContract.isDocumentUri(context, this) ->
@@ -28,6 +50,9 @@ fun Uri.resolveDocId(context: Context): String = when {
         DocumentsContract.getDocumentId(this)
 }
 
+/**
+ * Queries all immediate children of [docId] inside [treeRoot] and returns them as [DirectoryEntry] list.
+ */
 fun ContentResolver.queryDirectoryEntries(treeRoot: Uri, docId: String): List<DirectoryEntry> {
     val childrenUri = DocumentsContract.buildChildDocumentsUriUsingTree(treeRoot, docId)
     val entries = mutableListOf<DirectoryEntry>()
@@ -54,11 +79,12 @@ fun ContentResolver.queryDirectoryEntries(treeRoot: Uri, docId: String): List<Di
             val size = cursor.getLong(sizeCol)
             entries.add(
                 DirectoryEntry(
-                    DocumentsContract.buildDocumentUriUsingTree(treeRoot, childId),
-                    name,
-                    mime,
-                    size,
-                    mime == DocumentsContract.Document.MIME_TYPE_DIR
+                    childUri = DocumentsContract.buildDocumentUriUsingTree(treeRoot, childId),
+                    docId = childId,
+                    name = name,
+                    mime = mime,
+                    size = size,
+                    isDirectory = mime == DocumentsContract.Document.MIME_TYPE_DIR
                 )
             )
         }
