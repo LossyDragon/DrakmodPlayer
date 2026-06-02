@@ -3,7 +3,6 @@ package com.lossydragon.modplayer.ui.screens.browser
 import android.content.Context
 import android.content.Intent
 import android.net.Uri
-import android.provider.DocumentsContract
 import androidx.core.net.toUri
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
@@ -14,6 +13,8 @@ import com.lossydragon.modplayer.model.BrowserSortOrder
 import com.lossydragon.modplayer.model.BrowserUiState
 import com.lossydragon.modplayer.model.FileItem
 import com.lossydragon.modplayer.model.ModuleFile
+import com.lossydragon.modplayer.util.queryDirectoryEntries
+import com.lossydragon.modplayer.util.resolveDocId
 import kotlinx.collections.immutable.toImmutableList
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -121,63 +122,41 @@ class FileBrowserViewModel(
         viewModelScope.launch(Dispatchers.IO) {
             try {
                 val treeRoot = rootTreeUri ?: uri
-                val docId = resolveDocId(uri)
-                val childrenUri = DocumentsContract.buildChildDocumentsUriUsingTree(treeRoot, docId)
+                val entries = appContext.contentResolver
+                    .queryDirectoryEntries(treeRoot, uri.resolveDocId(appContext))
 
                 data class RawFile(val uri: Uri, val name: String, val size: Long, val ext: String)
 
                 val directories = mutableListOf<FileItem>()
                 val rawFiles = mutableListOf<RawFile>()
 
-                appContext.contentResolver.query(
-                    childrenUri,
-                    arrayOf(
-                        DocumentsContract.Document.COLUMN_DOCUMENT_ID,
-                        DocumentsContract.Document.COLUMN_DISPLAY_NAME,
-                        DocumentsContract.Document.COLUMN_MIME_TYPE,
-                        DocumentsContract.Document.COLUMN_SIZE,
-                    ),
-                    null,
-                    null,
-                    null,
-                )?.use { cursor ->
-                    val idCol =
-                        cursor.getColumnIndexOrThrow(DocumentsContract.Document.COLUMN_DOCUMENT_ID)
-                    val nameCol =
-                        cursor.getColumnIndexOrThrow(DocumentsContract.Document.COLUMN_DISPLAY_NAME)
-                    val mimeCol =
-                        cursor.getColumnIndexOrThrow(DocumentsContract.Document.COLUMN_MIME_TYPE)
-                    val sizeCol =
-                        cursor.getColumnIndexOrThrow(DocumentsContract.Document.COLUMN_SIZE)
-
-                    while (cursor.moveToNext()) {
-                        val childId = cursor.getString(idCol)
-                        val name = cursor.getString(nameCol) ?: continue
-                        val mime = cursor.getString(mimeCol) ?: continue
-                        val size = cursor.getLong(sizeCol)
-                        val childUri =
-                            DocumentsContract.buildDocumentUriUsingTree(treeRoot, childId)
-                        val ext = name.substringAfterLast('.', "").lowercase()
-                        val prefix = name.substringBefore('.').lowercase()
-
-                        when {
-                            mime == DocumentsContract.Document.MIME_TYPE_DIR ->
-                                directories.add(
-                                    FileItem(
-                                        name = name,
-                                        uri = childUri,
-                                        isDirectory = true,
-                                        size = 0L
-                                    )
+                for (entry in entries) {
+                    val ext = entry.name.substringAfterLast('.', "").lowercase()
+                    val prefix = entry.name.substringBefore('.').lowercase()
+                    when {
+                        entry.isDirectory ->
+                            directories.add(
+                                FileItem(
+                                    name = entry.name,
+                                    uri = entry.childUri,
+                                    isDirectory = true,
+                                    size = 0L
                                 )
+                            )
 
-                            ext in Constants.UNSUPPORTED_EXTENSIONS ||
-                                prefix in Constants.UNSUPPORTED_EXTENSIONS -> Unit
+                        ext in Constants.UNSUPPORTED_EXTENSIONS ||
+                            prefix in Constants.UNSUPPORTED_EXTENSIONS -> Unit
 
-                            ext !in Constants.SKIP_EXTENSIONS &&
-                                prefix !in Constants.SKIP_EXTENSIONS ->
-                                rawFiles.add(RawFile(childUri, name, size, ext.ifEmpty { prefix }))
-                        }
+                        ext !in Constants.SKIP_EXTENSIONS &&
+                            prefix !in Constants.SKIP_EXTENSIONS ->
+                            rawFiles.add(
+                                RawFile(
+                                    uri = entry.childUri,
+                                    name = entry.name,
+                                    size = entry.size,
+                                    ext = ext.ifEmpty { prefix }
+                                )
+                            )
                     }
                 }
 
@@ -233,63 +212,31 @@ class FileBrowserViewModel(
 
     private suspend fun indexDirectory(uri: Uri) {
         val treeRoot = rootTreeUri ?: uri
-        val docId = resolveDocId(uri)
-        val childrenUri = DocumentsContract.buildChildDocumentsUriUsingTree(treeRoot, docId)
+        val entries = appContext.contentResolver
+            .queryDirectoryEntries(treeRoot, uri.resolveDocId(appContext))
 
-        appContext.contentResolver.query(
-            childrenUri,
-            arrayOf(
-                DocumentsContract.Document.COLUMN_DOCUMENT_ID,
-                DocumentsContract.Document.COLUMN_DISPLAY_NAME,
-                DocumentsContract.Document.COLUMN_MIME_TYPE,
-                DocumentsContract.Document.COLUMN_SIZE,
-            ),
-            null,
-            null,
-            null,
-        )?.use { cursor ->
-            val idCol = cursor.getColumnIndexOrThrow(DocumentsContract.Document.COLUMN_DOCUMENT_ID)
-            val nameCol = cursor.getColumnIndexOrThrow(
-                DocumentsContract.Document.COLUMN_DISPLAY_NAME
-            )
-            val mimeCol = cursor.getColumnIndexOrThrow(DocumentsContract.Document.COLUMN_MIME_TYPE)
-            val sizeCol = cursor.getColumnIndexOrThrow(DocumentsContract.Document.COLUMN_SIZE)
+        for (entry in entries) {
+            if (entry.isDirectory) continue
+            val ext = entry.name.substringAfterLast('.', "").lowercase()
+            val prefix = entry.name.substringBefore('.').lowercase()
+            when {
+                ext in Constants.UNSUPPORTED_EXTENSIONS ||
+                    prefix in Constants.UNSUPPORTED_EXTENSIONS -> Unit
 
-            while (cursor.moveToNext()) {
-                val childId = cursor.getString(idCol)
-                val name = cursor.getString(nameCol) ?: continue
-                val mime = cursor.getString(mimeCol) ?: continue
-                val size = cursor.getLong(sizeCol)
-                val childUri = DocumentsContract.buildDocumentUriUsingTree(treeRoot, childId)
-                val ext = name.substringAfterLast('.', "").lowercase()
-                val prefix = name.substringBefore('.').lowercase()
-
-                when {
-                    mime == DocumentsContract.Document.MIME_TYPE_DIR -> Unit
-
-                    ext in Constants.UNSUPPORTED_EXTENSIONS ||
-                        prefix in Constants.UNSUPPORTED_EXTENSIONS -> Unit
-
-                    ext !in Constants.SKIP_EXTENSIONS &&
-                        prefix !in Constants.SKIP_EXTENSIONS -> {
-                        if (!db.exists(name, size)) {
-                            db.fetchAndCache(childUri, name, size, ext.ifEmpty { prefix })
-                        }
+                ext !in Constants.SKIP_EXTENSIONS &&
+                    prefix !in Constants.SKIP_EXTENSIONS -> {
+                    if (!db.exists(entry.name, entry.size)) {
+                        db.fetchAndCache(
+                            entry.childUri,
+                            entry.name,
+                            entry.size,
+                            ext.ifEmpty {
+                                prefix
+                            }
+                        )
                     }
                 }
             }
         }
-    }
-
-    private fun resolveDocId(uri: Uri): String = when {
-        DocumentsContract.isTreeUri(uri) &&
-            DocumentsContract.isDocumentUri(appContext, uri) ->
-            DocumentsContract.getDocumentId(uri)
-
-        DocumentsContract.isTreeUri(uri) ->
-            DocumentsContract.getTreeDocumentId(uri)
-
-        else ->
-            DocumentsContract.getDocumentId(uri)
     }
 }

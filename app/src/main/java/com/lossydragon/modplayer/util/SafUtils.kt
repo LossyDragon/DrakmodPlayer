@@ -8,6 +8,64 @@ import com.lossydragon.modplayer.model.Module
 import java.io.OutputStream
 import timber.log.Timber
 
+data class DirectoryEntry(
+    val childUri: Uri,
+    val name: String,
+    val mime: String,
+    val size: Long,
+    val isDirectory: Boolean
+)
+
+fun Uri.resolveDocId(context: Context): String = when {
+    DocumentsContract.isTreeUri(this) &&
+        DocumentsContract.isDocumentUri(context, this) ->
+        DocumentsContract.getDocumentId(this)
+
+    DocumentsContract.isTreeUri(this) ->
+        DocumentsContract.getTreeDocumentId(this)
+
+    else ->
+        DocumentsContract.getDocumentId(this)
+}
+
+fun ContentResolver.queryDirectoryEntries(treeRoot: Uri, docId: String): List<DirectoryEntry> {
+    val childrenUri = DocumentsContract.buildChildDocumentsUriUsingTree(treeRoot, docId)
+    val entries = mutableListOf<DirectoryEntry>()
+    query(
+        childrenUri,
+        arrayOf(
+            DocumentsContract.Document.COLUMN_DOCUMENT_ID,
+            DocumentsContract.Document.COLUMN_DISPLAY_NAME,
+            DocumentsContract.Document.COLUMN_MIME_TYPE,
+            DocumentsContract.Document.COLUMN_SIZE,
+        ),
+        null,
+        null,
+        null,
+    )?.use { cursor ->
+        val idCol = cursor.getColumnIndexOrThrow(DocumentsContract.Document.COLUMN_DOCUMENT_ID)
+        val nameCol = cursor.getColumnIndexOrThrow(DocumentsContract.Document.COLUMN_DISPLAY_NAME)
+        val mimeCol = cursor.getColumnIndexOrThrow(DocumentsContract.Document.COLUMN_MIME_TYPE)
+        val sizeCol = cursor.getColumnIndexOrThrow(DocumentsContract.Document.COLUMN_SIZE)
+        while (cursor.moveToNext()) {
+            val childId = cursor.getString(idCol)
+            val name = cursor.getString(nameCol) ?: continue
+            val mime = cursor.getString(mimeCol) ?: continue
+            val size = cursor.getLong(sizeCol)
+            entries.add(
+                DirectoryEntry(
+                    DocumentsContract.buildDocumentUriUsingTree(treeRoot, childId),
+                    name,
+                    mime,
+                    size,
+                    mime == DocumentsContract.Document.MIME_TYPE_DIR
+                )
+            )
+        }
+    }
+    return entries
+}
+
 /**
  * Finds a child directory by [name] under [parentDocId] in the given [treeUri].
  * Returns the document ID of the found directory, or null if not found.
