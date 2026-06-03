@@ -35,4 +35,7 @@ interface PlaylistDao {
 
     @Query("UPDATE playlists SET name = :name, comment = :comment WHERE id = :id")
     suspend fun updatePlaylist(id: Long, name: String, comment: String)
+
+    @Query("SELECT * FROM playlist_entries WHERE name LIKE '%' || :query || '%' ORDER BY name")
+    suspend fun searchByName(query: String): List<PlaylistEntryEntity>
 }

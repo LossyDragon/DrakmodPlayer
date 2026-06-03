@@ -24,4 +24,16 @@ interface ModuleMetadataDao {
 
     @Query("DELETE FROM module_metadata WHERE lastSeen < :cutoff")
     suspend fun removeStale(cutoff: Long)
+
+    @Query(
+        """
+        SELECT * FROM module_metadata
+        WHERE name LIKE '%' || :query || '%'
+        OR fileName LIKE '%' || :query || '%'
+    """
+    )
+    suspend fun searchByNameOrFileName(query: String): List<ModuleMetadataEntity>
+
+    @Query("SELECT fileName FROM module_metadata")
+    suspend fun getAllFileNames(): List<String>
 }

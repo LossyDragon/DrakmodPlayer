@@ -188,13 +188,16 @@ class PlayerViewModel(
         player.loadQueue(
             files = files.toList(),
             startAt = startIndex,
-            shuffle = isShuffle,
+            shuffleMode = isShuffle,
             repeatMode = repeatMode
         )
     }
 
-    fun togglePlayPause() =
-        if (state.value.status == PlaybackStatus.PLAYING) player.pause() else player.play()
+    fun togglePlayPause() = if (state.value.status == PlaybackStatus.PLAYING) {
+        player.pause()
+    } else {
+        player.play()
+    }
 
     fun seek(posMs: Long) = player.seekTo(player.currentMediaItemIndex, posMs)
 
@@ -222,15 +225,12 @@ class PlayerViewModel(
         state.update { it.copy(repeatMode = newMode) }
     }
 
-    // TODO implement muting
-    fun muteChannel(ch: Int, muted: Boolean) = Xmp.mute(ch, if (muted) 1 else 0)
-
     fun setSequence(index: Int) = player.setSequence(index)
 
     fun toggleAllSequences() {
-        val new = !state.value.playAllSequences
-        player.playAllSequences = new
-        state.update { it.copy(playAllSequences = new) }
+        val playAllSequences = !state.value.playAllSequences
+        player.setPlayAllSequences(playAllSequences)
+        state.update { it.copy(playAllSequences = playAllSequences) }
     }
 
     fun getModComment(): Boolean {

@@ -48,9 +48,8 @@ private val json = Json {
 
 /**
  * Serializes [playlists] and their [entries] to a JSON string.
- *
  * @param playlists List of [PlaylistEntity] to export.
- * @param entries Map of playlistId → list of [PlaylistEntryEntity].
+ * @param entries Map of playlistId to list of [PlaylistEntryEntity].
  */
 fun exportPlaylistsToJson(
     playlists: List<PlaylistEntity>,
@@ -138,7 +137,7 @@ fun PlaylistExport.toRoomEntities(
                 skipped++
                 return@mapNotNull null
             }
-            // ID will be set after Room insert — use 0 as placeholder
+            // ID will be set after Room insert - use 0 as placeholder
             PlaylistEntryEntity(
                 playlistId = 0L,
                 position = entry.position,
