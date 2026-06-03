@@ -13,9 +13,8 @@ import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.style.*
 import androidx.compose.ui.tooling.preview.*
 import androidx.compose.ui.unit.*
-import androidx.core.net.toUri
 import com.lossydragon.modplayer.R
-import com.lossydragon.modplayer.model.ModuleFile
+import com.lossydragon.modplayer.db.entity.ModuleEntity
 import com.lossydragon.modplayer.ui.theme.AppTheme
 import kotlinx.collections.immutable.ImmutableList
 import kotlinx.collections.immutable.toPersistentList
@@ -24,7 +23,7 @@ import kotlinx.collections.immutable.toPersistentList
 @Composable
 internal fun QueueSheet(
     sheetState: SheetState,
-    queue: ImmutableList<ModuleFile>,
+    queue: ImmutableList<ModuleEntity>,
     currentIndex: Int,
     onItemClick: (Int) -> Unit,
     onDismiss: () -> Unit
@@ -91,7 +90,7 @@ internal fun QueueSheet(
 private fun QueueListItem(
     isCurrentItem: Boolean,
     index: Int,
-    file: ModuleFile,
+    file: ModuleEntity,
     onItemClick: (Int) -> Unit
 ) {
     val background = if (isCurrentItem) {
@@ -137,7 +136,7 @@ private fun QueueListItem(
         },
         supportingContent = {
             Text(
-                text = file.extension.uppercase(),
+                text = file.type,
                 style = MaterialTheme.typography.labelSmall,
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
             )
@@ -166,11 +165,11 @@ private fun Preview() {
             QueueSheet(
                 sheetState = sheetState,
                 queue = List(10) {
-                    ModuleFile(
-                        uri = "content://preview/$it".toUri(),
-                        name = "Item $it",
-                        sizeBytes = 669L,
-                        extension = "669"
+                    ModuleEntity(
+                        filePath = "content://preview/$it",
+                        filename = "Item $it",
+                        fileExtension = "669",
+                        fileSize = 669L,
                     )
                 }.toPersistentList(),
                 currentIndex = 3,

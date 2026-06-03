@@ -1,10 +1,9 @@
 package com.lossydragon.modplayer.data
 
-import androidx.core.net.toUri
 import com.lossydragon.modplayer.db.dao.PlaylistDao
+import com.lossydragon.modplayer.db.entity.ModuleEntity
 import com.lossydragon.modplayer.db.entity.PlaylistEntity
 import com.lossydragon.modplayer.db.entity.PlaylistEntryEntity
-import com.lossydragon.modplayer.model.ModuleFile
 import kotlinx.coroutines.flow.Flow
 
 class PlaylistRepository(private val dao: PlaylistDao) {
@@ -16,26 +15,26 @@ class PlaylistRepository(private val dao: PlaylistDao) {
     suspend fun createPlaylist(name: String, comment: String): Long =
         dao.createPlaylist(PlaylistEntity(name = name, comment = comment))
 
-    suspend fun addToPlaylist(playlistId: Long, file: ModuleFile) {
+    suspend fun addToPlaylist(playlistId: Long, file: ModuleEntity) {
         val entries = dao.getEntries(playlistId)
         dao.addEntry(
             PlaylistEntryEntity(
                 playlistId = playlistId,
                 position = entries.size,
-                uri = file.uri.toString(),
-                name = file.resolvedName.ifBlank { file.name },
-                extension = file.extension,
+                uri = file.filePath,
+                name = file.name,
+                extension = file.fileExtension,
             )
         )
     }
 
-    suspend fun getPlaylistFiles(playlistId: Long): List<ModuleFile> =
+    suspend fun getPlaylistFiles(playlistId: Long): List<ModuleEntity> =
         dao.getEntries(playlistId).map {
-            ModuleFile(
-                uri = it.uri.toUri(),
-                name = it.name,
-                sizeBytes = 0L,
-                extension = it.extension,
+            ModuleEntity(
+                filename = it.name,
+                fileExtension = it.extension,
+                filePath = it.uri,
+                fileSize = 0L,
             )
         }
 
@@ -59,16 +58,16 @@ class PlaylistRepository(private val dao: PlaylistDao) {
     suspend fun removeFromPlaylist(playlistId: Long, uri: String) =
         dao.removeEntry(playlistId, uri)
 
-    suspend fun reorderEntries(playlistId: Long, files: List<ModuleFile>) {
+    suspend fun reorderEntries(playlistId: Long, files: List<ModuleEntity>) {
         dao.clearEntries(playlistId)
         files.forEachIndexed { index, file ->
             dao.addEntry(
                 PlaylistEntryEntity(
                     playlistId = playlistId,
                     position = index,
-                    uri = file.uri.toString(),
-                    name = file.resolvedName.ifBlank { file.name },
-                    extension = file.extension,
+                    uri = file.filePath,
+                    name = file.name,
+                    extension = file.fileExtension,
                 )
             )
         }

@@ -64,3 +64,21 @@ internal fun SingleChoiceAlertDialog(
         },
     )
 }
+
+@OptIn(ExperimentalMaterial3ExpressiveApi::class)
+@Composable
+private fun LabelRadioButton(
+    item: PreferenceItem,
+    isSelected: Boolean,
+    onClick: () -> Unit
+) {
+    ListItem(
+        onClick = onClick,
+        colors = ListItemDefaults.colors(
+            containerColor = MaterialTheme.colorScheme.surfaceContainerHigh,
+        ),
+        content = { Text(text = stringResource(item.title)) },
+        supportingContent = { Text(text = stringResource(item.description)) },
+        trailingContent = { RadioButton(selected = isSelected, onClick = null) },
+    )
+}

@@ -63,12 +63,14 @@ internal fun MultiChoiceAlertDialog(
             }
         },
         confirmButton = {
-            TextButton(onClick = {
-                onConfirm(working)
-            }) { Text(text = stringResource(R.string.confirm)) }
+            TextButton(onClick = { onConfirm(working) }) {
+                Text(text = stringResource(R.string.confirm))
+            }
         },
         dismissButton = {
-            TextButton(onClick = onDismiss) { Text(text = stringResource(R.string.cancel)) }
+            TextButton(onClick = onDismiss) {
+                Text(text = stringResource(R.string.cancel))
+            }
         }
     )
 }

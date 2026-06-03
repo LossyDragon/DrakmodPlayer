@@ -10,7 +10,7 @@ import androidx.media3.session.MediaSession
 import com.lossydragon.modplayer.MainActivity
 import com.lossydragon.modplayer.R
 import com.lossydragon.modplayer.db.AppPreferences
-import com.lossydragon.modplayer.db.dao.ModuleMetadataDao
+import com.lossydragon.modplayer.db.dao.ModuleDao
 import com.lossydragon.modplayer.db.dao.PlaylistDao
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
@@ -36,7 +36,7 @@ class PlayerService : MediaLibraryService() {
     private val player: ModPlayer by inject()
     private val prefs: AppPreferences by inject()
     private val playlistDao: PlaylistDao by inject()
-    private val metadataDao: ModuleMetadataDao by inject()
+    private val metadataDao: ModuleDao by inject()
 
     private lateinit var mediaLibrarySession: MediaLibrarySession
 
@@ -45,7 +45,7 @@ class PlayerService : MediaLibraryService() {
             context = this,
             prefs = prefs,
             playlistDao = playlistDao,
-            metadataDao = metadataDao,
+            modulesDao = metadataDao,
             scope = scope,
         )
     }

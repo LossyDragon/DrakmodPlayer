@@ -13,7 +13,7 @@ import androidx.compose.ui.hapticfeedback.*
 import androidx.compose.ui.platform.*
 import androidx.compose.ui.tooling.preview.Preview
 import androidx.core.net.toUri
-import com.lossydragon.modplayer.model.ModuleFile
+import com.lossydragon.modplayer.db.entity.ModuleEntity
 import com.lossydragon.modplayer.ui.theme.AppTheme
 import sh.calvin.reorderable.DragGestureDetector
 import sh.calvin.reorderable.ReorderableCollectionItemScope
@@ -22,7 +22,7 @@ import sh.calvin.reorderable.ReorderableCollectionItemScope
 @Composable
 internal fun ReorderableCollectionItemScope.PlaylistEntryItem(
     index: Int,
-    file: ModuleFile,
+    file: ModuleEntity,
     onPlay: () -> Unit,
     onRemove: () -> Unit
 ) {
@@ -37,12 +37,12 @@ internal fun ReorderableCollectionItemScope.PlaylistEntryItem(
         ),
         content = {
             Text(
-                text = file.resolvedName.ifBlank { file.name },
+                text = file.name,
                 maxLines = 1,
             )
         },
         supportingContent = {
-            Text(text = file.resolvedType.ifBlank { file.extension.uppercase() })
+            Text(text = file.moduleType.ifBlank { file.fileExtension.uppercase() })
         },
         leadingContent = {
             Text(
@@ -111,13 +111,13 @@ private fun Preview() {
         with(fakeScope) {
             PlaylistEntryItem(
                 index = 1,
-                file = ModuleFile(
-                    uri = "content://preview/1".toUri(),
-                    name = "aegis_-_beneath_the_fallen_stars.it",
-                    sizeBytes = 1_820_792L,
-                    extension = "it",
-                    resolvedName = "Beneath the Fallen Stars",
-                    resolvedType = "Impulse Tracker",
+                file = ModuleEntity(
+                    filePath = "content://preview/1",
+                    filename = "aegis_-_beneath_the_fallen_stars.it",
+                    fileExtension = "it",
+                    fileSize = 1_820_792L,
+                    moduleName = "Beneath the Fallen Stars",
+                    moduleType = "Impulse Tracker",
                 ),
                 onPlay = {},
                 onRemove = {},

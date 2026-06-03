@@ -1,8 +1,9 @@
 package com.lossydragon.modplayer.player
 
 import android.content.Context
+import androidx.core.net.toUri
 import com.lossydragon.modplayer.db.AppPreferences
-import com.lossydragon.modplayer.model.ModuleFile
+import com.lossydragon.modplayer.db.entity.ModuleEntity
 import com.lossydragon.modplayer.player.model.ChannelSnapshot
 import com.lossydragon.modplayer.player.model.FrameSnapshot
 import com.lossydragon.modplayer.player.model.NoteCell
@@ -159,7 +160,7 @@ class PlayerEngine(
      *
      * @return true on success; false if Oboe or libxmp init fails.
      */
-    fun load(file: ModuleFile): Boolean {
+    fun load(file: ModuleEntity): Boolean {
         clearPatternCache()
         resetSequenceState()
 
@@ -183,7 +184,7 @@ class PlayerEngine(
      *
      * @return true on success; false if libxmp cannot load the file.
      */
-    fun loadNext(file: ModuleFile): Boolean {
+    fun loadNext(file: ModuleEntity): Boolean {
         clearPatternCache()
         resetSequenceState()
 
@@ -434,7 +435,7 @@ class PlayerEngine(
      * @return true on success; on failure, de-inits and resets [initialized] only
      *   if this is a first-time load (i.e., [softStop] wasn't called).
      */
-    private fun loadModule(file: ModuleFile): Boolean {
+    private fun loadModule(file: ModuleEntity): Boolean {
         val modInfo = ModInfo()
         val result = Xmp.loadFromFd(context, file.uri, modInfo)
         if (result != 0) {

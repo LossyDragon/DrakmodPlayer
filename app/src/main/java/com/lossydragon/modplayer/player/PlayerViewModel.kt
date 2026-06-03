@@ -9,7 +9,7 @@ import androidx.lifecycle.viewModelScope
 import androidx.media3.common.Player
 import androidx.media3.common.util.UnstableApi
 import com.lossydragon.modplayer.db.AppPreferences
-import com.lossydragon.modplayer.model.ModuleFile
+import com.lossydragon.modplayer.db.entity.ModuleEntity
 import com.lossydragon.modplayer.player.model.FrameSnapshot
 import java.nio.charset.StandardCharsets
 import kotlinx.collections.immutable.ImmutableList
@@ -30,7 +30,7 @@ enum class PlaybackStatus { IDLE, LOADING, PLAYING, PAUSED }
 
 @Immutable
 data class PlayerUiState(
-    val currentModule: ModuleFile? = null,
+    val currentModule: ModuleEntity? = null,
     val currentQueueIndex: Int = 0,
     val currentSequence: Int = 0,
     val durationMs: Long = 0L,
@@ -46,7 +46,7 @@ data class PlayerUiState(
     val numSequences: Int = 0,
     val playAllSequences: Boolean = false,
     val positionMs: Long = 0L,
-    val queue: ImmutableList<ModuleFile> = persistentListOf(),
+    val queue: ImmutableList<ModuleEntity> = persistentListOf(),
     val repeatMode: Int = Player.REPEAT_MODE_OFF,
     val sequenceDurations: ImmutableList<Int> = persistentListOf(),
     val showRowNumbers: Boolean = false,
@@ -147,7 +147,7 @@ class PlayerViewModel(
     }
 
     /** Loads [file] as a single-item queue and starts playback. */
-    fun play(file: ModuleFile) {
+    fun play(file: ModuleEntity) {
         state.update {
             it.copy(
                 status = PlaybackStatus.LOADING,
@@ -162,7 +162,7 @@ class PlayerViewModel(
 
     /** Loads [files] as a queue, optionally shuffled, and starts playback at [startAt]. */
     fun playAll(
-        files: ImmutableList<ModuleFile>,
+        files: ImmutableList<ModuleEntity>,
         startAt: Int,
         isShuffle: Boolean,
         repeatMode: Int = state.value.repeatMode
@@ -245,11 +245,11 @@ class PlayerViewModel(
 
     suspend fun getLastDirectoryUri(): String? = prefs.getLastDirectoryUri()
 
-    private fun ModuleFile.displayName() =
-        resolvedName.ifBlank { name.ifBlank { "(Untitled)" } }
+    private fun ModuleEntity.displayName() =
+        moduleName.ifBlank { filename.ifBlank { "(Untitled)" } }
 
-    private fun ModuleFile.displayType() =
-        resolvedType.ifBlank { extension.uppercase().ifBlank { "???" } }
+    private fun ModuleEntity.displayType() =
+        moduleType.ifBlank { fileExtension.uppercase().ifBlank { "???" } }
 
     private fun ensureServiceRunning() =
         Intent(appContext, PlayerService::class.java).also(appContext::startService)

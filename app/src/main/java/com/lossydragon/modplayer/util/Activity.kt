@@ -2,6 +2,7 @@ package com.lossydragon.modplayer.util
 
 import android.content.Context
 import android.content.Intent
+import android.net.Uri
 import android.os.Build
 import androidx.activity.ComponentActivity
 import androidx.activity.SystemBarStyle
@@ -37,4 +38,20 @@ fun Context.shareLink(message: String) {
     }
     val shareIntent = Intent.createChooser(sendIntent, null)
     this.startActivity(shareIntent)
+}
+
+/**
+ * TODO kDoc
+ */
+fun Context.takeReadPermission(uri: Uri) {
+    val flags = Intent.FLAG_GRANT_READ_URI_PERMISSION
+    this.contentResolver.takePersistableUriPermission(uri, flags)
+}
+
+/**
+ * TODO kDoc
+ */
+fun Context.takeReadWritePermission(uri: Uri) {
+    val flags = Intent.FLAG_GRANT_READ_URI_PERMISSION or Intent.FLAG_GRANT_WRITE_URI_PERMISSION
+    this.contentResolver.takePersistableUriPermission(uri, flags)
 }

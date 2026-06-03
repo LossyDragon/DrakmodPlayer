@@ -3,22 +3,18 @@ package com.lossydragon.modplayer.ui
 import androidx.activity.compose.BackHandler
 import androidx.annotation.StringRes
 import androidx.compose.foundation.layout.*
-import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.automirrored.filled.List
-import androidx.compose.material.icons.automirrored.outlined.List
-import androidx.compose.material.icons.filled.Download
-import androidx.compose.material.icons.filled.Folder
-import androidx.compose.material.icons.filled.Settings
-import androidx.compose.material.icons.outlined.Download
-import androidx.compose.material.icons.outlined.Folder
-import androidx.compose.material.icons.outlined.Settings
+import androidx.compose.material.icons.*
+import androidx.compose.material.icons.automirrored.filled.*
+import androidx.compose.material.icons.automirrored.outlined.*
+import androidx.compose.material.icons.filled.*
+import androidx.compose.material.icons.outlined.*
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.runtime.retain.*
 import androidx.compose.ui.*
-import androidx.compose.ui.graphics.vector.ImageVector
+import androidx.compose.ui.graphics.vector.*
 import androidx.compose.ui.platform.*
-import androidx.compose.ui.res.stringResource
+import androidx.compose.ui.res.*
 import androidx.compose.ui.tooling.preview.*
 import androidx.lifecycle.viewmodel.navigation3.rememberViewModelStoreNavEntryDecorator
 import androidx.navigation3.runtime.NavKey
@@ -36,7 +32,7 @@ import com.lossydragon.modplayer.ui.theme.AppTheme
 import kotlinx.collections.immutable.persistentListOf
 import kotlinx.serialization.Serializable
 import org.koin.android.ext.koin.androidContext
-import org.koin.core.context.startKoin
+import org.koin.core.context.GlobalContext.startKoin
 
 @Serializable
 private sealed class NavKeyMain(@param:StringRes val title: Int) : NavKey {
@@ -44,19 +40,19 @@ private sealed class NavKeyMain(@param:StringRes val title: Int) : NavKey {
     abstract val unselectedIcon: ImageVector
 
     @Serializable
-    data object Browser : NavKeyMain(com.lossydragon.modplayer.R.string.nav_browser) {
+    data object Browser : NavKeyMain(R.string.nav_browser) {
         override val selectedIcon = Icons.Filled.Folder
         override val unselectedIcon = Icons.Outlined.Folder
     }
 
     @Serializable
-    data object Playlists : NavKeyMain(com.lossydragon.modplayer.R.string.nav_playlists) {
+    data object Playlists : NavKeyMain(R.string.nav_playlists) {
         override val selectedIcon = Icons.AutoMirrored.Filled.List
         override val unselectedIcon = Icons.AutoMirrored.Outlined.List
     }
 
     @Serializable
-    data object Downloads : NavKeyMain(com.lossydragon.modplayer.R.string.nav_downloads) {
+    data object Downloads : NavKeyMain(R.string.nav_downloads) {
         override val selectedIcon = Icons.Filled.Download
         override val unselectedIcon = Icons.Outlined.Download
     }

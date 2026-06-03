@@ -1,9 +1,6 @@
 package com.lossydragon.modplayer.ui.screens.browser
 
-import android.content.Intent
-import androidx.activity.ComponentActivity
 import androidx.activity.compose.BackHandler
-import androidx.activity.compose.LocalActivity
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.animation.*
@@ -25,7 +22,7 @@ import androidx.core.net.toUri
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.media3.common.Player
 import com.lossydragon.modplayer.R
-import com.lossydragon.modplayer.model.ModuleFile
+import com.lossydragon.modplayer.db.entity.ModuleEntity
 import com.lossydragon.modplayer.player.PlaybackStatus
 import com.lossydragon.modplayer.player.PlayerUiState
 import com.lossydragon.modplayer.player.PlayerViewModel
@@ -36,6 +33,7 @@ import com.lossydragon.modplayer.ui.screens.browser.components.BrowserInputField
 import com.lossydragon.modplayer.ui.screens.browser.components.ModuleList
 import com.lossydragon.modplayer.ui.screens.player.components.MiniPlayerBar
 import com.lossydragon.modplayer.ui.theme.AppTheme
+import com.lossydragon.modplayer.util.takeReadWritePermission
 import kotlinx.collections.immutable.persistentListOf
 import org.koin.androidx.compose.koinViewModel
 
@@ -47,14 +45,7 @@ fun FileBrowserScreen(
 ) {
     val context = LocalContext.current
     val browserViewModel = koinViewModel<FileBrowserViewModel>()
-
-    // Cheap hack to have @Preview work with MainNavigation
-    val activity = LocalActivity.current
-    val playerViewModel = if (activity != null) {
-        koinViewModel<PlayerViewModel>(viewModelStoreOwner = activity as ComponentActivity)
-    } else {
-        koinViewModel<PlayerViewModel>()
-    }
+    val playerViewModel = koinViewModel<PlayerViewModel>()
 
     val browserState by browserViewModel.state.collectAsStateWithLifecycle()
     val playerState by playerViewModel.state.collectAsStateWithLifecycle()
@@ -63,10 +54,7 @@ fun FileBrowserScreen(
         contract = ActivityResultContracts.OpenDocumentTree(),
         onResult = { uri ->
             uri?.let {
-                // Take both read and write permissions
-                val flags = Intent.FLAG_GRANT_READ_URI_PERMISSION or
-                    Intent.FLAG_GRANT_WRITE_URI_PERMISSION
-                context.contentResolver.takePersistableUriPermission(it, flags)
+                context.takeReadWritePermission(it)
                 browserViewModel.onRootFolderPicked(it)
             }
         }
@@ -139,7 +127,7 @@ private fun FileBrowserScreenContent(
     canNavigateUp: () -> Boolean,
     onBreadcrumb: (Int) -> Unit,
     onPlayAll: () -> Unit,
-    onSelect: (ModuleFile) -> Unit,
+    onSelect: (ModuleEntity) -> Unit,
     onDir: (FileItem) -> Unit,
     onMiniPlayerTap: () -> Unit,
     onMiniPlayerToggle: () -> Unit,
@@ -344,37 +332,37 @@ private data class BrowserPreviewState(
 private class BrowserPreviewParameter : PreviewParameterProvider<BrowserPreviewState> {
 
     private val sampleFiles = persistentListOf(
-        ModuleFile(
-            uri = "content://preview/1".toUri(),
-            name = "a_journey_into_sound.far",
-            sizeBytes = 123_456L,
-            extension = "far",
-            resolvedName = "A Journey Into Sound",
-            resolvedType = "Farandole Composer",
+        ModuleEntity(
+            filePath = "content://preview/1",
+            filename = "a_journey_into_sound.far",
+            fileExtension = "far",
+            fileSize = 123_456L,
+            moduleName = "A Journey Into Sound",
+            moduleType = "Farandole Composer",
         ),
-        ModuleFile(
-            uri = "content://preview/2".toUri(),
-            name = "aegis_-_beneath_the_fallen_stars.it",
-            sizeBytes = 1_820_792L,
-            extension = "it",
-            resolvedName = "Beneath the Fallen Stars",
-            resolvedType = "Impulse Tracker",
+        ModuleEntity(
+            filePath = "content://preview/2",
+            filename = "aegis_-_beneath_the_fallen_stars.it",
+            fileExtension = "it",
+            fileSize = 1_820_792L,
+            moduleName = "Beneath the Fallen Stars",
+            moduleType = "Impulse Tracker",
         ),
-        ModuleFile(
-            uri = "content://preview/3".toUri(),
-            name = "alpharapii.mod",
-            sizeBytes = 45_678L,
-            extension = "mod",
-            resolvedName = "alpharapii",
-            resolvedType = "Amiga Protracker/Compatible",
+        ModuleEntity(
+            filePath = "content://preview/3",
+            filename = "alpharapii.mod",
+            fileExtension = "mod",
+            fileSize = 45_678L,
+            moduleName = "alpharapii",
+            moduleType = "Amiga Protracker/Compatible",
         ),
-        ModuleFile(
-            uri = "content://preview/4".toUri(),
-            name = "chiptune_no_184.mod",
-            sizeBytes = 6_658L,
-            extension = "mod",
-            resolvedName = "Chiptune No. 184",
-            resolvedType = "Amiga Protracker/Compatible",
+        ModuleEntity(
+            filePath = "content://preview/4",
+            filename = "chiptune_no_184.mod",
+            fileExtension = "mod",
+            fileSize = 6_658L,
+            moduleName = "Chiptune No. 184",
+            moduleType = "Amiga Protracker/Compatible",
         ),
     )
 

@@ -15,7 +15,7 @@ import androidx.navigation3.runtime.rememberNavBackStack
 import androidx.navigation3.runtime.rememberSaveableStateHolderNavEntryDecorator
 import androidx.navigation3.ui.NavDisplay
 import com.lossydragon.modplayer.BuildConfig
-import com.lossydragon.modplayer.model.ModuleFile
+import com.lossydragon.modplayer.db.entity.ModuleEntity
 import com.lossydragon.modplayer.player.PlayerViewModel
 import com.lossydragon.modplayer.ui.screens.downloads.screen.DownloadHistoryScreen
 import com.lossydragon.modplayer.ui.screens.downloads.screen.DownloadModuleScreen
@@ -116,11 +116,11 @@ fun NavDownloads(
                                 filename = filename
                             ) ?: return@launch
 
-                            val moduleFile = ModuleFile(
-                                uri = fileUri,
-                                name = module.songtitle.ifBlank { filename },
-                                sizeBytes = module.bytes.toLong(),
-                                extension = filename.substringAfterLast('.', ""),
+                            val moduleFile = ModuleEntity(
+                                filePath = fileUri.toString(),
+                                filename = module.songtitle.ifBlank { filename },
+                                fileSize = module.bytes.toLong(),
+                                fileExtension = filename.substringAfterLast('.', ""),
                             )
 
                             withContext(Dispatchers.Main) {

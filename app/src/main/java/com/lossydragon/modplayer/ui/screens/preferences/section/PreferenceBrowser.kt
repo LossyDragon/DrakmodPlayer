@@ -1,6 +1,5 @@
 package com.lossydragon.modplayer.ui.screens.preferences.section
 
-import android.content.Intent
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.layout.*
@@ -16,6 +15,7 @@ import com.lossydragon.modplayer.R
 import com.lossydragon.modplayer.db.AppPreferences
 import com.lossydragon.modplayer.ui.screens.preferences.components.PreferenceSection
 import com.lossydragon.modplayer.ui.theme.AppTheme
+import com.lossydragon.modplayer.util.takeReadWritePermission
 import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.launch
 import org.koin.compose.koinInject
@@ -36,10 +36,7 @@ fun PreferenceBrowser(colors: ListItemColors) {
         contract = ActivityResultContracts.OpenDocumentTree(),
         onResult = { uri ->
             uri?.let {
-                val flags = Intent.FLAG_GRANT_READ_URI_PERMISSION or
-                    Intent.FLAG_GRANT_WRITE_URI_PERMISSION
-                context.contentResolver.takePersistableUriPermission(it, flags)
-
+                context.takeReadWritePermission(it)
                 scope.launch { prefs.setLastDirectoryUri(it.toString()) }
             }
         }

@@ -17,7 +17,9 @@ import com.google.common.util.concurrent.Futures
 import com.google.common.util.concurrent.ListenableFuture
 import com.lossydragon.modplayer.R
 import com.lossydragon.modplayer.db.AppPreferences
-import com.lossydragon.modplayer.model.ModuleFile
+import com.lossydragon.modplayer.db.entity.ModuleEntity
+import kotlin.math.abs
+import kotlin.time.Duration.Companion.milliseconds
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
@@ -31,8 +33,6 @@ import kotlinx.coroutines.runBlocking
 import kotlinx.serialization.json.Json
 import org.helllabs.libxmp.Xmp
 import timber.log.Timber
-import kotlin.math.abs
-import kotlin.time.Duration.Companion.milliseconds
 
 /**
  * Media3 [SimpleBasePlayer] backed by [PlayerEngine].
@@ -49,10 +49,10 @@ class ModPlayer(
     private var shuffleMode = false
 
     /** Current playback order; rebuilt by [applyQueueOrder]. */
-    private val queue = mutableListOf<ModuleFile>()
+    private val queue = mutableListOf<ModuleEntity>()
 
     /** Original (pre-shuffle) order, used to restore sequential play and persist state. */
-    private val originalQueue = mutableListOf<ModuleFile>()
+    private val originalQueue = mutableListOf<ModuleEntity>()
 
     /** Mirror of [queue] as [MediaItem]s for [getState]; the current item has real metadata. */
     private val playlist = mutableListOf<MediaItem>()
@@ -104,7 +104,7 @@ class ModPlayer(
         field = MutableStateFlow(0)
 
     /** Snapshot of the current playback queue; emitted when the queue changes. */
-    val queueFlow: StateFlow<List<ModuleFile>>
+    val queueFlow: StateFlow<List<ModuleEntity>>
         field = MutableStateFlow(emptyList())
 
     /** Incremented each time a new module finishes loading; triggers metadata sync. */
@@ -150,7 +150,7 @@ class ModPlayer(
 
     /** Loads [files] into the queue and starts playback at [startAt]. */
     fun loadQueue(
-        files: List<ModuleFile>,
+        files: List<ModuleEntity>,
         startAt: Int,
         shuffleMode: Boolean = this.shuffleMode,
         repeatMode: Int = this.repeatMode
@@ -268,7 +268,7 @@ class ModPlayer(
                 // Replace the placeholder item with real metadata from libxmp.
                 val realItem = MediaItem.Builder()
                     .setUri(file.uri)
-                    .setMediaId(file.uri.toString())
+                    .setMediaId(file.filePath)
                     .setMediaMetadata(file.toRealMetadata(engine.durationMs.value))
                     .build()
 
@@ -584,11 +584,11 @@ class ModPlayer(
     ): ListenableFuture<*> {
         val files = mediaItems.mapNotNull { item ->
             val uri = item.localConfiguration?.uri ?: return@mapNotNull null
-            ModuleFile(
-                uri = uri,
-                name = item.mediaMetadata.title?.toString() ?: uri.lastPathSegment ?: "Unknown",
-                sizeBytes = 0L,
-                extension = uri.lastPathSegment?.substringAfterLast('.', "") ?: "",
+            ModuleEntity(
+                filePath = uri.toString(),
+                filename = item.mediaMetadata.title?.toString() ?: uri.lastPathSegment ?: "Unknown",
+                fileSize = 0L,
+                fileExtension = uri.lastPathSegment?.substringAfterLast('.', "") ?: "",
             )
         }
         if (files.isEmpty()) return Futures.immediateVoidFuture()
@@ -658,7 +658,7 @@ class ModPlayer(
     suspend fun restoreQueue(): Boolean {
         val state = prefs.getQueueState() ?: return false
         val files = try {
-            Json.decodeFromString<List<ModuleFile>>(state.json)
+            Json.decodeFromString<List<ModuleEntity>>(state.json)
         } catch (e: Exception) {
             Timber.e(e, "Failed to restore queue")
             prefs.clearQueueState()
@@ -686,14 +686,14 @@ class ModPlayer(
      * Builds a [MediaItem] with placeholder metadata for initial queue population.
      * Real metadata (loaded from libxmp) is injected by [loadAndStartAt] later.
      */
-    private fun ModuleFile.toMediaItem(): MediaItem =
+    private fun ModuleEntity.toMediaItem(): MediaItem =
         MediaItem.Builder()
             .setUri(uri)
-            .setMediaId(uri.toString())
+            .setMediaId(filePath)
             .setMediaMetadata(
                 MediaMetadata.Builder()
-                    .setTitle(resolvedName.ifBlank { name })
-                    .setArtist(resolvedType.ifBlank { extension.uppercase() })
+                    .setTitle(moduleName.ifBlank { filename })
+                    .setArtist(moduleType.ifBlank { fileExtension.uppercase() })
                     .setArtworkUri(artworkUri)
                     .setIsPlayable(true)
                     .build()
@@ -701,10 +701,14 @@ class ModPlayer(
             .build()
 
     /** Builds [MediaMetadata] from libxmp after the module has been loaded successfully. */
-    private fun ModuleFile.toRealMetadata(duration: Long): MediaMetadata =
+    private fun ModuleEntity.toRealMetadata(duration: Long): MediaMetadata =
         MediaMetadata.Builder()
-            .setTitle(Xmp.getModName().ifBlank { resolvedName.ifBlank { name } })
-            .setArtist(Xmp.getModType().ifBlank { resolvedType.ifBlank { extension.uppercase() } })
+            .setTitle(Xmp.getModName().ifBlank { moduleName.ifBlank { filename } })
+            .setArtist(
+                Xmp.getModType().ifBlank {
+                    moduleType.ifBlank { fileExtension.uppercase() }
+                }
+            )
             .setDurationMs(duration)
             .setArtworkUri(artworkUri)
             .setIsPlayable(true)

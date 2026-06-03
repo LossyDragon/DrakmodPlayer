@@ -9,8 +9,8 @@ import com.lossydragon.modplayer.data.exportPlaylistsToJson
 import com.lossydragon.modplayer.data.readImportFromUri
 import com.lossydragon.modplayer.data.toRoomEntities
 import com.lossydragon.modplayer.data.writeExportToUri
+import com.lossydragon.modplayer.db.entity.ModuleEntity
 import com.lossydragon.modplayer.db.entity.PlaylistEntity
-import com.lossydragon.modplayer.model.ModuleFile
 import com.lossydragon.modplayer.player.PlayerUiState
 import com.lossydragon.modplayer.player.PlayerViewModel
 import kotlinx.collections.immutable.ImmutableList
@@ -28,7 +28,7 @@ import kotlinx.coroutines.withContext
 data class PlaylistsUiState(
     val playlists: ImmutableList<PlaylistEntity> = persistentListOf(),
     val selectedPlaylist: PlaylistEntity? = null,
-    val entries: ImmutableList<ModuleFile> = persistentListOf(),
+    val entries: ImmutableList<ModuleEntity> = persistentListOf(),
     val isLoading: Boolean = false,
     val error: String? = null,
     val importResult: ImportResultUi? = null,
@@ -107,7 +107,7 @@ class PlaylistsViewModel(
     }
 
     /** Adds [file] to [playlist]. Refreshes entries if [playlist] is currently selected. */
-    fun addToPlaylist(playlist: PlaylistEntity, file: ModuleFile) {
+    fun addToPlaylist(playlist: PlaylistEntity, file: ModuleEntity) {
         viewModelScope.launch {
             runCatching { repo.addToPlaylist(playlist.id, file) }
                 .onSuccess {
@@ -120,10 +120,10 @@ class PlaylistsViewModel(
     }
 
     /** Removes [file] from the currently selected playlist. */
-    fun removeFromPlaylist(file: ModuleFile) {
+    fun removeFromPlaylist(file: ModuleEntity) {
         val playlist = state.value.selectedPlaylist ?: return
         viewModelScope.launch {
-            runCatching { repo.removeFromPlaylist(playlist.id, file.uri.toString()) }
+            runCatching { repo.removeFromPlaylist(playlist.id, file.filePath) }
                 .onSuccess { refreshEntries() }
                 .onFailure { state.update { s -> s.copy(error = it.message) } }
         }
@@ -236,7 +236,7 @@ class PlaylistsViewModel(
         )
     }
 
-    fun playEntry(file: ModuleFile) {
+    fun playEntry(file: ModuleEntity) {
         val entries = state.value.entries
         val index = entries.indexOf(file).coerceAtLeast(0)
         player.playAll(

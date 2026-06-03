@@ -4,7 +4,7 @@ import androidx.room.Room
 import com.lossydragon.modplayer.core.Constants
 import com.lossydragon.modplayer.data.DownloadHistoryRepository
 import com.lossydragon.modplayer.data.ModArchiveService
-import com.lossydragon.modplayer.data.ModuleMetadataRepository
+import com.lossydragon.modplayer.data.ModuleRepository
 import com.lossydragon.modplayer.data.PlaylistRepository
 import com.lossydragon.modplayer.db.AppDatabase
 import com.lossydragon.modplayer.db.AppPreferences
@@ -50,7 +50,7 @@ val appModule = module {
     single { get<AppDatabase>().moduleMetadataDao() }
     single { get<AppDatabase>().downloadHistoryDao() }
     single { get<AppDatabase>().playlistDao() }
-    single { ModuleMetadataRepository(androidContext(), get()) }
+    single { ModuleRepository(androidContext(), get()) }
     single { DownloadHistoryRepository(get()) }
     single { PlaylistRepository(get()) }
 

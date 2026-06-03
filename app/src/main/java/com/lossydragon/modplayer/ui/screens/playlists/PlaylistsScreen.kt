@@ -27,8 +27,8 @@ import androidx.navigation3.runtime.rememberNavBackStack
 import androidx.navigation3.runtime.rememberSaveableStateHolderNavEntryDecorator
 import androidx.navigation3.ui.NavDisplay
 import com.lossydragon.modplayer.R
+import com.lossydragon.modplayer.db.entity.ModuleEntity
 import com.lossydragon.modplayer.db.entity.PlaylistEntity
-import com.lossydragon.modplayer.model.ModuleFile
 import com.lossydragon.modplayer.player.PlaybackStatus
 import com.lossydragon.modplayer.player.PlayerUiState
 import com.lossydragon.modplayer.player.PlayerViewModel
@@ -409,10 +409,10 @@ private fun PlaylistEntriesScreen(
     onMiniPlayerToggle: () -> Unit,
     onMiniPlayerNext: () -> Unit,
     onMiniPlayerPrev: () -> Unit,
-    onPlayEntry: (ModuleFile) -> Unit,
+    onPlayEntry: (ModuleEntity) -> Unit,
     onPlayAll: () -> Unit,
     onShuffle: () -> Unit,
-    onRemoveEntry: (ModuleFile) -> Unit,
+    onRemoveEntry: (ModuleEntity) -> Unit,
     onReorderEntry: (Int, Int) -> Unit
 ) {
     val hasModule = playerState.currentModule != null
@@ -493,7 +493,7 @@ private fun PlaylistEntriesScreen(
                         ) { index, file ->
                             ReorderableItem(
                                 state = reorderableLazyListState,
-                                key = file.uri.toString()
+                                key = file.filePath
                             ) { isDragging ->
                                 val elevation by animateDpAsState(
                                     if (isDragging) 4.dp else 0.dp,
@@ -550,45 +550,45 @@ private val samplePlaylists = persistentListOf(
 )
 
 private val sampleEntries = persistentListOf(
-    ModuleFile(
-        uri = "content://preview/1".toUri(),
-        name = "alpharapii.mod",
-        sizeBytes = 45_678L,
-        extension = "mod",
-        resolvedName = "alpharapii",
-        resolvedType = "Amiga Protracker/Compatible",
+    ModuleEntity(
+        filePath = "content://preview/1",
+        filename = "alpharapii.mod",
+        fileExtension = "mod",
+        fileSize = 45_678L,
+        moduleName = "alpharapii",
+        moduleType = "Amiga Protracker/Compatible",
     ),
-    ModuleFile(
-        uri = "content://preview/2".toUri(),
-        name = "aegis_-_beneath_the_fallen_stars.it",
-        sizeBytes = 1_820_792L,
-        extension = "it",
-        resolvedName = "Beneath the Fallen Stars",
-        resolvedType = "Impulse Tracker",
+    ModuleEntity(
+        filePath = "content://preview/2",
+        filename = "aegis_-_beneath_the_fallen_stars.it",
+        fileExtension = "it",
+        fileSize = 1_820_792L,
+        moduleName = "Beneath the Fallen Stars",
+        moduleType = "Impulse Tracker",
     ),
-    ModuleFile(
-        uri = "content://preview/3".toUri(),
-        name = "ballada-remix.mod",
-        sizeBytes = 22_334L,
-        extension = "mod",
-        resolvedName = "ballada-remix",
-        resolvedType = "Amiga Protracker/Compatible",
+    ModuleEntity(
+        filePath = "content://preview/3",
+        filename = "ballada-remix.mod",
+        fileExtension = "mod",
+        fileSize = 22_334L,
+        moduleName = "ballada-remix",
+        moduleType = "Amiga Protracker/Compatible",
     ),
-    ModuleFile(
-        uri = "content://preview/4".toUri(),
-        name = "KRAKEN.IT",
-        sizeBytes = 312_456L,
-        extension = "it",
-        resolvedName = "Kraken of the Sea",
-        resolvedType = "Impulse Tracker",
+    ModuleEntity(
+        filePath = "content://preview/4",
+        filename = "KRAKEN.IT",
+        fileExtension = "it",
+        fileSize = 312_456L,
+        moduleName = "Kraken of the Sea",
+        moduleType = "Impulse Tracker",
     ),
-    ModuleFile(
-        uri = "content://preview/5".toUri(),
-        name = "SONG0.S3M",
-        sizeBytes = 98_123L,
-        extension = "s3m",
-        resolvedName = "Escape",
-        resolvedType = "Scream Tracker 3",
+    ModuleEntity(
+        filePath = "content://preview/5",
+        filename = "SONG0.S3M",
+        fileExtension = "s3m",
+        fileSize = 98_123L,
+        moduleName = "Escape",
+        moduleType = "Scream Tracker 3",
     ),
 )
 

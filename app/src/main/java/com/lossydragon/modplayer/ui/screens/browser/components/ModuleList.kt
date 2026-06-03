@@ -12,7 +12,7 @@ import androidx.compose.ui.tooling.preview.*
 import androidx.compose.ui.unit.*
 import androidx.core.net.toUri
 import com.lossydragon.modplayer.R
-import com.lossydragon.modplayer.model.ModuleFile
+import com.lossydragon.modplayer.db.entity.ModuleEntity
 import com.lossydragon.modplayer.ui.screens.browser.BrowserUiState
 import com.lossydragon.modplayer.ui.screens.browser.FileItem
 import com.lossydragon.modplayer.ui.theme.AppTheme
@@ -24,7 +24,7 @@ internal fun ModuleList(
     padding: PaddingValues,
     listState: LazyListState,
     onDir: (FileItem) -> Unit,
-    onSelect: (ModuleFile) -> Unit
+    onSelect: (ModuleEntity) -> Unit
 ) {
     LazyColumn(
         state = listState,
@@ -50,11 +50,11 @@ internal fun ModuleList(
             )
             items(
                 items = state.files,
-                key = { it.uri.toString() },
+                key = { it.filePath },
                 itemContent = { file ->
                     BrowserListItem(
-                        title = file.resolvedName.ifBlank { file.name },
-                        comment = file.resolvedType.ifBlank { file.extension },
+                        title = file.name,
+                        comment = file.moduleType.ifBlank { file.fileExtension },
                         leadingIcon = Icons.Default.AudioFile,
                         onClick = { onSelect(file) },
                     )
@@ -71,11 +71,11 @@ private fun Preview() {
         ModuleList(
             state = BrowserUiState(
                 files = List(10) {
-                    ModuleFile(
-                        uri = "$it".toUri(),
-                        name = "Item $it",
-                        sizeBytes = it + 1L * it,
-                        extension = "669",
+                    ModuleEntity(
+                        filePath = "content://preview/$it",
+                        filename = "Item $it",
+                        fileExtension = "669",
+                        fileSize = it + 1L * it,
                     )
                 }.toImmutableList(),
             ),

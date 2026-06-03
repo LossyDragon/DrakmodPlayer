@@ -1,25 +1,27 @@
 package com.lossydragon.modplayer.ui.screens.browser
 
 import android.content.Context
-import android.content.Intent
 import android.net.Uri
 import androidx.compose.runtime.*
 import androidx.core.net.toUri
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import androidx.media3.common.Player
-import com.lossydragon.modplayer.core.Constants
-import com.lossydragon.modplayer.data.ModuleMetadataRepository
+import com.lossydragon.modplayer.data.ModuleRepository
 import com.lossydragon.modplayer.db.AppPreferences
-import com.lossydragon.modplayer.model.ModuleFile
-import com.lossydragon.modplayer.util.queryDirectoryEntries
-import com.lossydragon.modplayer.util.resolveDocId
+import com.lossydragon.modplayer.db.entity.ModuleEntity
+import com.lossydragon.modplayer.util.takeReadWritePermission
 import kotlinx.collections.immutable.ImmutableList
 import kotlinx.collections.immutable.persistentListOf
 import kotlinx.collections.immutable.toImmutableList
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
+import kotlinx.coroutines.flow.filterNotNull
+import kotlinx.coroutines.flow.flatMapLatest
+import kotlinx.coroutines.flow.launchIn
+import kotlinx.coroutines.flow.onEach
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
 
@@ -41,303 +43,156 @@ data class BrowserUiState(
     val currentPath: String = "",
     val directories: ImmutableList<FileItem> = persistentListOf(),
     val error: String? = null,
-    val files: ImmutableList<ModuleFile> = persistentListOf(),
+    val files: ImmutableList<ModuleEntity> = persistentListOf(),
     val filterQuery: String = "",
     val hasStorageAccess: Boolean = false,
-    val isFolderTraversal: Boolean = true, // Maybe add an option to turn off traversal.
     val isLoading: Boolean = true,
     val isShuffle: Boolean = false,
     val repeatMode: Int = Player.REPEAT_MODE_OFF,
     val sortOrder: BrowserSortOrder = BrowserSortOrder.NAME
 )
 
+@OptIn(ExperimentalCoroutinesApi::class)
 class FileBrowserViewModel(
     private val appContext: Context,
     private val prefs: AppPreferences,
-    private val db: ModuleMetadataRepository
+    private val db: ModuleRepository
 ) : ViewModel() {
 
     val state: StateFlow<BrowserUiState>
         field = MutableStateFlow(BrowserUiState())
 
-    private val dirStack = ArrayDeque<Uri>()
-    private var rootTreeUri: Uri? = null
+    private val currentPath = MutableStateFlow<String?>(null)
+    private val currentChildren = MutableStateFlow<List<ModuleEntity>>(emptyList())
 
-    // Rebuilds only when the directory changes, not on sort/filter
-    private var traversalCacheUri: Uri? = null
-    private var traversalCache: List<ModuleFile> = emptyList()
+    // Stack of (uri string, display name) for breadcrumb navigation
+    private val dirStack = ArrayDeque<Pair<String, String>>()
 
     init {
         viewModelScope.launch {
-            prefs.getLastDirectoryUri()?.let { savedUri ->
-                state.value = state.value.copy(isLoading = true)
-                onRootFolderPicked(savedUri.toUri())
-            } ?: run {
-                state.value = state.value.copy(isLoading = false)
+            val savedUri = prefs.getLastDirectoryUri()
+            if (savedUri == null) {
+                state.update { it.copy(isLoading = false, hasStorageAccess = false) }
+                return@launch
+            }
+
+            pushDir(savedUri, displayName(savedUri))
+            state.update { it.copy(hasStorageAccess = true) }
+
+            launch(Dispatchers.IO) {
+                db.indexDirectory(savedUri.toUri())
+                state.update { it.copy(isLoading = false) }
             }
         }
+
+        currentPath
+            .filterNotNull()
+            .flatMapLatest { path -> db.getChildren(path) }
+            .onEach { children ->
+                currentChildren.value = children
+                applyFilters()
+            }
+            .launchIn(viewModelScope)
     }
 
     fun onRootFolderPicked(uri: Uri) {
-        appContext.contentResolver.takePersistableUriPermission(
-            uri,
-            Intent.FLAG_GRANT_READ_URI_PERMISSION or Intent.FLAG_GRANT_WRITE_URI_PERMISSION
-        )
-
+        appContext.takeReadWritePermission(uri)
         viewModelScope.launch { prefs.setLastDirectoryUri(uri.toString()) }
-        state.update { it.copy(isLoading = true) }
 
-        rootTreeUri = uri
         dirStack.clear()
-        dirStack.addLast(uri)
+        pushDir(uri.toString(), displayName(uri.toString()))
+        state.update { it.copy(isLoading = true, hasStorageAccess = true) }
 
-        // Wait until we're fully done.
-        // loadDirectory(uri)
-
-        // Background index entire tree
         viewModelScope.launch(Dispatchers.IO) {
-            indexDirectory(uri)
-            loadDirectory(uri)
+            db.indexDirectory(uri)
+            state.update { it.copy(isLoading = false) }
         }
     }
 
     fun navigateInto(item: FileItem) {
-        dirStack.addLast(item.uri)
-        state.update { it.copy(isLoading = true) }
-        viewModelScope.launch(Dispatchers.IO) {
-            indexDirectory(item.uri)
-            loadDirectory(item.uri)
-        }
+        pushDir(item.uri.toString(), item.name)
     }
 
     fun navigateUp(): Boolean {
         if (dirStack.size <= 1) return false
         dirStack.removeLast()
-        loadDirectory(dirStack.last())
+        currentPath.value = dirStack.last().first
+        updateBreadcrumbs()
         return true
     }
 
-    fun canNavigateUp() = dirStack.size > 1
-
-    fun setShuffle(value: Boolean) {
-        state.value = state.value.copy(isShuffle = value)
-    }
-
-    fun setRepeatMode(mode: Int) {
-        state.value = state.value.copy(repeatMode = mode)
-    }
+    fun canNavigateUp(): Boolean = dirStack.size > 1
 
     fun navigateToBreadcrumb(index: Int) {
         while (dirStack.size > index + 1) dirStack.removeLast()
-        loadDirectory(dirStack.last())
+        currentPath.value = dirStack.last().first
+        updateBreadcrumbs()
+    }
+
+    fun setShuffle(value: Boolean) {
+        state.update { it.copy(isShuffle = value) }
+    }
+
+    fun setRepeatMode(mode: Int) {
+        state.update { it.copy(repeatMode = mode) }
     }
 
     fun setSortOrder(order: BrowserSortOrder) {
-        state.value = state.value.copy(sortOrder = order)
-        dirStack.lastOrNull()?.let { loadDirectory(it) }
+        state.update { it.copy(sortOrder = order) }
+        applyFilters()
     }
 
     fun setFilter(query: String) {
-        state.value = state.value.copy(filterQuery = query)
-        dirStack.lastOrNull()?.let { loadDirectory(it) }
+        state.update { it.copy(filterQuery = query) }
+        applyFilters()
     }
 
-    fun clearFilter() {
-        state.value = state.value.copy(filterQuery = "")
-        dirStack.lastOrNull()?.let { loadDirectory(it) }
+    private fun pushDir(path: String, name: String) {
+        dirStack.addLast(path to name)
+        currentPath.value = path
+        updateBreadcrumbs()
     }
 
-    private fun loadDirectory(uri: Uri) {
-        state.value = state.value.copy(isLoading = true, error = null)
-        val filterQuery = state.value.filterQuery
-        val sortOrder = state.value.sortOrder
-        val isFolderTraversal = state.value.isFolderTraversal
+    private fun updateBreadcrumbs() {
+        state.update {
+            it.copy(breadcrumbs = dirStack.map { (_, name) -> name }.toImmutableList())
+        }
+    }
 
-        viewModelScope.launch(Dispatchers.IO) {
-            try {
-                val treeRoot = rootTreeUri ?: uri
-                val entries = appContext.contentResolver
-                    .queryDirectoryEntries(treeRoot, uri.resolveDocId(appContext))
+    private fun applyFilters() {
+        val children = currentChildren.value
+        val query = state.value.filterQuery
+        val order = state.value.sortOrder
 
-                data class RawFile(val uri: Uri, val name: String, val size: Long, val ext: String)
+        val dirs = children
+            .filter { it.isDirectory }
+            .sortedBy { it.filename.lowercase() }
+            .map { FileItem(name = it.filename, uri = it.uri, isDirectory = true, size = 0L) }
+            .toImmutableList()
 
-                val directories = mutableListOf<FileItem>()
-                val rawFiles = mutableListOf<RawFile>()
-
-                for (entry in entries) {
-                    val ext = entry.name.substringAfterLast('.', "").lowercase()
-                    val prefix = entry.name.substringBefore('.').lowercase()
-                    when {
-                        entry.isDirectory ->
-                            directories.add(
-                                FileItem(
-                                    name = entry.name,
-                                    uri = entry.childUri,
-                                    isDirectory = true,
-                                    size = 0L
-                                )
-                            )
-
-                        ext in Constants.UNSUPPORTED_EXTENSIONS ||
-                            prefix in Constants.UNSUPPORTED_EXTENSIONS -> Unit
-
-                        ext !in Constants.SKIP_EXTENSIONS &&
-                            prefix !in Constants.SKIP_EXTENSIONS ->
-                            rawFiles.add(
-                                RawFile(
-                                    uri = entry.childUri,
-                                    name = entry.name,
-                                    size = entry.size,
-                                    ext = ext.ifEmpty { prefix }
-                                )
-                            )
-                    }
-                }
-
-                // Single batch DB query instead of N individual queries
-                val cachedMap = db.getByFileNames(rawFiles.map { it.name })
-                    .associateBy { it.fileName }
-
-                val modules = rawFiles.map { raw ->
-                    val cached = cachedMap[raw.name]
-                    ModuleFile(
-                        uri = raw.uri,
-                        name = raw.name,
-                        sizeBytes = raw.size,
-                        extension = raw.ext,
-                        resolvedName = cached?.name ?: "",
-                        resolvedType = cached?.type ?: "",
-                    )
-                }
-
-                val subdirModules = if (isFolderTraversal) {
-                    if (uri != traversalCacheUri) {
-                        traversalCacheUri = uri
-                        traversalCache = collectSubdirFiles(treeRoot, directories)
-                    }
-                    traversalCache
-                } else {
-                    emptyList()
-                }
-
-                val filtered = (modules + subdirModules).filter { file ->
-                    val name = file.resolvedName.ifBlank { file.name }
-                    filterQuery.isBlank() || name.contains(filterQuery, ignoreCase = true)
-                }.sortedWith(
-                    when (sortOrder) {
-                        BrowserSortOrder.NAME -> compareBy {
-                            it.resolvedName.ifBlank { it.name }.lowercase()
-                        }
-
-                        BrowserSortOrder.TYPE -> compareBy {
-                            it.resolvedType.ifBlank { it.extension }.lowercase()
-                        }
-
-                        BrowserSortOrder.SIZE -> compareBy { it.sizeBytes }
-                    }
-                )
-
-                state.value = state.value.copy(
-                    currentPath = uri.lastPathSegment ?: "",
-                    files = filtered.toImmutableList(),
-                    directories = directories.sortedBy { it.name.lowercase() }.toImmutableList(),
-                    breadcrumbs = dirStack.map {
-                        it.lastPathSegment?.substringAfterLast('/')?.substringAfterLast(':')
-                            ?: "Root"
-                    }.toImmutableList(),
-                    isLoading = false,
-                    hasStorageAccess = true,
-                )
-            } catch (e: Exception) {
-                state.value = state.value.copy(isLoading = false, error = e.message)
+        val files = children
+            .filter { !it.isDirectory && it.isValidModule }
+            .filter { entity ->
+                query.isBlank() ||
+                    entity.moduleName.contains(query, ignoreCase = true) ||
+                    entity.filename.contains(query, ignoreCase = true)
             }
-        }
-    }
+            .sortedWith(
+                when (order) {
+                    BrowserSortOrder.NAME -> compareBy {
+                        it.moduleName.ifBlank { it.filename }.lowercase()
+                    }
 
-    private suspend fun collectSubdirFiles(treeRoot: Uri, dirs: List<FileItem>): List<ModuleFile> {
-        val result = mutableListOf<ModuleFile>()
-        for (dir in dirs) {
-            result += collectFilesFromDir(treeRoot, dir.uri)
-        }
-        return result
-    }
+                    BrowserSortOrder.TYPE -> compareBy { it.moduleType.lowercase() }
 
-    private suspend fun collectFilesFromDir(treeRoot: Uri, uri: Uri): List<ModuleFile> {
-        val entries = appContext.contentResolver
-            .queryDirectoryEntries(treeRoot, uri.resolveDocId(appContext))
-
-        data class RawFile(val uri: Uri, val name: String, val size: Long, val ext: String)
-
-        val subdirUris = mutableListOf<Uri>()
-        val rawFiles = mutableListOf<RawFile>()
-
-        for (entry in entries) {
-            val ext = entry.name.substringAfterLast('.', "").lowercase()
-            val prefix = entry.name.substringBefore('.').lowercase()
-            when {
-                entry.isDirectory -> subdirUris.add(entry.childUri)
-
-                ext in Constants.UNSUPPORTED_EXTENSIONS ||
-                    prefix in Constants.UNSUPPORTED_EXTENSIONS -> Unit
-
-                ext !in Constants.SKIP_EXTENSIONS &&
-                    prefix !in Constants.SKIP_EXTENSIONS ->
-                    rawFiles.add(
-                        RawFile(
-                            entry.childUri,
-                            entry.name,
-                            entry.size,
-                            ext.ifEmpty {
-                                prefix
-                            }
-                        )
-                    )
-            }
-        }
-
-        val cachedMap = db.getByFileNames(rawFiles.map { it.name }).associateBy { it.fileName }
-        val modules = rawFiles.map { raw ->
-            val cached = cachedMap[raw.name]
-            ModuleFile(
-                uri = raw.uri,
-                name = raw.name,
-                sizeBytes = raw.size,
-                extension = raw.ext,
-                resolvedName = cached?.name ?: "",
-                resolvedType = cached?.type ?: "",
+                    BrowserSortOrder.SIZE -> compareBy { it.fileSize }
+                }
             )
-        }
+            .toImmutableList()
 
-        return modules + subdirUris.flatMap { collectFilesFromDir(treeRoot, it) }
+        state.update { it.copy(directories = dirs, files = files) }
     }
 
-    private suspend fun indexDirectory(uri: Uri) {
-        val treeRoot = rootTreeUri ?: uri
-        val entries = appContext.contentResolver
-            .queryDirectoryEntries(treeRoot, uri.resolveDocId(appContext))
-
-        for (entry in entries) {
-            if (entry.isDirectory) continue
-            val ext = entry.name.substringAfterLast('.', "").lowercase()
-            val prefix = entry.name.substringBefore('.').lowercase()
-            when {
-                ext in Constants.UNSUPPORTED_EXTENSIONS ||
-                    prefix in Constants.UNSUPPORTED_EXTENSIONS -> Unit
-
-                ext !in Constants.SKIP_EXTENSIONS &&
-                    prefix !in Constants.SKIP_EXTENSIONS -> {
-                    if (!db.exists(entry.name, entry.size)) {
-                        db.fetchAndCache(
-                            entry.childUri,
-                            entry.name,
-                            entry.size,
-                            ext.ifEmpty {
-                                prefix
-                            }
-                        )
-                    }
-                }
-            }
-        }
-    }
+    private fun displayName(path: String): String =
+        path.substringAfterLast('/').substringAfterLast(':').ifBlank { "Root" }
 }

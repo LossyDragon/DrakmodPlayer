@@ -15,7 +15,7 @@ import androidx.compose.ui.unit.*
 import androidx.core.net.toUri
 import androidx.media3.common.Player
 import com.lossydragon.modplayer.R
-import com.lossydragon.modplayer.model.ModuleFile
+import com.lossydragon.modplayer.db.entity.ModuleEntity
 import com.lossydragon.modplayer.player.PlaybackStatus
 import com.lossydragon.modplayer.player.PlayerUiState
 import com.lossydragon.modplayer.ui.theme.AppTheme
@@ -142,11 +142,11 @@ private fun PreviewPlaying() {
         MiniPlayerBar(
             state = PlayerUiState(
                 status = PlaybackStatus.PLAYING,
-                currentModule = ModuleFile(
-                    uri = "content://preview/1".toUri(),
-                    name = "a_journey_into_sound.far",
-                    sizeBytes = 123456L,
-                    extension = "far",
+                currentModule = ModuleEntity(
+                    filePath = "content://preview/1",
+                    filename = "a_journey_into_sound.far",
+                    fileExtension = "far",
+                    fileSize = 123456L,
                 ),
                 moduleName = "A Journey Into Sound",
                 moduleType = "FAR",
@@ -168,11 +168,11 @@ private fun PreviewPaused() {
         MiniPlayerBar(
             state = PlayerUiState(
                 status = PlaybackStatus.PAUSED,
-                currentModule = ModuleFile(
-                    uri = "content://preview/1".toUri(),
-                    name = "aegis_-_beneath_the_fallen_stars.it",
-                    sizeBytes = 1820792L,
-                    extension = "it",
+                currentModule = ModuleEntity(
+                    filePath = "content://preview/1",
+                    filename = "aegis_-_beneath_the_fallen_stars.it",
+                    fileExtension = "it",
+                    fileSize = 1820792L,
                 ),
                 moduleName = "Beneath the Fallen Stars",
                 moduleType = "IT",

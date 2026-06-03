@@ -18,11 +18,10 @@ import androidx.compose.ui.text.font.*
 import androidx.compose.ui.text.style.*
 import androidx.compose.ui.tooling.preview.*
 import androidx.compose.ui.unit.*
-import androidx.core.net.toUri
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.media3.common.Player
 import com.lossydragon.modplayer.R
-import com.lossydragon.modplayer.model.ModuleFile
+import com.lossydragon.modplayer.db.entity.ModuleEntity
 import com.lossydragon.modplayer.player.PlaybackStatus
 import com.lossydragon.modplayer.player.PlayerUiState
 import com.lossydragon.modplayer.player.PlayerViewModel
@@ -468,13 +467,13 @@ private fun PlayerAlertDialog(
 
 private val previewQueue = Array(10) {
     val number = it + 1
-    ModuleFile(
-        uri = "content://preview/$number".toUri(),
-        name = "a_journey_into_sound.far",
-        sizeBytes = 123456L,
-        extension = "far",
-        resolvedName = "A Journey Into Sound",
-        resolvedType = "Farandole Composer",
+    ModuleEntity(
+        filePath = "content://preview/$number",
+        filename = "a_journey_into_sound.far",
+        fileExtension = "far",
+        fileSize = 123456L,
+        moduleName = "A Journey Into Sound",
+        moduleType = "Farandole Composer",
     )
 }.toPersistentList()
 
