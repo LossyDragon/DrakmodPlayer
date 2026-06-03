@@ -3,14 +3,13 @@ package com.lossydragon.modplayer.ui.screens.downloads
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.BackHandler
 import androidx.activity.compose.LocalActivity
-import androidx.compose.material3.SnackbarHostState
-import androidx.compose.runtime.Composable
-import androidx.compose.runtime.remember
-import androidx.compose.runtime.rememberCoroutineScope
-import androidx.compose.ui.Modifier
-import androidx.compose.ui.platform.LocalContext
+import androidx.compose.material3.*
+import androidx.compose.runtime.*
+import androidx.compose.ui.*
+import androidx.compose.ui.platform.*
 import androidx.core.net.toUri
 import androidx.lifecycle.viewmodel.navigation3.rememberViewModelStoreNavEntryDecorator
+import androidx.navigation3.runtime.NavKey
 import androidx.navigation3.runtime.entryProvider
 import androidx.navigation3.runtime.rememberNavBackStack
 import androidx.navigation3.runtime.rememberSaveableStateHolderNavEntryDecorator
@@ -18,15 +17,26 @@ import androidx.navigation3.ui.NavDisplay
 import com.lossydragon.modplayer.BuildConfig
 import com.lossydragon.modplayer.model.ModuleFile
 import com.lossydragon.modplayer.player.PlayerViewModel
-import com.lossydragon.modplayer.ui.NavKeyDownload
 import com.lossydragon.modplayer.ui.screens.downloads.screen.DownloadHistoryScreen
 import com.lossydragon.modplayer.ui.screens.downloads.screen.DownloadModuleScreen
 import com.lossydragon.modplayer.ui.screens.downloads.screen.DownloadResultScreen
+import com.lossydragon.modplayer.ui.screens.downloads.viewmodel.SearchType
 import com.lossydragon.modplayer.util.findDownloadedModule
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
+import kotlinx.serialization.Serializable
 import org.koin.androidx.compose.koinViewModel
+
+private sealed interface NavKeyDownload : NavKey {
+    @Serializable data object Search : NavKeyDownload
+
+    @Serializable data object History : NavKeyDownload
+
+    @Serializable data class SearchResult(val query: String, val type: SearchType) : NavKeyDownload
+
+    @Serializable data class Module(val moduleId: Int) : NavKeyDownload
+}
 
 @Composable
 fun NavDownloads(

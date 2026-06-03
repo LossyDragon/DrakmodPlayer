@@ -20,7 +20,7 @@ import com.lossydragon.modplayer.core.Constants
 import com.lossydragon.modplayer.ui.components.BackButton
 import com.lossydragon.modplayer.ui.screens.downloads.viewmodel.SearchType
 import com.lossydragon.modplayer.ui.theme.AppTheme
-import com.lossydragon.modplayer.ui.util.annotatedLinkString
+import com.lossydragon.modplayer.util.annotatedLinkString
 import kotlin.time.Duration.Companion.milliseconds
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch

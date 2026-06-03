@@ -1,4 +1,4 @@
-package com.lossydragon.modplayer.ui.util
+package com.lossydragon.modplayer.util
 
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.runtime.Composable

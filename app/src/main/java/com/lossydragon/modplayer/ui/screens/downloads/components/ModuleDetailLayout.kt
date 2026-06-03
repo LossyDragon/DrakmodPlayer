@@ -23,7 +23,7 @@ import com.lossydragon.modplayer.model.ModuleResult
 import com.lossydragon.modplayer.model.Sponsor
 import com.lossydragon.modplayer.model.SponsorDetails
 import com.lossydragon.modplayer.ui.theme.AppTheme
-import com.lossydragon.modplayer.ui.util.annotatedLinkString
+import com.lossydragon.modplayer.util.annotatedLinkString
 import com.lossydragon.modplayer.util.formatSize
 import kotlinx.coroutines.launch
 

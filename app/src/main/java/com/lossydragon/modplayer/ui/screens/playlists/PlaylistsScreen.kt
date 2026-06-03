@@ -21,6 +21,7 @@ import androidx.compose.ui.unit.*
 import androidx.core.net.toUri
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.lifecycle.viewmodel.navigation3.rememberViewModelStoreNavEntryDecorator
+import androidx.navigation3.runtime.NavKey
 import androidx.navigation3.runtime.entryProvider
 import androidx.navigation3.runtime.rememberNavBackStack
 import androidx.navigation3.runtime.rememberSaveableStateHolderNavEntryDecorator
@@ -31,7 +32,6 @@ import com.lossydragon.modplayer.model.ModuleFile
 import com.lossydragon.modplayer.player.PlaybackStatus
 import com.lossydragon.modplayer.player.PlayerUiState
 import com.lossydragon.modplayer.player.PlayerViewModel
-import com.lossydragon.modplayer.ui.NavKeyPlaylists
 import com.lossydragon.modplayer.ui.components.BackButton
 import com.lossydragon.modplayer.ui.components.MessageBox
 import com.lossydragon.modplayer.ui.components.ProgressbarIndicator
@@ -45,9 +45,20 @@ import com.lossydragon.modplayer.ui.screens.playlists.components.PlaylistsFabMen
 import com.lossydragon.modplayer.ui.theme.AppTheme
 import kotlinx.collections.immutable.persistentListOf
 import kotlinx.coroutines.launch
+import kotlinx.serialization.Serializable
 import org.koin.compose.viewmodel.koinViewModel
 import sh.calvin.reorderable.ReorderableItem
 import sh.calvin.reorderable.rememberReorderableLazyListState
+
+private sealed interface NavKeyPlaylists : NavKey {
+    @Serializable data object List : NavKeyPlaylists
+
+    @Serializable data class Entries(
+        val playlistId: Long,
+        val playlistName: String,
+        val playlistComment: String
+    ) : NavKeyPlaylists
+}
 
 @Composable
 fun NavPlaylists(
@@ -331,7 +342,7 @@ private fun PlaylistListScreen(
                             .padding(padding)
                             .fillMaxSize(),
                         contentAlignment = Alignment.Center,
-                        content = { ProgressbarIndicator(isLoading = true) }
+                        content = { ProgressbarIndicator() }
                     )
                 } else {
                     if (!state.error.isNullOrBlank()) {
@@ -463,7 +474,7 @@ private fun PlaylistEntriesScreen(
                 state.isLoading -> Box(
                     modifier = Modifier.fillMaxSize(),
                     contentAlignment = Alignment.Center,
-                    content = { ProgressbarIndicator(isLoading = true) }
+                    content = { ProgressbarIndicator() }
                 )
 
                 state.entries.isEmpty() -> MessageBox(

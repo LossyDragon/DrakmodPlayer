@@ -6,14 +6,23 @@ import androidx.compose.runtime.*
 import androidx.compose.ui.*
 import androidx.compose.ui.platform.*
 import androidx.lifecycle.viewmodel.navigation3.rememberViewModelStoreNavEntryDecorator
+import androidx.navigation3.runtime.NavKey
 import androidx.navigation3.runtime.entryProvider
 import androidx.navigation3.runtime.rememberNavBackStack
 import androidx.navigation3.runtime.rememberSaveableStateHolderNavEntryDecorator
 import androidx.navigation3.ui.NavDisplay
-import com.lossydragon.modplayer.ui.NavKeyPreferences
 import com.lossydragon.modplayer.util.shareLink
 import kotlinx.collections.immutable.toPersistentList
+import kotlinx.serialization.Serializable
 import org.helllabs.libxmp.Xmp
+
+private sealed interface NavKeyPreferences : NavKey {
+    @Serializable data object Preferences : NavKeyPreferences
+
+    @Serializable data object About : NavKeyPreferences
+
+    @Serializable data object Formats : NavKeyPreferences
+}
 
 @Composable
 fun NavPreferences(

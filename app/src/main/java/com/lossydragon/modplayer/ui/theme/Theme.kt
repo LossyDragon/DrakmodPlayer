@@ -31,9 +31,7 @@ fun AppTheme(
     }
 
     val amoledValue by prefs.getAppThemeAmoledFlow().collectAsStateWithLifecycle(false)
-    val amoled by remember(amoledValue) {
-        mutableStateOf(amoledValue)
-    }
+    val amoled by remember(amoledValue) { mutableStateOf(amoledValue) }
 
     val prefColor by prefs.getThemeColorFlow().collectAsStateWithLifecycle(seed.toArgb())
     val color = remember(prefColor) { Color(prefColor) }
