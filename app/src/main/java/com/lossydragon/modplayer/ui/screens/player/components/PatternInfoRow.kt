@@ -1,6 +1,7 @@
 package com.lossydragon.modplayer.ui.screens.player.components
 
 import androidx.compose.foundation.layout.*
+import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
@@ -21,12 +22,14 @@ internal fun PatternInfoRow(
         modifier = modifier
             .fillMaxWidth()
             .padding(all = 6.dp),
-        horizontalArrangement = Arrangement.SpaceBetween,
+        horizontalArrangement = Arrangement.SpaceAround,
         verticalAlignment = Alignment.CenterVertically,
         content = {
+            val numRows = frame.numRows.toString()
+            val row = "${frame.row.toString().padStart(numRows.length)}/$numRows"
             InfoChip(label = "Pos", value = "${frame.position}")
             InfoChip(label = "Pat", value = "${frame.pattern}")
-            InfoChip(label = "Row", value = "${frame.row}/${frame.numRows}")
+            InfoChip(label = "Row", value = row) // Pad fix
             InfoChip(label = "Spd", value = "${frame.speed}")
             InfoChip(label = "BPM", value = "${frame.bpm}")
         }

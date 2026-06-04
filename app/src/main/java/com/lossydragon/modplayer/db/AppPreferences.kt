@@ -73,6 +73,10 @@ class AppPreferences(context: Context) {
     suspend fun getLastDirectoryUri() = get(lastDirectoryUri, "").ifBlank { null }
     suspend fun setLastDirectoryUri(v: String) = set(lastDirectoryUri, v)
 
+    private val globalShuffle = booleanPreferencesKey("global_shuffle")
+    fun getGlobalShuffleFlow() = flow(globalShuffle, false)
+    suspend fun setGlobalShuffle(v: Boolean) = set(globalShuffle, v)
+
     /* Player */
     private val sampleRate = intPreferencesKey("sample_rate")
     fun getSampleRateFlow() = flow(sampleRate, Xmp.DEFAULT_SAMPLE_RATE)
@@ -113,6 +117,10 @@ class AppPreferences(context: Context) {
     private val playerFormat = intPreferencesKey("player_format")
     fun getPlayerFormatFlow(): Flow<Int> = flow(playerFormat, 0)
     suspend fun setPlayerFormat(v: Int) = set(playerFormat, v)
+
+    private val playerView = intPreferencesKey("player_view")
+    fun getPlayerViewFlow(): Flow<Int> = flow(playerView, 0)
+    suspend fun setPlayerView(v: Int) = set(playerView, v)
 
     /* Oboe */
     private val oboePerfMode = intPreferencesKey("oboe_perf_mode")

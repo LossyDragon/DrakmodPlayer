@@ -18,9 +18,12 @@ import kotlinx.collections.immutable.toImmutableList
 import kotlinx.collections.immutable.toPersistentList
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
+import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.launchIn
 import kotlinx.coroutines.flow.onEach
 import kotlinx.coroutines.flow.update
+import kotlinx.coroutines.launch
+import kotlinx.coroutines.runBlocking
 import org.helllabs.libxmp.Xmp
 import timber.log.Timber
 
@@ -35,7 +38,7 @@ data class PlayerUiState(
     val currentSequence: Int = 0,
     val durationMs: Long = 0L,
     val errorMessage: String? = null,
-    val frame: FrameSnapshot? = null,
+    val frame: FrameSnapshot = FrameSnapshot(),
     val isShuffle: Boolean = false,
     val moduleName: String = "",
     val moduleType: String = "",
@@ -52,7 +55,8 @@ data class PlayerUiState(
     val showRowNumbers: Boolean = false,
     val songInstruments: ImmutableList<String> = persistentListOf(),
     val songMessage: String = "",
-    val status: PlaybackStatus = PlaybackStatus.IDLE
+    val status: PlaybackStatus = PlaybackStatus.IDLE,
+    val playerView: Int = 0
 )
 
 /** Bridges [Player] state to the UI via [PlayerUiState]. */
@@ -108,7 +112,7 @@ class PlayerViewModel(
                     queue = queue.toImmutableList(),
                     currentModule = if (empty) null else it.currentModule,
                     status = if (empty) PlaybackStatus.IDLE else it.status,
-                    frame = if (empty) null else it.frame,
+                    frame = if (empty) FrameSnapshot() else it.frame,
                 )
             }
         }.launchIn(viewModelScope)
@@ -130,6 +134,16 @@ class PlayerViewModel(
             Timber.d("moduleLoadedFlow fired")
             syncModuleInfo()
         }.launchIn(viewModelScope)
+
+        prefs.getPlayerViewFlow().onEach { view ->
+            state.update { it.copy(playerView = view) }
+        }.launchIn(viewModelScope)
+
+        runBlocking {
+            // Meh...
+            val view = prefs.getPlayerViewFlow().first()
+            state.update { it.copy(playerView = view) }
+        }
     }
 
     /** Returns a formatted string of current Oboe audio stream statistics. */
@@ -237,6 +251,11 @@ class PlayerViewModel(
         val songMessageText = String(Xmp.getComment(), StandardCharsets.UTF_8)
         state.update { it.copy(songMessage = songMessageText) }
         return songMessageText.isNotBlank()
+    }
+
+    fun onPlayerView() {
+        val next = (state.value.playerView + 1) % 2
+        viewModelScope.launch { prefs.setPlayerView(next) }
     }
 
     fun closeModComment() = state.update { it.copy(songMessage = "") }

@@ -1,4 +1,4 @@
-package com.lossydragon.modplayer.ui.screens.player.components
+package com.lossydragon.modplayer.ui.screens.player.components.views
 
 import androidx.compose.animation.core.Animatable
 import androidx.compose.animation.core.exponentialDecay

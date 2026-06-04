@@ -30,15 +30,15 @@ import com.lossydragon.modplayer.player.model.FrameSnapshot
 import com.lossydragon.modplayer.player.model.PatternData
 import com.lossydragon.modplayer.player.model.emptyPatternData
 import com.lossydragon.modplayer.ui.components.BackButton
-import com.lossydragon.modplayer.ui.screens.player.components.ChannelView
 import com.lossydragon.modplayer.ui.screens.player.components.ChipList
 import com.lossydragon.modplayer.ui.screens.player.components.DurationsSheet
 import com.lossydragon.modplayer.ui.screens.player.components.PatternInfoRow
-import com.lossydragon.modplayer.ui.screens.player.components.PatternView
 import com.lossydragon.modplayer.ui.screens.player.components.PlaybackProgress
 import com.lossydragon.modplayer.ui.screens.player.components.PlayerBottomAppBar
 import com.lossydragon.modplayer.ui.screens.player.components.QueueSheet
 import com.lossydragon.modplayer.ui.screens.player.components.TransportRow
+import com.lossydragon.modplayer.ui.screens.player.components.views.ChannelView
+import com.lossydragon.modplayer.ui.screens.player.components.views.PatternView
 import com.lossydragon.modplayer.ui.theme.AppTheme
 import kotlin.time.Duration.Companion.seconds
 import kotlinx.collections.immutable.toImmutableList
@@ -51,21 +51,22 @@ import org.koin.compose.viewmodel.koinViewModel
 // TODO localize hard coded text
 
 private sealed class PlayerAction {
-    data class OnQueueClick(val int: Int) : PlayerAction()
     data class OnDurationClick(val int: Int) : PlayerAction()
-    data class OnQueueSheet(val open: Boolean) : PlayerAction()
     data class OnDurationSheet(val open: Boolean) : PlayerAction()
+    data class OnQueueClick(val int: Int) : PlayerAction()
+    data class OnQueueSheet(val open: Boolean) : PlayerAction()
     data class OnSeek(val seek: Long) : PlayerAction()
     data object OnAllSequences : PlayerAction()
+    data object OnAudioInfo : PlayerAction()
     data object OnBack : PlayerAction()
     data object OnInstruments : PlayerAction()
     data object OnLoop : PlayerAction()
     data object OnModInfo : PlayerAction()
     data object OnNext : PlayerAction()
     data object OnPlayPause : PlayerAction()
+    data object OnPlayerView : PlayerAction()
     data object OnPrevious : PlayerAction()
     data object OnShuffle : PlayerAction()
-    data object OnAudioInfo : PlayerAction()
     data object OnSongMessage : PlayerAction()
     data object OnStop : PlayerAction()
 }
@@ -100,7 +101,7 @@ fun PlayerScreen(
     var showInstruments by remember { mutableStateOf(false) }
     var showModInfo by remember { mutableStateOf(false) }
 
-    val patternIndex = state.frame?.pattern ?: -1
+    val patternIndex = state.frame.pattern
     val patternData = remember(patternIndex, state.numChannels) {
         if (patternIndex < 0 || state.numChannels == 0) {
             emptyPatternData()
@@ -127,38 +128,16 @@ fun PlayerScreen(
             icon = Icons.Default.MusicNote,
             title = "Mod Info",
             content = {
-                Column {
-                    Text(
-                        text = stringResource(
-                            R.string.player_num_of_channels,
-                            state.numChannels
-                        )
+                Text(
+                    text = stringResource(
+                        R.string.player_module_info,
+                        state.numChannels,
+                        state.numInstruments,
+                        state.numPatterns,
+                        state.numSamples,
+                        state.numSequences,
                     )
-                    Text(
-                        text = stringResource(
-                            R.string.player_num_of_instruments,
-                            state.numInstruments
-                        )
-                    )
-                    Text(
-                        text = stringResource(
-                            R.string.player_num_of_patterns,
-                            state.numPatterns
-                        )
-                    )
-                    Text(
-                        text = stringResource(
-                            R.string.player_num_of_samples,
-                            state.numSamples
-                        )
-                    )
-                    Text(
-                        text = stringResource(
-                            R.string.player_num_of_sequences,
-                            state.numSequences
-                        )
-                    )
-                }
+                )
             },
         )
     }
@@ -260,6 +239,8 @@ fun PlayerScreen(
                     }
                 }
 
+                PlayerAction.OnPlayerView -> viewModel.onPlayerView()
+
                 is PlayerAction.OnSeek -> viewModel.seek(action.seek)
 
                 is PlayerAction.OnQueueClick -> {
@@ -293,8 +274,6 @@ private fun PlayerScreenContent(
     modifier: Modifier = Modifier,
     onAction: (PlayerAction) -> Unit
 ) {
-    var activePlayerView by remember { mutableIntStateOf(0) }
-
     if (state.currentModule == null) {
         Box(
             modifier = Modifier
@@ -339,10 +318,7 @@ private fun PlayerScreenContent(
                 navigationIcon = { BackButton(onBack = { onAction(PlayerAction.OnBack) }) },
                 actions = {
                     IconButton(
-                        onClick = {
-                            activePlayerView++
-                            activePlayerView %= 2
-                        },
+                        onClick = { onAction(PlayerAction.OnPlayerView) },
                         content = {
                             Icon(
                                 imageVector = Icons.Default.ViewCarousel,
@@ -358,7 +334,7 @@ private fun PlayerScreenContent(
                 contentPadding = PaddingValues(bottom = 8.dp),
                 content = {
                     HorizontalDivider(modifier = Modifier.fillMaxWidth())
-                    state.frame?.let { PatternInfoRow(frame = it) }
+                    PatternInfoRow(frame = state.frame)
                     PlaybackProgress(state = state, onSeek = { onAction(PlayerAction.OnSeek(it)) })
                     Spacer(modifier = Modifier.height(4.dp))
                     ChipList(
@@ -403,21 +379,19 @@ private fun PlayerScreenContent(
                     .fillMaxSize()
                     .padding(contentPadding)
             ) {
-                state.frame?.let { frame ->
-                    when (activePlayerView) {
-                        0 -> PatternView(
-                            modifier = Modifier.fillMaxSize(),
-                            pattern = patternData,
-                            currentRow = frame.row,
-                            showRowNumbers = state.showRowNumbers,
-                        )
+                when (state.playerView) {
+                    0 -> PatternView(
+                        modifier = Modifier.fillMaxSize(),
+                        pattern = patternData,
+                        currentRow = state.frame.row,
+                        showRowNumbers = state.showRowNumbers,
+                    )
 
-                        1 -> ChannelView(
-                            modifier = Modifier.fillMaxSize(),
-                            frame = frame,
-                            instrumentNames = state.songInstruments,
-                        )
-                    }
+                    1 -> ChannelView(
+                        modifier = Modifier.fillMaxSize(),
+                        frame = state.frame,
+                        instrumentNames = state.songInstruments,
+                    )
                 }
             }
 
@@ -464,6 +438,10 @@ private fun PlayerAlertDialog(
         }
     )
 }
+
+/***********
+ * Preview *
+ ***********/
 
 private val previewQueue = Array(10) {
     val number = it + 1

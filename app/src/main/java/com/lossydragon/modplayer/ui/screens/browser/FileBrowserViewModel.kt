@@ -19,11 +19,13 @@ import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.filterNotNull
+import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.flatMapLatest
 import kotlinx.coroutines.flow.launchIn
 import kotlinx.coroutines.flow.onEach
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.runBlocking
 
 /** UI state and domain models for the SAF file browser. */
 
@@ -96,6 +98,16 @@ class FileBrowserViewModel(
                 applyFilters()
             }
             .launchIn(viewModelScope)
+
+        prefs.getGlobalShuffleFlow().onEach { isShuffle ->
+            state.update { it.copy(isShuffle = isShuffle) }
+        }.launchIn(viewModelScope)
+
+        runBlocking {
+            // Meh...
+            val isShuffle = prefs.getGlobalShuffleFlow().first()
+            state.update { it.copy(isShuffle = isShuffle) }
+        }
     }
 
     fun onRootFolderPicked(uri: Uri) {
@@ -146,8 +158,9 @@ class FileBrowserViewModel(
         updateBreadcrumbs()
     }
 
-    fun setShuffle(value: Boolean) {
-        state.update { it.copy(isShuffle = value) }
+    fun setShuffle() {
+        val value = !state.value.isShuffle
+        viewModelScope.launch { prefs.setGlobalShuffle(value) }
     }
 
     fun setRepeatMode(mode: Int) {

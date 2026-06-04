@@ -1,4 +1,4 @@
-package com.lossydragon.modplayer.ui.screens.player.components
+package com.lossydragon.modplayer.ui.screens.player.components.views
 
 import androidx.compose.foundation.*
 import androidx.compose.foundation.gestures.*
@@ -54,8 +54,8 @@ fun rememberDefaultPatternColors(): PatternColors {
             effectType = Color(0xFFE08060), // coral
             effectParam = Color(0xFFC0A0E0), // lavender
             empty = Color(0xFF303848),
-            beat = Color(0xFF1C2030),
-            currentRow = Color(0xFF4060A0).copy(alpha = 0.35f),
+            beat = Color(0xFF1C2030).copy(alpha = 0.40f),
+            currentRow = Color(0xFF4060A0),
             background = Color.Black.lighten(1.0f),
             headerBackground = Color(0xFF20283A),
             headerText = Color(0xFFA0C0E0),
@@ -231,9 +231,30 @@ fun PatternView(
             size = Size(rowNumberWidth, size.height - gridTop),
         )
 
-        val rowTexts = if (showRowNumbers) renderState.rowTextsDec else renderState.rowTextsHex
+        // Beat tints
+        clipRect(left = rowNumberWidth, top = gridTop, right = size.width, bottom = size.height) {
+            for (row in firstVisibleRow..lastVisibleRow) {
+                if (row % 4 == 0) {
+                    drawRect(
+                        color = colors.beat,
+                        topLeft = Offset(rowNumberWidth, row * rowHeight + scrollY),
+                        size = Size(size.width - rowNumberWidth, rowHeight),
+                    )
+                }
+            }
+        }
+
+        // Current row tint
+        clipRect(top = gridTop) {
+            drawRect(
+                color = colors.currentRow,
+                topLeft = Offset(0f, (currentRow * rowHeight + scrollY)),
+                size = Size(size.width, rowHeight),
+            )
+        }
 
         // Row numbers
+        val rowTexts = if (showRowNumbers) renderState.rowTextsDec else renderState.rowTextsHex
         clipRect(
             left = 0f,
             top = gridTop,
@@ -250,7 +271,7 @@ fun PatternView(
                 val rowTextY = rowY + (rowHeight - rowTextLayout.size.height) / 2
                 drawText(
                     rowTextLayout,
-                    color = colors.rowNumber,
+                    color = if (row == currentRow) Color.White else colors.rowNumber,
                     topLeft = Offset(rowTextX, rowTextY)
                 )
             }
@@ -265,23 +286,6 @@ fun PatternView(
         ) {
             for (row in firstVisibleRow..lastVisibleRow) {
                 val rowY = row * rowHeight + scrollY
-
-                // Beat tint
-                if (row % 4 == 0) {
-                    drawRect(
-                        color = colors.beat,
-                        topLeft = Offset(rowNumberWidth, rowY),
-                        size = Size(size.width - rowNumberWidth, rowHeight),
-                    )
-                }
-
-                if (row == currentRow) {
-                    drawRect(
-                        color = colors.currentRow,
-                        topLeft = Offset(rowNumberWidth, rowY),
-                        size = Size(size.width - rowNumberWidth, rowHeight),
-                    )
-                }
 
                 val rowCells = pattern.cells[row]
                 for (ch in 0 until pattern.numChannels) {
@@ -397,11 +401,13 @@ private fun PreviewPatternView() {
     )
 
     AppTheme {
-        PatternView(
-            pattern = sample,
-            currentRow = 12,
-            modifier = Modifier.size(400.dp, 600.dp),
-            showRowNumbers = false,
-        )
+        Surface(modifier = Modifier.fillMaxSize()) {
+            PatternView(
+                pattern = sample,
+                currentRow = 12,
+                modifier = Modifier.size(400.dp, 600.dp),
+                showRowNumbers = false,
+            )
+        }
     }
 }

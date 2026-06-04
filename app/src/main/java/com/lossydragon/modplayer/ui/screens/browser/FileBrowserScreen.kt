@@ -1,6 +1,8 @@
 package com.lossydragon.modplayer.ui.screens.browser
 
+import androidx.activity.ComponentActivity
 import androidx.activity.compose.BackHandler
+import androidx.activity.compose.LocalActivity
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.animation.*
@@ -49,7 +51,9 @@ fun FileBrowserScreen(
     val context = LocalContext.current
     val resources = LocalResources.current
     val browserViewModel = koinViewModel<FileBrowserViewModel>()
-    val playerViewModel = koinViewModel<PlayerViewModel>()
+    val playerViewModel = koinViewModel<PlayerViewModel>(
+        viewModelStoreOwner = LocalActivity.current as ComponentActivity
+    )
     val scope = rememberCoroutineScope()
 
     val browserState by browserViewModel.state.collectAsStateWithLifecycle()
@@ -126,7 +130,7 @@ private fun FileBrowserScreenContent(
     playerState: PlayerUiState,
     onRefresh: () -> Unit,
     onFilter: (String) -> Unit,
-    onShuffle: (Boolean) -> Unit,
+    onShuffle: () -> Unit,
     onRepeatMode: (Int) -> Unit,
     onFolderPick: () -> Unit,
     onSortOrder: (BrowserSortOrder) -> Unit,
@@ -220,7 +224,7 @@ private fun FileBrowserScreenContent(
                     },
                     content = {
                         IconButton(
-                            onClick = { onShuffle(!browserState.isShuffle) },
+                            onClick = onShuffle,
                             content = {
                                 val icon = if (browserState.isShuffle) {
                                     Icons.Default.ShuffleOn
