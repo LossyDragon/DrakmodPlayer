@@ -664,7 +664,10 @@ class ModPlayer(
             prefs.clearQueueState()
             return false
         }
+
         if (files.isEmpty()) return false
+
+        if (originalQueue.isNotEmpty()) return false
 
         originalQueue.clear()
         originalQueue.addAll(files)
