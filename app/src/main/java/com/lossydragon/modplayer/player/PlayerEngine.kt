@@ -543,7 +543,7 @@ class PlayerEngine(
                     endedNaturally = true
                     isPlaying.value = false
                     Timber.i("renderLoop: ended naturally, exiting loop")
-                    Xmp.setExpectSilence(true) // We know we're going to xRun in Oboe, so silence is OK.
+                    Xmp.setExpectSilence(true) // We know we're going to xRun in Oboe.
                     break
                 }
             } catch (_: InterruptedException) {

@@ -27,6 +27,7 @@ internal fun ModuleList(
     onSelect: (ModuleEntity) -> Unit
 ) {
     LazyColumn(
+        modifier = Modifier.fillMaxSize(),
         state = listState,
         contentPadding = PaddingValues(
             top = padding.calculateTopPadding(),
@@ -34,7 +35,6 @@ internal fun ModuleList(
             start = padding.calculateStartPadding(LocalLayoutDirection.current),
             end = padding.calculateEndPadding(LocalLayoutDirection.current),
         ),
-        modifier = Modifier.fillMaxSize(),
         content = {
             items(
                 items = state.directories,

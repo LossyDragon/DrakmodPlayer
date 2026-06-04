@@ -48,6 +48,7 @@ data class BrowserUiState(
     val hasStorageAccess: Boolean = false,
     val isLoading: Boolean = true,
     val isShuffle: Boolean = false,
+    val loadingReason: String? = null,
     val repeatMode: Int = Player.REPEAT_MODE_OFF,
     val sortOrder: BrowserSortOrder = BrowserSortOrder.NAME
 )
@@ -70,6 +71,8 @@ class FileBrowserViewModel(
 
     init {
         viewModelScope.launch {
+            state.update { it.copy(isLoading = true, loadingReason = "Loading...") }
+
             val savedUri = prefs.getLastDirectoryUri()
             if (savedUri == null) {
                 state.update { it.copy(isLoading = false, hasStorageAccess = false) }
@@ -96,15 +99,31 @@ class FileBrowserViewModel(
     }
 
     fun onRootFolderPicked(uri: Uri) {
+        state.update {
+            it.copy(
+                isLoading = true,
+                loadingReason = "Indexing...",
+                hasStorageAccess = true
+            )
+        }
+
         appContext.takeReadWritePermission(uri)
         viewModelScope.launch { prefs.setLastDirectoryUri(uri.toString()) }
 
         dirStack.clear()
         pushDir(uri.toString(), displayName(uri.toString()))
-        state.update { it.copy(isLoading = true, hasStorageAccess = true) }
 
         viewModelScope.launch(Dispatchers.IO) {
             db.indexDirectory(uri)
+            state.update { it.copy(isLoading = false) }
+        }
+    }
+
+    fun onRefresh() {
+        val rootUri = dirStack.firstOrNull()?.first?.toUri() ?: return
+        state.update { it.copy(isLoading = true, loadingReason = "Reindexing...") }
+        viewModelScope.launch(Dispatchers.IO) {
+            db.reindexDirectory(rootUri)
             state.update { it.copy(isLoading = false) }
         }
     }
@@ -120,8 +139,6 @@ class FileBrowserViewModel(
         updateBreadcrumbs()
         return true
     }
-
-    fun canNavigateUp(): Boolean = dirStack.size > 1
 
     fun navigateToBreadcrumb(index: Int) {
         while (dirStack.size > index + 1) dirStack.removeLast()

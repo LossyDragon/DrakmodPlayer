@@ -130,6 +130,7 @@ fun MainNavigation(
                 entry<NavKeyMain.Browser> {
                     FileBrowserScreen(
                         modifier = Modifier.consumeWindowInsets(padding),
+                        snackbarHostState = snackBarHostState,
                         onNavigateToPlayer = onNavigateToPlayer,
                         onBack = onBack,
                     )

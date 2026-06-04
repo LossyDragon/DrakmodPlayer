@@ -10,6 +10,7 @@ import androidx.compose.foundation.text.input.*
 import androidx.compose.material.icons.*
 import androidx.compose.material.icons.filled.*
 import androidx.compose.material3.*
+import androidx.compose.material3.pulltorefresh.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.*
 import androidx.compose.ui.graphics.*
@@ -35,17 +36,21 @@ import com.lossydragon.modplayer.ui.screens.player.components.MiniPlayerBar
 import com.lossydragon.modplayer.ui.theme.AppTheme
 import com.lossydragon.modplayer.util.takeReadWritePermission
 import kotlinx.collections.immutable.persistentListOf
+import kotlinx.coroutines.launch
 import org.koin.androidx.compose.koinViewModel
 
 @Composable
 fun FileBrowserScreen(
     onNavigateToPlayer: () -> Unit,
+    snackbarHostState: SnackbarHostState,
     modifier: Modifier = Modifier,
     onBack: () -> Unit
 ) {
     val context = LocalContext.current
+    val resources = LocalResources.current
     val browserViewModel = koinViewModel<FileBrowserViewModel>()
     val playerViewModel = koinViewModel<PlayerViewModel>()
+    val scope = rememberCoroutineScope()
 
     val browserState by browserViewModel.state.collectAsStateWithLifecycle()
     val playerState by playerViewModel.state.collectAsStateWithLifecycle()
@@ -68,18 +73,15 @@ fun FileBrowserScreen(
 
     FileBrowserScreenContent(
         modifier = modifier,
+        snackbarHostState = snackbarHostState,
         browserState = browserState,
         playerState = playerState,
-        filterQuery = browserState.filterQuery,
+        onRefresh = browserViewModel::onRefresh,
         onFilter = browserViewModel::setFilter,
-        onNavigateToPlayer = onNavigateToPlayer,
         onShuffle = browserViewModel::setShuffle,
         onRepeatMode = browserViewModel::setRepeatMode,
-        onBack = onBack,
         onFolderPick = { folderPicker.launch(null) },
         onSortOrder = browserViewModel::setSortOrder,
-        onNavigateUp = browserViewModel::navigateUp,
-        canNavigateUp = browserViewModel::canNavigateUp,
         onBreadcrumb = browserViewModel::navigateToBreadcrumb,
         onPlayAll = {
             if (browserState.files.isNotEmpty()) {
@@ -90,6 +92,11 @@ fun FileBrowserScreen(
                     repeatMode = browserState.repeatMode,
                 )
                 onNavigateToPlayer()
+            } else {
+                scope.launch {
+                    val text = resources.getString(R.string.snack_nothing_to_play)
+                    snackbarHostState.showSnackbar(text)
+                }
             }
         },
         onSelect = { file ->
@@ -113,18 +120,16 @@ fun FileBrowserScreen(
 @OptIn(ExperimentalMaterial3Api::class, ExperimentalMaterial3ExpressiveApi::class)
 @Composable
 private fun FileBrowserScreenContent(
+    modifier: Modifier = Modifier,
+    snackbarHostState: SnackbarHostState,
     browserState: BrowserUiState,
     playerState: PlayerUiState,
-    filterQuery: String,
+    onRefresh: () -> Unit,
     onFilter: (String) -> Unit,
-    onNavigateToPlayer: () -> Unit,
     onShuffle: (Boolean) -> Unit,
     onRepeatMode: (Int) -> Unit,
-    onBack: () -> Unit,
     onFolderPick: () -> Unit,
     onSortOrder: (BrowserSortOrder) -> Unit,
-    onNavigateUp: () -> Unit,
-    canNavigateUp: () -> Boolean,
     onBreadcrumb: (Int) -> Unit,
     onPlayAll: () -> Unit,
     onSelect: (ModuleEntity) -> Unit,
@@ -132,7 +137,6 @@ private fun FileBrowserScreenContent(
     onMiniPlayerTap: () -> Unit,
     onMiniPlayerToggle: () -> Unit,
     onMiniPlayerNext: () -> Unit,
-    modifier: Modifier = Modifier,
     onMiniPlayerPrev: () -> Unit
 ) {
     val searchBarState = rememberSearchBarWithGapState()
@@ -143,7 +147,8 @@ private fun FileBrowserScreenContent(
         scrolledAppBarContainerColor = Color.Unspecified,
     )
     val listState = rememberLazyListState()
-    val hasModule = playerState.currentModule != null
+    val hasModule = playerState.currentModule != null // Its fine not being wrapped in remember.
+    val layoutDirection = LocalLayoutDirection.current
 
     LaunchedEffect(textFieldState) {
         snapshotFlow { textFieldState.text.toString() }
@@ -164,6 +169,7 @@ private fun FileBrowserScreenContent(
 
     Scaffold(
         modifier = modifier.nestedScroll(scrollBehavior.nestedScrollConnection),
+        snackbarHost = { SnackbarHost(hostState = snackbarHostState) },
         topBar = {
             Column {
                 AppBarWithSearch(
@@ -280,40 +286,53 @@ private fun FileBrowserScreenContent(
             }
         },
         content = { padding ->
-            when {
-                browserState.isLoading -> ProgressbarIndicator(
-                    modifier = Modifier
-                        .fillMaxSize()
-                        .padding(padding)
-                )
+            val state = rememberPullToRefreshState()
 
-                !browserState.hasStorageAccess -> MessageBox(
-                    modifier = Modifier.padding(padding),
-                    icon = Icons.Default.FolderOpen,
-                    title = stringResource(R.string.no_folder_selected),
-                    text = stringResource(R.string.no_folder_selected_message),
-                    actions = {
-                        TextButton(
-                            onClick = onFolderPick,
-                            content = { Text(text = stringResource(R.string.choose_directory)) }
-                        )
-                    }
-                )
+            PullToRefreshBox(
+                state = state,
+                isRefreshing = browserState.isLoading,
+                onRefresh = onRefresh,
+                modifier = Modifier
+                    .fillMaxSize()
+                    .padding(top = padding.calculateTopPadding()),
+            ) {
+                when {
+                    browserState.isLoading -> ProgressbarIndicator(
+                        modifier = Modifier.fillMaxSize(),
+                        text = browserState.loadingReason
+                    )
 
-                browserState.files.isEmpty() && browserState.directories.isEmpty() -> MessageBox(
-                    modifier = Modifier
-                        .fillMaxSize()
-                        .padding(padding),
-                    text = "No module files found in this folder.",
-                )
+                    !browserState.hasStorageAccess -> MessageBox(
+                        modifier = Modifier,
+                        icon = Icons.Default.FolderOpen,
+                        title = stringResource(R.string.no_folder_selected),
+                        text = stringResource(R.string.no_folder_selected_message),
+                        actions = {
+                            TextButton(
+                                onClick = onFolderPick,
+                                content = { Text(text = stringResource(R.string.choose_directory)) }
+                            )
+                        }
+                    )
 
-                else -> ModuleList(
-                    state = browserState,
-                    padding = padding,
-                    listState = listState,
-                    onDir = onDir,
-                    onSelect = onSelect,
-                )
+                    browserState.files.isEmpty() &&
+                        browserState.directories.isEmpty() -> MessageBox(
+                        modifier = Modifier.fillMaxSize(),
+                        text = "No module files found in this folder.",
+                    )
+
+                    else -> ModuleList(
+                        state = browserState,
+                        padding = PaddingValues(
+                            bottom = padding.calculateBottomPadding(),
+                            start = padding.calculateStartPadding(layoutDirection),
+                            end = padding.calculateEndPadding(layoutDirection),
+                        ),
+                        listState = listState,
+                        onDir = onDir,
+                        onSelect = onSelect,
+                    )
+                }
             }
         }
     )
@@ -464,18 +483,15 @@ private fun Preview(
 ) {
     AppTheme {
         FileBrowserScreenContent(
+            snackbarHostState = SnackbarHostState(),
             browserState = params.browserState,
             playerState = params.playerState,
-            filterQuery = params.browserState.filterQuery,
+            onRefresh = {},
             onFilter = {},
             onShuffle = {},
             onRepeatMode = {},
-            onNavigateToPlayer = {},
-            onBack = {},
             onFolderPick = {},
             onSortOrder = {},
-            onNavigateUp = {},
-            canNavigateUp = { params.browserState.breadcrumbs.size > 1 },
             onBreadcrumb = {},
             onPlayAll = {},
             onSelect = {},

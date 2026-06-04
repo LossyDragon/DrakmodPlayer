@@ -15,14 +15,27 @@ class ModuleRepository(
     private val dao: ModuleDao
 ) {
 
-    fun getAllModules(): Flow<List<ModuleEntity>> = dao.getAllModules()
-
     fun getChildren(parentPath: String): Flow<List<ModuleEntity>> = dao.getChildren(parentPath)
 
-    suspend fun getByFilePaths(paths: List<String>): List<ModuleEntity> =
-        dao.getByFilePaths(paths)
-
     suspend fun indexDirectory(uri: Uri) {
+        val existingPaths = dao.getAllFilePaths().toHashSet()
+        indexInternal(uri, existingPaths)
+    }
+
+    suspend fun reindexDirectory(uri: Uri) {
+        val allPaths = dao.getAllFilePaths().toHashSet()
+        val skipPaths = dao.getConfirmedPaths().toHashSet()
+        val seenPaths = mutableSetOf<String>()
+        indexInternal(uri, skipPaths, seenPaths)
+        val removed = allPaths - seenPaths
+        if (removed.isNotEmpty()) dao.deleteByFilePaths(removed.toList())
+    }
+
+    private suspend fun indexInternal(
+        uri: Uri,
+        skipPaths: Set<String>,
+        seenPaths: MutableSet<String>? = null
+    ) {
         val resolver = context.contentResolver
         val rootDocId = uri.resolveDocId(context)
 
@@ -35,35 +48,41 @@ class ModuleRepository(
             val entries = resolver.queryDirectoryEntries(uri, docId)
 
             for (entry in entries) {
+                val path = entry.childUri.toString()
+                seenPaths?.add(path)
                 if (entry.isDirectory) {
-                    dao.upsert(
-                        ModuleEntity(
-                            filename = entry.name,
-                            fileExtension = "",
-                            filePath = entry.childUri.toString(),
-                            parentPath = parentPath,
-                            fileSize = 0L,
-                            isDirectory = true,
+                    if (path !in skipPaths) {
+                        dao.upsert(
+                            ModuleEntity(
+                                filename = entry.name.trim(),
+                                fileExtension = "",
+                                filePath = path,
+                                parentPath = parentPath,
+                                fileSize = 0L,
+                                isDirectory = true,
+                            )
                         )
-                    )
-                    stack.addLast(entry.docId to entry.childUri.toString())
+                    }
+                    stack.addLast(entry.docId to path)
                 } else {
-                    val ext = entry.name.substringAfterLast('.', "").lowercase()
-                    val modInfo = ModInfo()
-                    val isValid = Xmp.testFromFd(context, entry.childUri, modInfo)
-                    dao.upsert(
-                        ModuleEntity(
-                            filename = entry.name,
-                            fileExtension = ext,
-                            filePath = entry.childUri.toString(),
-                            parentPath = parentPath,
-                            fileSize = entry.size,
-                            isDirectory = false,
-                            isValidModule = isValid,
-                            moduleName = modInfo.name,
-                            moduleType = modInfo.type,
+                    if (path !in skipPaths) {
+                        val ext = entry.name.substringAfterLast('.', "").lowercase()
+                        val modInfo = ModInfo()
+                        val isValid = Xmp.testFromFd(context, entry.childUri, modInfo)
+                        dao.upsert(
+                            ModuleEntity(
+                                filename = entry.name.trim(),
+                                fileExtension = ext,
+                                filePath = path,
+                                parentPath = parentPath,
+                                fileSize = entry.size,
+                                isDirectory = false,
+                                isValidModule = isValid,
+                                moduleName = modInfo.name.trim(),
+                                moduleType = modInfo.type.trim(),
+                            )
                         )
-                    )
+                    }
                 }
             }
         }

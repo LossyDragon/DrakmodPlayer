@@ -223,4 +223,5 @@
     <string name="stereo">stereo</string>
     <string name="unsigned">unsigned</string>
     <string name="directory">Directory</string>
+    <string name="snack_nothing_to_play">Nothing to play</string>
 </resources>
