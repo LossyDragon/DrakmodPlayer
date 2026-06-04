@@ -4,12 +4,13 @@ import androidx.room.Dao
 import androidx.room.Query
 import androidx.room.Upsert
 import com.lossydragon.modplayer.db.entity.DownloadHistoryEntity
+import kotlinx.coroutines.flow.Flow
 
 @Dao
 interface DownloadHistoryDao {
 
     @Query("SELECT * FROM download_history ORDER BY viewedAt DESC")
-    suspend fun getAll(): List<DownloadHistoryEntity>
+    fun getAllFlow(): Flow<List<DownloadHistoryEntity>>
 
     @Upsert
     suspend fun upsert(entity: DownloadHistoryEntity)

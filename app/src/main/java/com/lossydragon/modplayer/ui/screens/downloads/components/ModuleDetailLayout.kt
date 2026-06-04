@@ -127,7 +127,7 @@ internal fun ModuleDetailLayout(
         // License
         HeaderText(text = stringResource(R.string.module_detail_license))
         Spacer(modifier = Modifier.height(5.dp))
-        // Licence Link
+        // License Link
         Text(
             text = annotatedLinkString(module.license.title, module.license.legalurl),
             style = TextStyle(

@@ -20,7 +20,6 @@ import com.lossydragon.modplayer.player.PlayerViewModel
 import com.lossydragon.modplayer.ui.screens.downloads.screen.DownloadHistoryScreen
 import com.lossydragon.modplayer.ui.screens.downloads.screen.DownloadModuleScreen
 import com.lossydragon.modplayer.ui.screens.downloads.screen.DownloadResultScreen
-import com.lossydragon.modplayer.ui.screens.downloads.viewmodel.SearchType
 import com.lossydragon.modplayer.util.findDownloadedModule
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch

@@ -5,10 +5,13 @@ import com.lossydragon.modplayer.db.entity.DownloadHistoryEntity
 import com.lossydragon.modplayer.model.Artist
 import com.lossydragon.modplayer.model.ArtistInfo
 import com.lossydragon.modplayer.model.Module
+import kotlinx.coroutines.flow.Flow
+import kotlinx.coroutines.flow.map
 
 class DownloadHistoryRepository(private val dao: DownloadHistoryDao) {
 
-    suspend fun getAll(): List<Module> = dao.getAll().map { it.toModule() }
+    fun getAllFlow(): Flow<List<Module>> = dao.getAllFlow()
+        .map { entities -> entities.map { it.toModule() } } // wow
 
     suspend fun add(module: Module) = dao.upsert(module.toEntity())
 

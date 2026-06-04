@@ -1,14 +1,19 @@
-package com.lossydragon.modplayer.ui.screens.downloads.viewmodel
+package com.lossydragon.modplayer.ui.screens.downloads
 
 import android.content.Context
+import android.net.Uri
 import android.provider.DocumentsContract
+import androidx.compose.runtime.*
 import androidx.core.net.toUri
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.lossydragon.modplayer.data.DownloadHistoryRepository
 import com.lossydragon.modplayer.data.ModArchiveService
 import com.lossydragon.modplayer.db.AppPreferences
+import com.lossydragon.modplayer.model.ArtistResult
 import com.lossydragon.modplayer.model.Module
+import com.lossydragon.modplayer.model.ModuleResult
+import com.lossydragon.modplayer.model.SearchListResult
 import com.lossydragon.modplayer.util.findDownloadedModule
 import com.lossydragon.modplayer.util.getOrCreateOutputFile
 import io.ktor.client.HttpClient
@@ -16,30 +21,76 @@ import io.ktor.client.request.get
 import io.ktor.client.statement.bodyAsChannel
 import io.ktor.http.contentLength
 import io.ktor.utils.io.readAvailable
+import kotlinx.collections.immutable.ImmutableList
+import kotlinx.collections.immutable.persistentListOf
+import kotlinx.collections.immutable.toPersistentList
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.firstOrNull
+import kotlinx.coroutines.flow.map
+import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
 import timber.log.Timber
 
-class ModuleResultViewModel(
+enum class SearchType { ARTIST, TITLE }
+
+sealed class SearchResult {
+    data class Artists(val data: ArtistResult) : SearchResult()
+    data class Modules(val data: SearchListResult) : SearchResult()
+}
+
+@Immutable
+data class DownloadSearchState(
+    val error: String? = null,
+    val isLoading: Boolean = false,
+    val result: SearchResult? = null,
+    val title: String = ""
+)
+
+@Immutable
+sealed class DownloadStatus {
+    data class Error(val message: String) : DownloadStatus()
+    data class Progress(val percent: Float) : DownloadStatus()
+    data object Loading : DownloadStatus()
+    data object None : DownloadStatus()
+    data object Success : DownloadStatus()
+}
+
+@Immutable
+data class ModuleResultState(
+    val downloadStatus: DownloadStatus = DownloadStatus.None,
+    val isLoading: Boolean = false,
+    val isRandom: Boolean = false,
+    val moduleExists: Boolean = false,
+    val result: ModuleResult? = null,
+    val softError: String? = null
+)
+
+class DownloadsViewModel(
     private val appContext: Context,
     private val service: ModArchiveService,
     private val httpClient: HttpClient,
-    private val history: DownloadHistoryRepository,
+    private val historyRepo: DownloadHistoryRepository,
     prefs: AppPreferences
 ) : ViewModel() {
 
-    val state: StateFlow<ModuleResultState>
+    private var downloadJob: Job? = null
+    private val lastDirectory: Flow<String?> = prefs.getLastDirectoryFlow()
+
+    val moduleResultState: StateFlow<ModuleResultState>
         field = MutableStateFlow(ModuleResultState())
 
-    private var downloadJob: Job? = null
+    val historyState: StateFlow<ImmutableList<Module>> = historyRepo.getAllFlow()
+        .map { it.toPersistentList() }
+        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), persistentListOf())
 
-    private val lastDirectory: Flow<String?> = prefs.getLastDirectoryFlow()
+    val searchState: StateFlow<DownloadSearchState>
+        field = MutableStateFlow(DownloadSearchState())
 
     fun getModuleById(id: Int) {
         if (id < 0) {
@@ -47,10 +98,10 @@ class ModuleResultViewModel(
             return
         }
         viewModelScope.launch {
-            state.update { it.copy(isLoading = true, isRandom = false) }
+            moduleResultState.update { it.copy(isLoading = true, isRandom = false) }
             service.getModuleById(id).fold(
                 onSuccess = { result ->
-                    state.update {
+                    moduleResultState.update {
                         it.copy(
                             result = result,
                             moduleExists = checkExists(result.module),
@@ -58,7 +109,7 @@ class ModuleResultViewModel(
                             softError = null,
                         )
                     }
-                    history.add(result.module)
+                    historyRepo.add(result.module)
                 },
                 onFailure = ::handleFailure
             )
@@ -67,10 +118,10 @@ class ModuleResultViewModel(
 
     fun getRandomModule() {
         viewModelScope.launch {
-            state.update { it.copy(isLoading = true, isRandom = true) }
+            moduleResultState.update { it.copy(isLoading = true, isRandom = true) }
             service.getRandomModule().fold(
                 onSuccess = { result ->
-                    state.update {
+                    moduleResultState.update {
                         it.copy(
                             result = result,
                             moduleExists = checkExists(result.module),
@@ -79,7 +130,7 @@ class ModuleResultViewModel(
                         )
                     }
 
-                    history.add(result.module)
+                    historyRepo.add(result.module)
                 },
                 onFailure = ::handleFailure
             )
@@ -90,10 +141,10 @@ class ModuleResultViewModel(
         downloadJob?.cancel()
         downloadJob = viewModelScope.launch(Dispatchers.IO) {
             try {
-                state.update { it.copy(downloadStatus = DownloadStatus.Loading) }
+                moduleResultState.update { it.copy(downloadStatus = DownloadStatus.Loading) }
 
                 val rootUri = lastDirectory.firstOrNull()?.toUri() ?: run {
-                    state.update {
+                    moduleResultState.update {
                         it.copy(downloadStatus = DownloadStatus.Error("No folder selected"))
                     }
                     return@launch
@@ -103,7 +154,7 @@ class ModuleResultViewModel(
                     rootUri = rootUri,
                     module = module
                 ) ?: run {
-                    state.update {
+                    moduleResultState.update {
                         it.copy(
                             downloadStatus = DownloadStatus.Error("Could not create output file")
                         )
@@ -123,7 +174,7 @@ class ModuleResultViewModel(
                         out.write(buf, 0, read)
                         bytesRead += read
                         if (totalBytes > 0) {
-                            state.update {
+                            moduleResultState.update {
                                 it.copy(
                                     downloadStatus = DownloadStatus.Progress(
                                         bytesRead * 100f / totalBytes
@@ -133,7 +184,7 @@ class ModuleResultViewModel(
                         }
                     }
                 }
-                state.update {
+                moduleResultState.update {
                     it.copy(
                         downloadStatus = DownloadStatus.Success,
                         moduleExists = true
@@ -141,7 +192,7 @@ class ModuleResultViewModel(
                 }
             } catch (e: Exception) {
                 Timber.e(e)
-                state.update {
+                moduleResultState.update {
                     it.copy(
                         downloadStatus = DownloadStatus.Error(
                             e.message ?: "Download failed"
@@ -157,28 +208,81 @@ class ModuleResultViewModel(
             try {
                 val fileUri = findModuleUri(module) ?: return@launch
                 DocumentsContract.deleteDocument(appContext.contentResolver, fileUri)
-                state.update { it.copy(moduleExists = false) }
+                moduleResultState.update { it.copy(moduleExists = false) }
             } catch (e: Exception) {
                 Timber.e(e)
             }
         }
     }
 
-    fun refreshExists() {
+    fun clearHistory() {
         viewModelScope.launch {
-            val module = state.value.result?.module ?: return@launch
-            state.update { it.copy(moduleExists = checkExists(module)) }
+            historyRepo.clear()
         }
+    }
+
+    fun searchFileOrTitle(query: String) = viewModelScope.launch {
+        searchState.update { it.copy(title = "Results: $query", isLoading = true, error = null) }
+        service.searchByFileNameOrTitle(query).fold(
+            onSuccess = { data ->
+                searchState.update {
+                    it.copy(
+                        result = SearchResult.Modules(data),
+                        isLoading = false
+                    )
+                }
+            },
+            onFailure = {
+                Timber.e(it)
+                searchState.update { s -> s.copy(error = it.message, isLoading = false) }
+            }
+        )
+    }
+
+    fun searchArtist(query: String) = viewModelScope.launch {
+        searchState.update { it.copy(title = "Artists: $query", isLoading = true, error = null) }
+        service.getArtistSearch(query).fold(
+            onSuccess = { data ->
+                searchState.update {
+                    it.copy(
+                        result = SearchResult.Artists(data),
+                        isLoading = false
+                    )
+                }
+            },
+            onFailure = {
+                Timber.e(it)
+                searchState.update { s -> s.copy(error = it.message, isLoading = false) }
+            }
+        )
+    }
+
+    fun getArtistById(id: Int) = viewModelScope.launch {
+        searchState.update { it.copy(isLoading = true, error = null) }
+        service.getArtistById(id).fold(
+            onSuccess = { data ->
+                searchState.update {
+                    it.copy(
+                        result = SearchResult.Modules(data),
+                        isLoading = false
+                    )
+                }
+            },
+            onFailure = {
+                Timber.e(it)
+                searchState.update { s -> s.copy(error = it.message, isLoading = false) }
+            }
+        )
     }
 
     private fun handleFailure(t: Throwable) {
         Timber.e(t)
-        state.update { it.copy(softError = t.message, isLoading = false) }
+        moduleResultState.update { it.copy(softError = t.message, isLoading = false) }
     }
 
     private suspend fun checkExists(module: Module) = findModuleUri(module) != null
 
-    private suspend fun findModuleUri(module: Module): android.net.Uri? {
+    private suspend fun findModuleUri(module: Module): Uri? {
         val rootUri = (lastDirectory.firstOrNull() ?: return null).toUri()
         return appContext.findDownloadedModule(
             rootUri = rootUri,

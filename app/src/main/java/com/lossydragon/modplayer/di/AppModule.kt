@@ -12,9 +12,7 @@ import com.lossydragon.modplayer.player.ModPlayer
 import com.lossydragon.modplayer.player.PlayerEngine
 import com.lossydragon.modplayer.player.PlayerViewModel
 import com.lossydragon.modplayer.ui.screens.browser.FileBrowserViewModel
-import com.lossydragon.modplayer.ui.screens.downloads.viewmodel.DownloadHistoryViewModel
-import com.lossydragon.modplayer.ui.screens.downloads.viewmodel.DownloadViewModel
-import com.lossydragon.modplayer.ui.screens.downloads.viewmodel.ModuleResultViewModel
+import com.lossydragon.modplayer.ui.screens.downloads.DownloadsViewModel
 import com.lossydragon.modplayer.ui.screens.playlists.PlaylistsViewModel
 import io.ktor.client.HttpClient
 import io.ktor.client.engine.android.Android
@@ -32,11 +30,9 @@ val appModule = module {
     single { AppPreferences(androidContext()) }
 
     // ViewModels
-    viewModel { DownloadViewModel(get()) }
     viewModel { FileBrowserViewModel(androidContext(), get(), get()) }
-    viewModel { ModuleResultViewModel(androidContext(), get(), get(), get(), get()) }
+    viewModel { DownloadsViewModel(androidContext(), get(), get(), get(), get()) }
     viewModel { PlayerViewModel(androidContext(), get(), get()) }
-    viewModel { DownloadHistoryViewModel(get()) }
     viewModel { PlaylistsViewModel(androidContext(), get(), get()) }
 
     // Database

@@ -20,11 +20,11 @@ import com.lossydragon.modplayer.model.Sponsor
 import com.lossydragon.modplayer.ui.components.BackButton
 import com.lossydragon.modplayer.ui.components.MessageBox
 import com.lossydragon.modplayer.ui.components.ProgressbarIndicator
+import com.lossydragon.modplayer.ui.screens.downloads.DownloadSearchState
+import com.lossydragon.modplayer.ui.screens.downloads.DownloadsViewModel
+import com.lossydragon.modplayer.ui.screens.downloads.SearchResult
+import com.lossydragon.modplayer.ui.screens.downloads.SearchType
 import com.lossydragon.modplayer.ui.screens.downloads.components.DownloadListItem
-import com.lossydragon.modplayer.ui.screens.downloads.viewmodel.DownloadSearchState
-import com.lossydragon.modplayer.ui.screens.downloads.viewmodel.DownloadViewModel
-import com.lossydragon.modplayer.ui.screens.downloads.viewmodel.SearchResult
-import com.lossydragon.modplayer.ui.screens.downloads.viewmodel.SearchType
 import com.lossydragon.modplayer.ui.theme.AppTheme
 import org.koin.androidx.compose.koinViewModel
 
@@ -36,8 +36,8 @@ internal fun DownloadResultScreen(
     modifier: Modifier = Modifier,
     onModuleClick: (Int) -> Unit
 ) {
-    val viewModel = koinViewModel<DownloadViewModel>()
-    val state by viewModel.state.collectAsStateWithLifecycle()
+    val viewModel = koinViewModel<DownloadsViewModel>()
+    val state by viewModel.searchState.collectAsStateWithLifecycle()
 
     LaunchedEffect(Unit) {
         if (searchType == SearchType.ARTIST) {

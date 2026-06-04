@@ -16,8 +16,8 @@ import com.lossydragon.modplayer.model.ArtistInfo
 import com.lossydragon.modplayer.model.Module
 import com.lossydragon.modplayer.ui.components.BackButton
 import com.lossydragon.modplayer.ui.components.MessageBox
+import com.lossydragon.modplayer.ui.screens.downloads.DownloadsViewModel
 import com.lossydragon.modplayer.ui.screens.downloads.components.DownloadListItem
-import com.lossydragon.modplayer.ui.screens.downloads.viewmodel.DownloadHistoryViewModel
 import com.lossydragon.modplayer.ui.theme.AppTheme
 import kotlinx.collections.immutable.ImmutableList
 import kotlinx.collections.immutable.toPersistentList
@@ -29,8 +29,8 @@ internal fun DownloadHistoryScreen(
     modifier: Modifier = Modifier,
     onModuleClick: (Int) -> Unit
 ) {
-    val viewModel = koinViewModel<DownloadHistoryViewModel>()
-    val history by viewModel.history.collectAsStateWithLifecycle()
+    val viewModel = koinViewModel<DownloadsViewModel>()
+    val history by viewModel.historyState.collectAsStateWithLifecycle()
 
     var showClearDialog by remember { mutableStateOf(false) }
 
@@ -43,7 +43,7 @@ internal fun DownloadHistoryScreen(
             confirmButton = {
                 TextButton(
                     onClick = {
-                        viewModel.clear()
+                        viewModel.clearHistory()
                         showClearDialog = false
                     },
                     content = { Text(text = stringResource(R.string.clear)) }

@@ -18,10 +18,10 @@ import com.lossydragon.modplayer.model.ModuleResult
 import com.lossydragon.modplayer.ui.components.BackButton
 import com.lossydragon.modplayer.ui.components.MessageBox
 import com.lossydragon.modplayer.ui.components.ProgressbarIndicator
+import com.lossydragon.modplayer.ui.screens.downloads.DownloadStatus
+import com.lossydragon.modplayer.ui.screens.downloads.DownloadsViewModel
+import com.lossydragon.modplayer.ui.screens.downloads.ModuleResultState
 import com.lossydragon.modplayer.ui.screens.downloads.components.ModuleDetailLayout
-import com.lossydragon.modplayer.ui.screens.downloads.viewmodel.DownloadStatus
-import com.lossydragon.modplayer.ui.screens.downloads.viewmodel.ModuleResultState
-import com.lossydragon.modplayer.ui.screens.downloads.viewmodel.ModuleResultViewModel
 import com.lossydragon.modplayer.ui.theme.AppTheme
 import com.lossydragon.modplayer.util.shareLink
 import org.koin.androidx.compose.koinViewModel
@@ -33,9 +33,9 @@ internal fun DownloadModuleScreen(
     modifier: Modifier = Modifier,
     onPlay: (Module) -> Unit
 ) {
-    val viewModel = koinViewModel<ModuleResultViewModel>()
+    val viewModel = koinViewModel<DownloadsViewModel>()
 
-    val state by viewModel.state.collectAsStateWithLifecycle()
+    val state by viewModel.moduleResultState.collectAsStateWithLifecycle()
 
     var showDeleteDialog by remember { mutableStateOf(false) }
 
