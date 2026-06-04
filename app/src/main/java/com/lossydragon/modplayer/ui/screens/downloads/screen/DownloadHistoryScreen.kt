@@ -67,6 +67,7 @@ internal fun DownloadHistoryScreen(
     )
 }
 
+@OptIn(ExperimentalMaterial3Api::class)
 @Composable
 private fun DownloadHistoryContent(
     history: ImmutableList<Module>,

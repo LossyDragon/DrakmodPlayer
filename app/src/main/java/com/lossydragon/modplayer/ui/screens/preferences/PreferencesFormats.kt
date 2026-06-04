@@ -12,7 +12,7 @@ import com.lossydragon.modplayer.R
 import com.lossydragon.modplayer.ui.components.BackButton
 import kotlinx.collections.immutable.ImmutableList
 
-@OptIn(ExperimentalMaterial3ExpressiveApi::class)
+@OptIn(ExperimentalMaterial3ExpressiveApi::class, ExperimentalMaterial3Api::class)
 @Composable
 internal fun PreferencesFormats(
     snackbarHostState: SnackbarHostState,

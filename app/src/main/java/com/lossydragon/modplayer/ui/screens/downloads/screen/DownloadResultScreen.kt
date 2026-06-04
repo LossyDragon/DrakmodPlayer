@@ -56,6 +56,7 @@ internal fun DownloadResultScreen(
     )
 }
 
+@OptIn(ExperimentalMaterial3Api::class)
 @Composable
 private fun DownloadScreenContent(
     state: DownloadSearchState,

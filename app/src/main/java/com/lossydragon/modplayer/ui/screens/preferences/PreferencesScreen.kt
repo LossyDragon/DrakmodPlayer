@@ -25,7 +25,7 @@ import com.lossydragon.modplayer.ui.theme.AppTheme
 import kotlinx.coroutines.launch
 import org.koin.compose.koinInject
 
-@OptIn(ExperimentalMaterial3ExpressiveApi::class)
+@OptIn(ExperimentalMaterial3ExpressiveApi::class, ExperimentalMaterial3Api::class)
 @Composable
 internal fun PreferencesScreen(
     snackbarHostState: SnackbarHostState,

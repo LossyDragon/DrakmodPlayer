@@ -87,6 +87,7 @@ internal fun DownloadModuleScreen(
     )
 }
 
+@OptIn(ExperimentalMaterial3Api::class)
 @Composable
 private fun DownloadModuleContent(
     state: ModuleResultState,
