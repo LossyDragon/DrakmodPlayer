@@ -183,8 +183,7 @@ class PlayerViewModel(
     ) {
         if (files.isEmpty()) return
 
-        val startIndex = (if (isShuffle) files.indices.random() else startAt)
-            .coerceIn(0, files.lastIndex)
+        val startIndex = startAt.coerceIn(0, files.lastIndex)
 
         state.update {
             it.copy(
