@@ -382,6 +382,7 @@ private fun PlayerScreenContent(
                 when (state.playerView) {
                     0 -> PatternView(
                         modifier = Modifier.fillMaxSize(),
+                        module = state.currentModule,
                         pattern = patternData,
                         currentRow = state.frame.row,
                         showRowNumbers = state.showRowNumbers,

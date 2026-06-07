@@ -20,6 +20,7 @@ import androidx.compose.ui.text.font.*
 import androidx.compose.ui.text.rememberTextMeasurer
 import androidx.compose.ui.tooling.preview.*
 import androidx.compose.ui.unit.*
+import com.lossydragon.modplayer.db.entity.ModuleEntity
 import com.lossydragon.modplayer.player.model.NoteCell
 import com.lossydragon.modplayer.player.model.PatternData
 import com.lossydragon.modplayer.ui.theme.AppTheme
@@ -83,6 +84,7 @@ private fun buildRenderState(pattern: PatternData): PatternRenderState =
 
 @Composable
 fun PatternView(
+    module: ModuleEntity,
     pattern: PatternData,
     currentRow: Int,
     modifier: Modifier = Modifier,
@@ -94,7 +96,7 @@ fun PatternView(
     var userOffset by remember { mutableStateOf(Offset.Zero) }
 
     // Reset zoom and pan when track/pattern changes
-    LaunchedEffect(pattern.patternIndex) {
+    LaunchedEffect(module) {
         zoom = 1f
         userOffset = Offset.Zero
     }
@@ -403,6 +405,7 @@ private fun PreviewPatternView() {
     AppTheme {
         Surface(modifier = Modifier.fillMaxSize()) {
             PatternView(
+                module = ModuleEntity(),
                 pattern = sample,
                 currentRow = 12,
                 modifier = Modifier.size(400.dp, 600.dp),

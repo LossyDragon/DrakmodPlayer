@@ -14,11 +14,11 @@ import kotlinx.serialization.Serializable
 data class ModuleEntity(
     @PrimaryKey(autoGenerate = true)
     val id: Int = 0,
-    val filename: String,
-    val fileExtension: String,
-    val filePath: String,
+    val filename: String = "",
+    val fileExtension: String = "",
+    val filePath: String = "",
     @ColumnInfo(defaultValue = "") val parentPath: String = "", // TODO why ColumnInfo
-    val fileSize: Long,
+    val fileSize: Long = 0L,
     @ColumnInfo(defaultValue = "0") val isDirectory: Boolean = false, // TODO why ColumnInfo
     val isValidModule: Boolean = false,
     val moduleName: String = "",
