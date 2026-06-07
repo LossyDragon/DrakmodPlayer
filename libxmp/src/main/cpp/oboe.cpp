@@ -526,29 +526,6 @@ int stop_audio() {
     return result == oboe::Result::OK ? 0 : -1;
 }
 
-int get_volume() {
-    // Volume is stored as 0.0-1.0, convert to millibels-like format
-    // to maintain compatibility with existing code
-    // -vol format where 0 = max volume, higher numbers = quieter
-    float vol = volume_scale.load(std::memory_order_relaxed);
-    int result = (int) ((1.0f - vol) * 1000.0f);
-    return result;
-}
-
-int set_volume(int vol) {
-    // Convert from -vol format (0 = max, higher = quieter) to 0.0-1.0
-    float new_volume = 1.0f - ((float) vol / 1000.0f);
-
-    // Clamp to valid range
-    if (new_volume < 0.0f) new_volume = 0.0f;
-    if (new_volume > 1.0f) new_volume = 1.0f;
-
-    // Store volume - will be applied in audio callback
-    volume_scale.store(new_volume, std::memory_order_relaxed);
-
-    return 0;
-}
-
 int get_audio_stats(struct AudioStats *stats) {
     if (!audio_stream || !stats) {
         return -1;

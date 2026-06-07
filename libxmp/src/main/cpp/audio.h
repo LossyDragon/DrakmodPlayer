@@ -24,8 +24,6 @@ void drop_audio(void);
 
 int fill_buffer(int);
 
-int get_volume(void);
-
 int has_free_buffer(void);
 
 int open_audio(int, int, int, int, int, int);
@@ -35,8 +33,6 @@ int play_audio(void);
 int play_buffer(void*, int, int);
 
 int restart_audio(void);
-
-int set_volume(int);
 
 int stop_audio(void);
 

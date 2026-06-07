@@ -25,6 +25,7 @@ import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.runBlocking
 import org.helllabs.libxmp.Xmp
+import org.helllabs.libxmp.model.AudioStats
 import timber.log.Timber
 
 /** UI state and domain models for the module player. */
@@ -147,16 +148,18 @@ class PlayerViewModel(
     }
 
     /** Returns a formatted string of current Oboe audio stream statistics. */
-    fun getAudioStats(): String = Xmp.getAudioStats().let { stats ->
-        """
-        Audio API: ${stats.audioApi}
-        Audio Format: ${stats.audioFormat}
-        Audio Glitches: ${stats.xrunCount} (system), ${stats.underrunCount} (app)
-        Buffer: ${stats.bufferSize} / ${stats.bufferCapacity} frames
-        Frames Per Burst: ${stats.framesPerBurst}
-        Performance Mode: ${stats.perfMode}
-        Sample Rate: ${stats.sampleRate} Hz
-        Sharing Mode: ${stats.sharingMode}
+    fun getAudioStats(): String {
+        val stats = AudioStats()
+        Xmp.getAudioStats(stats)
+        return """
+                Audio API: ${stats.audioApi}
+                Audio Format: ${stats.audioFormat}
+                Audio Glitches: ${stats.xrunCount} (system), ${stats.underrunCount} (app)
+                Buffer: ${stats.bufferSize} / ${stats.bufferCapacity} frames
+                Frames Per Burst: ${stats.framesPerBurst}
+                Performance Mode: ${stats.perfMode}
+                Sample Rate: ${stats.sampleRate} Hz
+                Sharing Mode: ${stats.sharingMode}
         """.trimIndent()
     }
 

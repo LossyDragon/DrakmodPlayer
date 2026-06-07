@@ -198,8 +198,6 @@ object Xmp {
 
     external fun getVersion(): String
 
-    external fun getVolume(): Int
-
     external fun nextPosition(): Int
 
     external fun prevPosition(): Int
@@ -210,9 +208,7 @@ object Xmp {
 
     external fun setSequence(seq: Int): Boolean
 
-    external fun setVolume(vol: Int): Int
-
-    external fun getAudioStats(): AudioStats
+    external fun getAudioStats(stats: AudioStats)
 
     external fun setExpectSilence(value: Boolean)
 
