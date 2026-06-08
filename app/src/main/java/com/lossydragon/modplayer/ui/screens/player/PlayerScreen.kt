@@ -38,12 +38,12 @@ import com.lossydragon.modplayer.ui.screens.player.components.views.ChannelView
 import com.lossydragon.modplayer.ui.screens.player.components.views.DebugView
 import com.lossydragon.modplayer.ui.screens.player.components.views.PatternView
 import com.lossydragon.modplayer.ui.theme.AppTheme
-import kotlin.time.Duration.Companion.seconds
 import kotlinx.collections.immutable.toPersistentList
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.isActive
 import kotlinx.coroutines.launch
 import org.koin.compose.viewmodel.koinViewModel
+import kotlin.time.Duration.Companion.seconds
 
 // TODO localize hard coded text
 
@@ -397,7 +397,8 @@ private fun PlayerScreenContent(
                     2 -> DebugView(
                         modifier = Modifier.fillMaxSize(),
                         state = state,
-                        patternData = patternData
+                        patternData = patternData,
+                        isPlaying = state.status == PlaybackStatus.PLAYING,
                     )
                 }
             }

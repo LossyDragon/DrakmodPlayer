@@ -13,7 +13,11 @@ data class ChannelInfo(
     val instruments: IntArray = IntArray(64),
     val keys: IntArray = IntArray(64),
     val periods: IntArray = IntArray(64),
-    val holdVols: IntArray = IntArray(64)
+    val holdVols: IntArray = IntArray(64),
+    val positions: IntArray = IntArray(64),
+    val pitchbends: IntArray = IntArray(64),
+    val notes: IntArray = IntArray(64),
+    val samples: IntArray = IntArray(64),
 ) {
     override fun equals(other: Any?): Boolean {
         if (this === other) return true
@@ -24,7 +28,11 @@ data class ChannelInfo(
             instruments.contentEquals(other.instruments) &&
             keys.contentEquals(other.keys) &&
             periods.contentEquals(other.periods) &&
-            holdVols.contentEquals(other.holdVols)
+            holdVols.contentEquals(other.holdVols) &&
+            positions.contentEquals(other.positions) &&
+            pitchbends.contentEquals(other.pitchbends) &&
+            notes.contentEquals(other.notes) &&
+            samples.contentEquals(other.samples)
     }
 
     override fun hashCode(): Int {
@@ -35,6 +43,10 @@ data class ChannelInfo(
         result = 31 * result + keys.contentHashCode()
         result = 31 * result + periods.contentHashCode()
         result = 31 * result + holdVols.contentHashCode()
+        result = 31 * result + positions.contentHashCode()
+        result = 31 * result + pitchbends.contentHashCode()
+        result = 31 * result + notes.contentHashCode()
+        result = 31 * result + samples.contentHashCode()
         return result
     }
 }

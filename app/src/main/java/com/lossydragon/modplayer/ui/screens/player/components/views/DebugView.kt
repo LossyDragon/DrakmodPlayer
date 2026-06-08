@@ -1,47 +1,79 @@
 package com.lossydragon.modplayer.ui.screens.player.components.views
 
-import androidx.compose.foundation.horizontalScroll
-import androidx.compose.foundation.layout.Arrangement
-import androidx.compose.foundation.layout.Column
-import androidx.compose.foundation.layout.Row
-import androidx.compose.foundation.layout.Spacer
-import androidx.compose.foundation.layout.fillMaxSize
-import androidx.compose.foundation.layout.fillMaxWidth
-import androidx.compose.foundation.layout.height
-import androidx.compose.foundation.layout.padding
-import androidx.compose.foundation.layout.width
-import androidx.compose.foundation.rememberScrollState
-import androidx.compose.foundation.verticalScroll
-import androidx.compose.material3.HorizontalDivider
-import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.Text
-import androidx.compose.runtime.Composable
-import androidx.compose.ui.Modifier
-import androidx.compose.ui.text.PlatformTextStyle
-import androidx.compose.ui.text.TextStyle
-import androidx.compose.ui.text.font.FontFamily
-import androidx.compose.ui.text.font.FontWeight
-import androidx.compose.ui.text.style.LineHeightStyle
-import androidx.compose.ui.tooling.preview.Preview
-import androidx.compose.ui.unit.dp
-import androidx.compose.ui.unit.sp
+import androidx.compose.foundation.*
+import androidx.compose.foundation.layout.*
+import androidx.compose.material3.*
+import androidx.compose.runtime.*
+import androidx.compose.ui.*
+import androidx.compose.ui.text.*
+import androidx.compose.ui.text.font.*
+import androidx.compose.ui.text.style.*
+import androidx.compose.ui.tooling.preview.*
+import androidx.compose.ui.unit.*
 import com.lossydragon.modplayer.player.PlaybackStatus
 import com.lossydragon.modplayer.player.PlayerUiState
 import com.lossydragon.modplayer.player.model.NoteCell
 import com.lossydragon.modplayer.player.model.PatternData
 import com.lossydragon.modplayer.ui.theme.AppTheme
 import kotlinx.collections.immutable.toImmutableList
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.delay
+import kotlinx.coroutines.isActive
+import kotlinx.coroutines.withContext
+import org.helllabs.libxmp.Xmp
+import org.helllabs.libxmp.model.ChannelInfo
 import org.helllabs.libxmp.model.FrameInfo
 import org.helllabs.libxmp.model.ModVars
+import kotlin.time.Duration.Companion.milliseconds
+
+private val NOTE_NAMES = arrayOf(
+    "C-", "C#", "D-", "D#", "E-", "F-",
+    "F#", "G-", "G#", "A-", "A#", "B-",
+)
+
+private fun noteStr(note: Int): String = when {
+    note <= 0 -> "---"
+    else -> "${NOTE_NAMES[note % 12]}${note / 12}"
+}
 
 @Composable
 fun DebugView(
     modifier: Modifier = Modifier,
     state: PlayerUiState,
-    patternData: PatternData
+    patternData: PatternData,
+    isPlaying: Boolean,
 ) {
     val fi = state.frameInfo
     val mv = state.modVars
+    val numChannels = mv.chn
+
+    val channelInfoBuffer = remember { ChannelInfo() }
+    var channelSnapshot by remember { mutableStateOf(ChannelInfo()) }
+    val isPlayingState = rememberUpdatedState(isPlaying)
+
+    LaunchedEffect(numChannels) {
+        if (numChannels == 0) return@LaunchedEffect
+        while (isActive) {
+            if (isPlayingState.value) {
+                withContext(Dispatchers.Default) { Xmp.getChannelData(channelInfoBuffer) }
+                channelSnapshot = ChannelInfo(
+                    volumes = channelInfoBuffer.volumes.copyOf(),
+                    finalVols = channelInfoBuffer.finalVols.copyOf(),
+                    pans = channelInfoBuffer.pans.copyOf(),
+                    instruments = channelInfoBuffer.instruments.copyOf(),
+                    keys = channelInfoBuffer.keys.copyOf(),
+                    periods = channelInfoBuffer.periods.copyOf(),
+                    holdVols = channelInfoBuffer.holdVols.copyOf(),
+                    positions = channelInfoBuffer.positions.copyOf(),
+                    pitchbends = channelInfoBuffer.pitchbends.copyOf(),
+                    notes = channelInfoBuffer.notes.copyOf(),
+                    samples = channelInfoBuffer.samples.copyOf(),
+                )
+            }
+            delay(50.milliseconds) // ~20fps is plenty for a debug view
+        }
+    }
+
     val patternTextStyle = TextStyle(
         fontSize = 8.sp,
         lineHeight = 10.sp,
@@ -54,106 +86,162 @@ fun DebugView(
     )
 
     Column(modifier = modifier.fillMaxSize()) {
-        Row(
-            modifier = Modifier
-                .weight(1f)
-                .fillMaxWidth()
-                .verticalScroll(rememberScrollState())
-                .padding(horizontal = 6.dp, vertical = 4.dp),
-        ) {
-            Column(
-                modifier = Modifier.weight(1f),
-                verticalArrangement = Arrangement.spacedBy(1.dp),
-            ) {
-                DebugHeader("Playback")
-                DebugRow("Status", state.status.name)
-                DebugRow(
-                    "Module",
-                    state.currentModule?.let { it.moduleName.ifBlank { it.filename } } ?: "—"
-                )
-                DebugRow("Queue", "${state.currentQueueIndex + 1} / ${state.queue.size}")
-                DebugRow("Sequence", state.currentSequence.toString())
-                DebugRow("Repeat", state.repeatMode.toString())
-                DebugRow("Shuffle", state.isShuffle.toString())
-                DebugRow("All seqs", state.playAllSequences.toString())
-
-                Spacer(Modifier.height(6.dp))
-                DebugHeader("ModVars")
-                DebugRow("Name", mv.name.ifBlank { "—" })
-                DebugRow("Type", mv.type.ifBlank { "—" })
-                DebugRow("Pat/Chn/Ins", "${mv.pat} / ${mv.chn} / ${mv.ins}")
-                DebugRow("Smp/Spd/BPM", "${mv.smp} / ${mv.spd} / ${mv.bpm}")
-                DebugRow("Len/Rst/Gvl", "${mv.len} / ${mv.rst} / ${mv.gvl}")
-                DebugRow("Sequences", mv.miNumSequences.toString())
-                if (mv.miComment.isNotBlank()) DebugRow("Comment", mv.miComment.take(32))
-            }
-
-            Column(
-                modifier = Modifier.weight(1f),
-                verticalArrangement = Arrangement.spacedBy(1.dp),
-            ) {
-                DebugHeader("FrameInfo")
-                DebugRow("Pos/Pat/Row", "${fi.pos} / ${fi.pattern} / ${fi.row}")
-                DebugRow("Speed/BPM", "${fi.speed} / ${fi.bpm}")
-                DebugRow("Time/Total", "${fi.time} / ${fi.totalTime}")
-                DebugRow("Loop/Seq", "${fi.loopCount} / ${fi.sequence}")
-                DebugRow("VChn used", "${fi.virtUsed} / ${fi.virtChannels}")
-            }
-        }
-
-        HorizontalDivider()
-
         Column(
             modifier = Modifier
                 .weight(1f)
                 .fillMaxWidth()
                 .verticalScroll(rememberScrollState())
                 .padding(horizontal = 6.dp, vertical = 4.dp),
+            verticalArrangement = Arrangement.spacedBy(1.dp),
         ) {
-            DebugHeader(
-                "Pat #${patternData.patternIndex}  ${patternData.numRows}r × ${patternData.numChannels}ch"
-            )
-            Row(modifier = Modifier.horizontalScroll(rememberScrollState())) {
-                Column {
-                    patternData.cells.forEachIndexed { rowIdx, row ->
-                        val isCurrent = patternData.patternIndex == fi.pattern && rowIdx == fi.row
+            Row(modifier = Modifier.fillMaxWidth()) {
+                Column(
+                    modifier = Modifier.weight(1f),
+                    verticalArrangement = Arrangement.spacedBy(1.dp),
+                ) {
+                    DebugHeader("Playback")
+                    DebugRow("Status", state.status.name)
+                    DebugRow(
+                        "Module",
+                        state.currentModule?.let { it.moduleName.ifBlank { it.filename } } ?: "—"
+                    )
+                    DebugRow("Queue", "${state.currentQueueIndex + 1} / ${state.queue.size}")
+                    DebugRow("Sequence", state.currentSequence.toString())
+                    DebugRow("Repeat", state.repeatMode.toString())
+                    DebugRow("Shuffle", state.isShuffle.toString())
+                    DebugRow("All seqs", state.playAllSequences.toString())
+
+                    Spacer(Modifier.height(6.dp))
+                    DebugHeader("ModVars")
+                    DebugRow("Name", mv.name.ifBlank { "—" })
+                    DebugRow("Type", mv.type.ifBlank { "—" })
+                    DebugRow("Pat/Chn/Ins", "${mv.pat} / ${mv.chn} / ${mv.ins}")
+                    DebugRow("Smp/Spd/BPM", "${mv.smp} / ${mv.spd} / ${mv.bpm}")
+                    DebugRow("Len/Rst/Gvl", "${mv.len} / ${mv.rst} / ${mv.gvl}")
+                    DebugRow("Sequences", mv.miNumSequences.toString())
+                    if (mv.miComment.isNotBlank()) DebugRow("Comment", mv.miComment.take(32))
+                }
+
+                Column(
+                    modifier = Modifier.weight(1f),
+                    verticalArrangement = Arrangement.spacedBy(1.dp),
+                ) {
+                    DebugHeader("FrameInfo")
+                    DebugRow("Pos/Pat/Row", "${fi.pos} / ${fi.pattern} / ${fi.row}")
+                    DebugRow("Speed/BPM", "${fi.speed} / ${fi.bpm}")
+                    DebugRow("Time/Total", "${fi.time} / ${fi.totalTime}")
+                    DebugRow("Loop/Seq", "${fi.loopCount} / ${fi.sequence}")
+                    DebugRow("VChn used", "${fi.virtUsed} / ${fi.virtChannels}")
+                }
+            }
+
+            if (numChannels > 0) {
+                Spacer(Modifier.height(6.dp))
+                DebugHeader("Channel Info")
+
+                val ci = channelSnapshot
+                val mono = TextStyle(
+                    fontSize = 8.sp,
+                    lineHeight = 11.sp,
+                    fontFamily = FontFamily.Monospace,
+                    platformStyle = PlatformTextStyle(includeFontPadding = false),
+                    lineHeightStyle = LineHeightStyle(
+                        alignment = LineHeightStyle.Alignment.Center,
+                        trim = LineHeightStyle.Trim.Both,
+                    ),
+                )
+                val hdrColor = MaterialTheme.colorScheme.primary
+                val cellColor = MaterialTheme.colorScheme.onSurface
+
+                Row(modifier = Modifier.horizontalScroll(rememberScrollState())) {
+                    Column {
+                        // Header
                         Row {
-                            Text(
-                                text = "%02X ".format(rowIdx),
-                                style = patternTextStyle,
-                                fontWeight = if (isCurrent) FontWeight.Bold else FontWeight.Normal,
-                                color = when {
-                                    isCurrent -> MaterialTheme.colorScheme.primary
-
-                                    rowIdx % 4 == 0 -> MaterialTheme.colorScheme.onSurface.copy(
-                                        alpha = 0.8f
-                                    )
-
-                                    else -> MaterialTheme.colorScheme.onSurface.copy(alpha = 0.4f)
-                                },
-                            )
-                            row.forEach { cell ->
-                                Text(
-                                    text = "${cell.noteStr}${cell.instrumentStr}" +
-                                        "${cell.effectTypeChar}${cell.effectParamStr} ",
-                                    style = patternTextStyle,
-                                    color = when {
-                                        isCurrent -> MaterialTheme.colorScheme.primary
-
-                                        cell.isEmpty -> MaterialTheme.colorScheme.onSurface.copy(
-                                            alpha = 0.2f
-                                        )
-
-                                        else -> MaterialTheme.colorScheme.onSurface
-                                    },
-                                )
+                            DebugCell("Ch",    4, mono, hdrColor)
+                            DebugCell("Note",  5, mono, hdrColor)
+                            DebugCell("Ins",   4, mono, hdrColor)
+                            DebugCell("Smp",   4, mono, hdrColor)
+                            DebugCell("Vol",   4, mono, hdrColor)
+                            DebugCell("FVol",  5, mono, hdrColor)
+                            DebugCell("Pan",   4, mono, hdrColor)
+                            DebugCell("Period",7, mono, hdrColor)
+                            DebugCell("Pos",   9, mono, hdrColor)
+                            DebugCell("Bend",  6, mono, hdrColor)
+                        }
+                        for (i in 0 until numChannels) {
+                            Row {
+                                DebugCell("%2d".format(i + 1),              4, mono, cellColor)
+                                DebugCell(noteStr(ci.notes[i]),             5, mono, cellColor)
+                                DebugCell("%3d".format(ci.instruments[i]),  4, mono, cellColor)
+                                DebugCell("%3d".format(ci.samples[i]),      4, mono, cellColor)
+                                DebugCell("%3d".format(ci.volumes[i]),      4, mono, cellColor)
+                                DebugCell("%4d".format(ci.finalVols[i]),    5, mono, cellColor)
+                                DebugCell("%3d".format(ci.pans[i]),         4, mono, cellColor)
+                                DebugCell("%6d".format(ci.periods[i]),      7, mono, cellColor)
+                                DebugCell("%8d".format(ci.positions[i]),    9, mono, cellColor)
+                                DebugCell("%5d".format(ci.pitchbends[i]),   6, mono, cellColor)
                             }
                         }
                     }
                 }
             }
         }
+
+//        HorizontalDivider()
+
+//        Column(
+//            modifier = Modifier
+//                .weight(1f)
+//                .fillMaxWidth()
+//                .verticalScroll(rememberScrollState())
+//                .padding(horizontal = 6.dp, vertical = 4.dp),
+//        ) {
+//            DebugHeader(
+//                "Pat #${patternData.patternIndex}  ${patternData.numRows}r × ${patternData.numChannels}ch"
+//            )
+//            Row(modifier = Modifier.horizontalScroll(rememberScrollState())) {
+//                Column {
+//                    patternData.cells.forEachIndexed { rowIdx, row ->
+//                        val isCurrent = patternData.patternIndex == fi.pattern && rowIdx == fi.row
+//                        Row {
+//                            Text(
+//                                text = "%02X ".format(rowIdx),
+//                                style = patternTextStyle,
+//                                fontWeight = if (isCurrent) FontWeight.Bold else FontWeight.Normal,
+//                                color = when {
+//                                    isCurrent -> MaterialTheme.colorScheme.primary
+//                                    rowIdx % 4 == 0 -> MaterialTheme.colorScheme.onSurface.copy(alpha = 0.8f)
+//                                    else -> MaterialTheme.colorScheme.onSurface.copy(alpha = 0.4f)
+//                                },
+//                            )
+//                            row.forEach { cell ->
+//                                Text(
+//                                    text = "${cell.noteStr}${cell.instrumentStr}" +
+//                                        "${cell.effectTypeChar}${cell.effectParamStr} ",
+//                                    style = patternTextStyle,
+//                                    color = when {
+//                                        isCurrent -> MaterialTheme.colorScheme.primary
+//                                        cell.isEmpty -> MaterialTheme.colorScheme.onSurface.copy(alpha = 0.2f)
+//                                        else -> MaterialTheme.colorScheme.onSurface
+//                                    },
+//                                )
+//                            }
+//                        }
+//                    }
+//                }
+//            }
+//        }
     }
+}
+
+@Composable
+private fun DebugCell(text: String, minChars: Int, style: TextStyle, color: androidx.compose.ui.graphics.Color) {
+    Text(
+        text = text.padEnd(minChars),
+        style = style,
+        color = color,
+        modifier = Modifier.padding(end = 4.dp),
+    )
 }
 
 @Composable
@@ -199,21 +287,18 @@ private fun Preview() {
                     fxType = 0,
                     fxParam = 0
                 )
-
                 row == 2 && ch == 1 -> NoteCell(
                     note = 52,
                     instrument = 2,
                     fxType = 10,
                     fxParam = 0xF0
                 )
-
                 row == 6 && ch == 5 -> NoteCell(
                     note = 0x80,
                     instrument = 0,
                     fxType = -1,
                     fxParam = 0
                 )
-
                 else -> NoteCell(note = 0, instrument = 0, fxType = -1, fxParam = 0)
             }
         }.toImmutableList()
@@ -251,6 +336,7 @@ private fun Preview() {
                 numRows = 16,
                 patternIndex = 3,
             ),
+            isPlaying = true,
         )
     }
 }

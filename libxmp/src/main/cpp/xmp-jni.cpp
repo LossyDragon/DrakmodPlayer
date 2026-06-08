@@ -33,8 +33,9 @@ inline std::string sanitizeForJni(const char* src) {
   if (!src) return "";
   std::string out;
   out.reserve(strlen(src));
-  for (const auto* p = reinterpret_cast<const unsigned char*>(src); *p; ++p)
+  for (const auto* p = reinterpret_cast<const unsigned char*>(src); *p; ++p) {
     out += (*p < 0x80) ? static_cast<char>(*p) : '?';
+  }
   return out;
 }
 
@@ -86,6 +87,10 @@ static struct channel_info {
   jfieldID keys = nullptr;
   jfieldID periods = nullptr;
   jfieldID holdVols = nullptr;
+  jfieldID positions = nullptr;
+  jfieldID pitchbends = nullptr;
+  jfieldID notes = nullptr;
+  jfieldID samples = nullptr;
 } channel_info;
 
 static struct mod_vars {
@@ -179,13 +184,8 @@ namespace {
     xmp_module_info mi{};
 
     std::array<int, XMP_MAX_CHANNELS> cur_vol{};
-    std::array<int, XMP_MAX_CHANNELS> final_vol{};
     std::array<int, XMP_MAX_CHANNELS> hold_vol{};
-    std::array<int, XMP_MAX_CHANNELS> ins{};
-    std::array<int, XMP_MAX_CHANNELS> key{};
     std::array<int, XMP_MAX_CHANNELS> last_key{};
-    std::array<int, XMP_MAX_CHANNELS> pan{};
-    std::array<int, XMP_MAX_CHANNELS> period{};
     std::array<int, XMP_MAX_CHANNELS> pos{};
 
   private:
@@ -217,6 +217,10 @@ namespace {
     GET_FIELD(channel_info, keys, "[I");
     GET_FIELD(channel_info, periods, "[I");
     GET_FIELD(channel_info, holdVols, "[I");
+    GET_FIELD(channel_info, positions, "[I");
+    GET_FIELD(channel_info, pitchbends, "[I");
+    GET_FIELD(channel_info, notes, "[I");
+    GET_FIELD(channel_info, samples, "[I");
   }
 
   void initFrameInfoFields(JNIEnv* env) {
@@ -255,7 +259,6 @@ namespace {
     GET_FIELD(sequence_info, duration, "I");
   }
 
-  // TODO verify all fields
   void initModVarsFields(JNIEnv* env) {
     if (mod_vars.clazz != nullptr) return;
     GET_CLASS(mod_vars, "org/helllabs/libxmp/model/ModVars");
@@ -486,7 +489,6 @@ METHOD(jint, startPlayer)(JNIEnv* env, jobject obj, jint rate, jint format) {
     return -101;
   }
 
-  state.key.fill(-1);
   state.last_key.fill(-1);
 
   state.before = 0;
@@ -599,30 +601,53 @@ METHOD(jint, mute)(JNIEnv* env, jobject obj, jint chn, jint status) {
 METHOD(void, getFrameInfo)(JNIEnv* env, jobject obj, jobject frameInfo) {
   XmpPlayerState& state = XmpPlayerState::instance();
 
-  if (!state.mod_is_loaded) return;
+  if (!state.initialized) return;
 
-  std::unique_lock<std::mutex> lock = state.lock();
+  struct Snap {
+    int pos, pattern, row, numRows, frame, speed, bpm, time, totalTime;
+    int frameTime, bufferSize, totalSize, volume, loopCount, virtChannels, virtUsed, sequence;
+  } s{};
 
-  if (state.playing) {
+  {
+    std::unique_lock<std::mutex> lock = state.lock();
+    if (!state.mod_is_loaded || !state.playing) return;
     const xmp_frame_info& fi = state.fi.get()[state.before];
-    env->SetIntField(frameInfo, frame_info.pos, fi.pos);
-    env->SetIntField(frameInfo, frame_info.pattern, fi.pattern);
-    env->SetIntField(frameInfo, frame_info.row, fi.row);
-    env->SetIntField(frameInfo, frame_info.numRows, fi.num_rows);
-    env->SetIntField(frameInfo, frame_info.frame, fi.frame);
-    env->SetIntField(frameInfo, frame_info.speed, fi.speed);
-    env->SetIntField(frameInfo, frame_info.bpm, fi.bpm);
-    env->SetIntField(frameInfo, frame_info.time, fi.time);
-    env->SetIntField(frameInfo, frame_info.totalTime, fi.total_time);
-    env->SetIntField(frameInfo, frame_info.frameTime, fi.frame_time);
-    env->SetIntField(frameInfo, frame_info.bufferSize, fi.buffer_size);
-    env->SetIntField(frameInfo, frame_info.totalSize, fi.total_size);
-    env->SetIntField(frameInfo, frame_info.volume, fi.volume);
-    env->SetIntField(frameInfo, frame_info.loopCount, fi.loop_count);
-    env->SetIntField(frameInfo, frame_info.virtChannels, fi.virt_channels);
-    env->SetIntField(frameInfo, frame_info.virtUsed, fi.virt_used);
-    env->SetIntField(frameInfo, frame_info.sequence, fi.sequence);
+    s = {fi.pos,
+      fi.pattern,
+      fi.row,
+      fi.num_rows,
+      fi.frame,
+      fi.speed,
+      fi.bpm,
+      fi.time,
+      fi.total_time,
+      fi.frame_time,
+      fi.buffer_size,
+      fi.total_size,
+      fi.volume,
+      fi.loop_count,
+      fi.virt_channels,
+      fi.virt_used,
+      fi.sequence};
   }
+
+  env->SetIntField(frameInfo, frame_info.pos, s.pos);
+  env->SetIntField(frameInfo, frame_info.pattern, s.pattern);
+  env->SetIntField(frameInfo, frame_info.row, s.row);
+  env->SetIntField(frameInfo, frame_info.numRows, s.numRows);
+  env->SetIntField(frameInfo, frame_info.frame, s.frame);
+  env->SetIntField(frameInfo, frame_info.speed, s.speed);
+  env->SetIntField(frameInfo, frame_info.bpm, s.bpm);
+  env->SetIntField(frameInfo, frame_info.time, s.time);
+  env->SetIntField(frameInfo, frame_info.totalTime, s.totalTime);
+  env->SetIntField(frameInfo, frame_info.frameTime, s.frameTime);
+  env->SetIntField(frameInfo, frame_info.bufferSize, s.bufferSize);
+  env->SetIntField(frameInfo, frame_info.totalSize, s.totalSize);
+  env->SetIntField(frameInfo, frame_info.volume, s.volume);
+  env->SetIntField(frameInfo, frame_info.loopCount, s.loopCount);
+  env->SetIntField(frameInfo, frame_info.virtChannels, s.virtChannels);
+  env->SetIntField(frameInfo, frame_info.virtUsed, s.virtUsed);
+  env->SetIntField(frameInfo, frame_info.sequence, s.sequence);
 }
 
 METHOD(jint, setPlayer)(JNIEnv* env, jobject obj, jint parm, jint value) {
@@ -639,62 +664,87 @@ METHOD(jint, getPlayer)(JNIEnv* env, jobject obj, jint parm) {
 
 METHOD(void, getModVars)(JNIEnv* env, jobject obj, jobject modVars) {
   XmpPlayerState& state = XmpPlayerState::instance();
-  int tid = get_thread_id();
 
   if (!state.initialized) {
-    LOG_WARN("getModVars() - early exit: not initialized - tid: %d", tid);
+    LOG_WARN("getModVars() - early exit: not initialized - tid: %d", get_thread_id());
     return;
   }
 
-  std::unique_lock<std::mutex> lock = state.lock();
+  std::string modName, modType, modComment;
+  int pat, trk, chn, ins, smp, spd, bpm, len, rst, gvl, numSeq;
+  struct SeqEntry {
+    int entryPoint, duration;
+  };
+  std::vector<SeqEntry> seqs;
+  std::vector<std::string> instrNames;
 
-  if (!state.mod_is_loaded) {
-    LOG_WARN("getModVars() - module not loaded - tid: %d", tid);
-    return;
+  {
+    std::unique_lock<std::mutex> lock = state.lock();
+    if (!state.mod_is_loaded) {
+      LOG_WARN("getModVars() - module not loaded - tid: %d", get_thread_id());
+      return;
+    }
+    const xmp_module_info& mi = state.mi;
+    modName = sanitizeForJni(mi.mod->name);
+    modType = sanitizeForJni(mi.mod->type);
+    modComment = sanitizeForJni(mi.comment);
+    pat = mi.mod->pat;
+    trk = mi.mod->trk;
+    chn = mi.mod->chn;
+    ins = mi.mod->ins;
+    smp = mi.mod->smp;
+    spd = mi.mod->spd;
+    bpm = mi.mod->bpm;
+    len = mi.mod->len;
+    rst = mi.mod->rst;
+    gvl = mi.mod->gvl;
+    numSeq = mi.num_sequences;
+    if (mi.seq_data) {
+      seqs.reserve(numSeq);
+      for (int i = 0; i < numSeq; i++) seqs.push_back({mi.seq_data[i].entry_point, mi.seq_data[i].duration});
+    }
+    instrNames.reserve(ins);
+    for (int i = 0; i < ins; i++) {
+      std::array<char, 64> buf{};
+      snprintf(buf.data(), buf.size(), "%02X %s", i + 1, sanitizeForJni(mi.mod->xxi[i].name).c_str());
+      instrNames.emplace_back(buf.data());
+    }
   }
 
-  const xmp_module_info& mi = state.mi;
-  int seq = state.sequence;
-
-  jstring nameStr = env->NewStringUTF(sanitizeForJni(mi.mod->name).c_str());
-  jstring typeStr = env->NewStringUTF(sanitizeForJni(mi.mod->type).c_str());
-  jstring commentStr = env->NewStringUTF(sanitizeForJni(mi.comment).c_str());
+  jstring nameStr = env->NewStringUTF(modName.c_str());
+  jstring typeStr = env->NewStringUTF(modType.c_str());
+  jstring commentStr = env->NewStringUTF(modComment.c_str());
 
   env->SetObjectField(modVars, mod_vars.name, nameStr);
   env->SetObjectField(modVars, mod_vars.type, typeStr);
-  env->SetIntField(modVars, mod_vars.pat, mi.mod->pat);
-  env->SetIntField(modVars, mod_vars.trk, mi.mod->trk);
-  env->SetIntField(modVars, mod_vars.chn, mi.mod->chn);
-  env->SetIntField(modVars, mod_vars.ins, mi.mod->ins);
-  env->SetIntField(modVars, mod_vars.smp, mi.mod->smp);
-  env->SetIntField(modVars, mod_vars.spd, mi.mod->spd);
-  env->SetIntField(modVars, mod_vars.bpm, mi.mod->bpm);
-  env->SetIntField(modVars, mod_vars.len, mi.mod->len);
-  env->SetIntField(modVars, mod_vars.rst, mi.mod->rst);
-  env->SetIntField(modVars, mod_vars.gvl, mi.mod->gvl);
-
-  env->SetIntField(modVars, mod_vars.miNumSequences, mi.num_sequences);
+  env->SetIntField(modVars, mod_vars.pat, pat);
+  env->SetIntField(modVars, mod_vars.trk, trk);
+  env->SetIntField(modVars, mod_vars.chn, chn);
+  env->SetIntField(modVars, mod_vars.ins, ins);
+  env->SetIntField(modVars, mod_vars.smp, smp);
+  env->SetIntField(modVars, mod_vars.spd, spd);
+  env->SetIntField(modVars, mod_vars.bpm, bpm);
+  env->SetIntField(modVars, mod_vars.len, len);
+  env->SetIntField(modVars, mod_vars.rst, rst);
+  env->SetIntField(modVars, mod_vars.gvl, gvl);
+  env->SetIntField(modVars, mod_vars.miNumSequences, numSeq);
   env->SetObjectField(modVars, mod_vars.miComment, commentStr);
 
-  int numSeq = mi.seq_data ? mi.num_sequences : 0;
   jclass seqCls = env->FindClass("org/helllabs/libxmp/model/Sequence");
-  jobjectArray seqArray = env->NewObjectArray(numSeq, seqCls, nullptr);
-  for (int i = 0; i < numSeq; i++) {
+  jobjectArray seqArray = env->NewObjectArray((jsize)seqs.size(), seqCls, nullptr);
+  for (int i = 0; i < (int)seqs.size(); i++) {
     jobject seqObj = env->AllocObject(seqCls);
-    env->SetIntField(seqObj, sequence_info.entryPoint, mi.seq_data[i].entry_point);
-    env->SetIntField(seqObj, sequence_info.duration, mi.seq_data[i].duration);
+    env->SetIntField(seqObj, sequence_info.entryPoint, seqs[i].entryPoint);
+    env->SetIntField(seqObj, sequence_info.duration, seqs[i].duration);
     env->SetObjectArrayElement(seqArray, i, seqObj);
     env->DeleteLocalRef(seqObj);
   }
   env->SetObjectField(modVars, mod_vars.seqData, seqArray);
 
   jclass stringClass = env->FindClass("java/lang/String");
-  jobjectArray insArray = env->NewObjectArray(mi.mod->ins, stringClass, nullptr);
-  for (int i = 0; i < mi.mod->ins; i++) {
-    std::string insName = sanitizeForJni(mi.mod->xxi[i].name);
-    std::array<char, 64> buf{};
-    snprintf(buf.data(), buf.size(), "%02X %s", i + 1, insName.c_str());
-    jstring s = env->NewStringUTF(buf.data());
+  jobjectArray insArray = env->NewObjectArray(ins, stringClass, nullptr);
+  for (int i = 0; i < ins; i++) {
+    jstring s = env->NewStringUTF(instrNames[i].c_str());
     env->SetObjectArrayElement(insArray, i, s);
     env->DeleteLocalRef(s);
   }
@@ -729,77 +779,75 @@ METHOD(jobjectArray, getFormats)(JNIEnv* env, jobject obj) {
   return result;
 }
 
-
 METHOD(void, getChannelData)(JNIEnv* env, jobject obj, jobject channelInfo) {
   XmpPlayerState& state = XmpPlayerState::instance();
-  int tid = get_thread_id();
 
   if (!state.initialized) {
-    LOG_WARN("getChannelData() - early exit: not initialized - tid: %d", tid);
+    LOG_WARN("getChannelData() - early exit: not initialized - tid: %d", get_thread_id());
     return;
   }
 
-  std::unique_lock<std::mutex> lock = state.lock();
+  int chn = 0;
+  std::array<int, XMP_MAX_CHANNELS> lVol{}, lFinalVol{}, lPan{}, lIns{};
+  std::array<int, XMP_MAX_CHANNELS> lKey{}, lPeriod{}, lHoldVol{};
+  std::array<int, XMP_MAX_CHANNELS> lPosition{}, lPitchbend{}, lNote{}, lSample{};
 
-  if (!state.mod_is_loaded || !state.playing) return;
+  {
+    std::unique_lock<std::mutex> lock = state.lock();
+    if (!state.mod_is_loaded || !state.playing) return;
 
-  const xmp_module_info& mi = state.mi;
-  int chn = mi.mod->chn;
-  const xmp_frame_info& fi = state.fi.get()[state.before];
+    const xmp_module_info& mi = state.mi;
+    chn = mi.mod->chn;
+    const xmp_frame_info& fi = state.fi.get()[state.before];
 
-  auto& cur_vol = state.cur_vol;
-  auto& final_vol = state.final_vol;
-  auto& hold_vol = state.hold_vol;
-  auto& ins = state.ins;
-  auto& key = state.key;
-  auto& last_key = state.last_key;
-  auto& pan = state.pan;
-  auto& period = state.period;
+    for (int i = 0; i < chn; i++) {
+      const xmp_channel_info& ci = fi.channel_info[i];
 
-  for (int i = 0; i < chn; i++) {
-    const xmp_channel_info& ci = fi.channel_info[i];
+      if (ci.event.vol > 0) state.hold_vol[i] = ci.event.vol * 0x40 / mi.vol_base;
 
-    if (ci.event.vol > 0) hold_vol[i] = ci.event.vol * 0x40 / mi.vol_base;
+      state.cur_vol[i] = std::max(0, state.cur_vol[i] - state.decay);
 
-    cur_vol[i] -= state.decay;
-    cur_vol[i] = std::max(0, cur_vol[i]);
-
-    if (ci.event.note > 0 && ci.event.note <= 0x80) {
-      key[i] = ci.event.note - 1;
-      last_key[i] = key[i];
-      if (xmp_subinstrument* sub = getSubinstrument(mi, ci.instrument, key[i])) {
-        cur_vol[i] = sub->vol * 0x40 / mi.vol_base;
+      int key = -1;
+      if (ci.event.note > 0 && ci.event.note <= 0x80) {
+        key = ci.event.note - 1;
+        state.last_key[i] = key;
+        if (xmp_subinstrument* sub = getSubinstrument(mi, ci.instrument, key)) state.cur_vol[i] = sub->vol * 0x40 / mi.vol_base;
       }
-    } else {
-      key[i] = -1;
-    }
+      if (ci.event.vol > 0) {
+        key = state.last_key[i];
+        state.cur_vol[i] = ci.event.vol * 0x40 / mi.vol_base;
+      }
 
-    if (ci.event.vol > 0) {
-      key[i] = last_key[i];
-      cur_vol[i] = ci.event.vol * 0x40 / mi.vol_base;
+      lVol[i] = state.cur_vol[i];
+      lHoldVol[i] = state.hold_vol[i];
+      lKey[i] = key;
+      lIns[i] = static_cast<unsigned char>(ci.instrument);
+      lFinalVol[i] = ci.volume;
+      lPan[i] = ci.pan;
+      lPeriod[i] = static_cast<int>(ci.period) >> 8;
+      lPosition[i] = static_cast<int>(ci.position);
+      lPitchbend[i] = static_cast<int>(ci.pitchbend);
+      lNote[i] = static_cast<int>(ci.note);
+      lSample[i] = static_cast<int>(ci.sample);
     }
-
-    ins[i] = static_cast<int>(static_cast<unsigned char>(ci.instrument));
-    final_vol[i] = ci.volume;
-    pan[i] = ci.pan;
-    period[i] = static_cast<int>(ci.period) >> 8;
   }
 
-  auto vol = (jintArray)env->GetObjectField(channelInfo, channel_info.volumes);
-  auto finalVols = (jintArray)env->GetObjectField(channelInfo, channel_info.finalVols);
-  auto pans = (jintArray)env->GetObjectField(channelInfo, channel_info.pans);
-  auto instruments = (jintArray)env->GetObjectField(channelInfo, channel_info.instruments);
-  auto keys = (jintArray)env->GetObjectField(channelInfo, channel_info.keys);
-  auto periods = (jintArray)env->GetObjectField(channelInfo, channel_info.periods);
-  auto holdVols = (jintArray)env->GetObjectField(channelInfo, channel_info.holdVols);
+  auto set = [&](jfieldID fid, const std::array<int, XMP_MAX_CHANNELS>& arr) {
+    auto obj = (jintArray)env->GetObjectField(channelInfo, fid);
+    env->SetIntArrayRegion(obj, 0, chn, arr.data());
+  };
 
-  env->SetIntArrayRegion(vol, 0, chn, cur_vol.data());
-  env->SetIntArrayRegion(finalVols, 0, chn, final_vol.data());
-  env->SetIntArrayRegion(pans, 0, chn, pan.data());
-  env->SetIntArrayRegion(instruments, 0, chn, ins.data());
-  env->SetIntArrayRegion(keys, 0, chn, key.data());
-  env->SetIntArrayRegion(periods, 0, chn, period.data());
-  env->SetIntArrayRegion(holdVols, 0, chn, hold_vol.data());
+  set(channel_info.volumes, lVol);
+  set(channel_info.finalVols, lFinalVol);
+  set(channel_info.pans, lPan);
+  set(channel_info.instruments, lIns);
+  set(channel_info.keys, lKey);
+  set(channel_info.periods, lPeriod);
+  set(channel_info.holdVols, lHoldVol);
+  set(channel_info.positions, lPosition);
+  set(channel_info.pitchbends, lPitchbend);
+  set(channel_info.notes, lNote);
+  set(channel_info.samples, lSample);
 }
 
 METHOD(jint, getPatternRows)(JNIEnv* env, jobject obj, jint pat) {
@@ -863,14 +911,10 @@ METHOD(void, getPatternRow)(JNIEnv* env, jobject obj, jint pat, jint row, jbyteA
 METHOD(void, getSampleData)(JNIEnv* env, jobject obj, jboolean trigger, jint ins, jint key, jint period, jint chn, jint width, jbyteArray buffer) {
   XmpPlayerState& state = XmpPlayerState::instance();
 
-  // Clamp before any early exit — keeps SetByteArrayRegion in bounds for every path.
   width = std::min(width, MAX_BUFFER_SIZE);
 
-  // Zero-init covers the non-loop tail and all early-return paths without separate fills.
   std::array<jbyte, MAX_BUFFER_SIZE> sample_buffer{};
 
-  // Compute under lock, then write to the Java array outside — JNI array writes
-  // must not be made while holding a native mutex (GC pin/unpin may be needed).
   [&]() {
     std::unique_lock<std::mutex> lock = state.lock();
 

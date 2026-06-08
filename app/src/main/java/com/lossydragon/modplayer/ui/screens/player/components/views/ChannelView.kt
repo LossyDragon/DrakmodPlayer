@@ -1,36 +1,26 @@
 package com.lossydragon.modplayer.ui.screens.player.components.views
 
-import androidx.compose.animation.core.Animatable
-import androidx.compose.animation.core.exponentialDecay
-import androidx.compose.foundation.Canvas
-import androidx.compose.foundation.gestures.awaitEachGesture
-import androidx.compose.foundation.gestures.awaitFirstDown
-import androidx.compose.foundation.gestures.calculatePan
-import androidx.compose.foundation.gestures.calculateZoom
-import androidx.compose.foundation.gestures.detectTapGestures
-import androidx.compose.foundation.layout.fillMaxSize
-import androidx.compose.material3.MaterialTheme
+import androidx.compose.animation.core.*
+import androidx.compose.foundation.*
+import androidx.compose.foundation.gestures.*
+import androidx.compose.foundation.layout.*
+import androidx.compose.material3.*
 import androidx.compose.runtime.*
-import androidx.compose.ui.Modifier
-import androidx.compose.ui.draw.clipToBounds
-import androidx.compose.ui.geometry.Offset
-import androidx.compose.ui.geometry.Size
+import androidx.compose.ui.*
+import androidx.compose.ui.draw.*
+import androidx.compose.ui.geometry.*
 import androidx.compose.ui.graphics.*
-import androidx.compose.ui.graphics.drawscope.Stroke
-import androidx.compose.ui.graphics.drawscope.clipRect
-import androidx.compose.ui.input.pointer.pointerInput
-import androidx.compose.ui.input.pointer.util.VelocityTracker
-import androidx.compose.ui.input.pointer.util.addPointerInputChange
-import androidx.compose.ui.platform.LocalDensity
+import androidx.compose.ui.graphics.drawscope.*
+import androidx.compose.ui.input.pointer.*
+import androidx.compose.ui.input.pointer.util.*
+import androidx.compose.ui.platform.*
 import androidx.compose.ui.text.*
-import androidx.compose.ui.text.font.FontFamily
-import androidx.compose.ui.tooling.preview.Preview
-import androidx.compose.ui.unit.dp
-import androidx.compose.ui.unit.sp
+import androidx.compose.ui.text.font.*
+import androidx.compose.ui.tooling.preview.*
+import androidx.compose.ui.unit.*
 import com.lossydragon.modplayer.ui.theme.AppTheme
 import com.materialkolor.ktx.darken
 import com.materialkolor.ktx.lighten
-import kotlin.time.Duration.Companion.milliseconds
 import kotlinx.collections.immutable.ImmutableList
 import kotlinx.collections.immutable.toPersistentList
 import kotlinx.coroutines.Dispatchers
@@ -40,6 +30,7 @@ import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import org.helllabs.libxmp.Xmp
 import org.helllabs.libxmp.model.ChannelInfo
+import kotlin.time.Duration.Companion.milliseconds
 
 /** PCM samples requested per channel per frame - matches getSampleData buffer width. */
 private const val WAVEFORM_SAMPLES = 256
@@ -174,6 +165,10 @@ fun ChannelView(
                     keys = channelInfoBuffer.keys.copyOf(),
                     periods = channelInfoBuffer.periods.copyOf(),
                     holdVols = channelInfoBuffer.holdVols.copyOf(),
+                    positions = channelInfoBuffer.positions.copyOf(),
+                    pitchbends = channelInfoBuffer.pitchbends.copyOf(),
+                    notes = channelInfoBuffer.notes.copyOf(),
+                    samples = channelInfoBuffer.samples.copyOf(),
                 )
                 waveformSnapshot = Array(numChannels) { waveformBuffers[it].copyOf() }
             }
