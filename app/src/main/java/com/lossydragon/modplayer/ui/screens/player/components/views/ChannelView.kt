@@ -82,12 +82,11 @@ fun rememberDefaultChannelViewColors(): ChannelViewColors {
     }
 }
 
-// TODO check Mute status
-
 @Composable
 fun ChannelView(
     numChannels: Int,
     instrumentNames: ImmutableList<String>,
+    isPlaying: Boolean,
     modifier: Modifier = Modifier,
     colors: ChannelViewColors = rememberDefaultChannelViewColors()
 ) {
@@ -114,6 +113,7 @@ fun ChannelView(
             repeat(numChannels) { i -> add(Xmp.mute(i, -1) == 1) }
         }
     }
+    val isPlayingState = rememberUpdatedState(isPlaying)
     var soloChannel by remember { mutableIntStateOf(-1) }
 
     // Gesture state
@@ -132,49 +132,51 @@ fun ChannelView(
         if (numChannels == 0) return@LaunchedEffect
 
         while (isActive) {
-            withContext(Dispatchers.Default) {
-                Xmp.getChannelData(channelInfoBuffer)
+            if (isPlayingState.value) {
+                withContext(Dispatchers.Default) {
+                    Xmp.getChannelData(channelInfoBuffer)
 
-                for (i in 0 until numChannels) {
-                    val period = channelInfoBuffer.periods[i]
-                    val volume = channelInfoBuffer.volumes[i]
-                    val finalVol = channelInfoBuffer.finalVols[i]
-                    val key = channelInfoBuffer.keys[i]
-                    val ins = channelInfoBuffer.instruments[i]
+                    for (i in 0 until numChannels) {
+                        val period = channelInfoBuffer.periods[i]
+                        val volume = channelInfoBuffer.volumes[i]
+                        val finalVol = channelInfoBuffer.finalVols[i]
+                        val key = channelInfoBuffer.keys[i]
+                        val ins = channelInfoBuffer.instruments[i]
 
-                    if (period <= 0 || (volume == 0 && finalVol == 0)) {
-                        waveformBuffers[i].fill(0)
-                        continue
+                        if (period <= 0 || (volume == 0 && finalVol == 0)) {
+                            waveformBuffers[i].fill(0)
+                            continue
+                        }
+
+                        // Trigger waveform oscilloscope sync only on real note-on events.
+                        val trigger = key >= 0 && (key != prevKey[i] || ins != prevInstrument[i])
+                        if (key >= 0) prevKey[i] = key
+                        prevInstrument[i] = ins
+
+                        Xmp.getSampleData(
+                            trigger = trigger,
+                            ins = ins,
+                            key = prevKey[i],
+                            period = period,
+                            chn = i,
+                            width = WAVEFORM_SAMPLES,
+                            buffer = waveformBuffers[i],
+                        )
                     }
-
-                    // Trigger waveform oscilloscope sync only on real note-on events.
-                    val trigger = key >= 0 && (key != prevKey[i] || ins != prevInstrument[i])
-                    if (key >= 0) prevKey[i] = key
-                    prevInstrument[i] = ins
-
-                    Xmp.getSampleData(
-                        trigger = trigger,
-                        ins = ins,
-                        key = prevKey[i],
-                        period = period,
-                        chn = i,
-                        width = WAVEFORM_SAMPLES,
-                        buffer = waveformBuffers[i],
-                    )
                 }
-            }
 
-            // Publish to Canvas on Main. copyOf prevents the JNI from racing the Canvas reader.
-            channelSnapshot = ChannelInfo(
-                volumes = channelInfoBuffer.volumes.copyOf(),
-                finalVols = channelInfoBuffer.finalVols.copyOf(),
-                pans = channelInfoBuffer.pans.copyOf(),
-                instruments = channelInfoBuffer.instruments.copyOf(),
-                keys = channelInfoBuffer.keys.copyOf(),
-                periods = channelInfoBuffer.periods.copyOf(),
-                holdVols = channelInfoBuffer.holdVols.copyOf(),
-            )
-            waveformSnapshot = Array(numChannels) { waveformBuffers[it].copyOf() }
+                // Publish to Canvas on Main. copyOf prevents the JNI from racing the Canvas reader.
+                channelSnapshot = ChannelInfo(
+                    volumes = channelInfoBuffer.volumes.copyOf(),
+                    finalVols = channelInfoBuffer.finalVols.copyOf(),
+                    pans = channelInfoBuffer.pans.copyOf(),
+                    instruments = channelInfoBuffer.instruments.copyOf(),
+                    keys = channelInfoBuffer.keys.copyOf(),
+                    periods = channelInfoBuffer.periods.copyOf(),
+                    holdVols = channelInfoBuffer.holdVols.copyOf(),
+                )
+                waveformSnapshot = Array(numChannels) { waveformBuffers[it].copyOf() }
+            }
 
             delay(20.milliseconds) // ~50fps
         }
@@ -542,6 +544,7 @@ private fun PreviewChannelView() {
         ChannelView(
             numChannels = 0,
             instrumentNames = emptyList<String>().toPersistentList(),
+            isPlaying = false,
             modifier = Modifier.fillMaxSize(),
         )
     }

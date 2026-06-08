@@ -391,6 +391,7 @@ private fun PlayerScreenContent(
                         modifier = Modifier.fillMaxSize(),
                         numChannels = state.modVars.chn,
                         instrumentNames = state.modVars.instruments.toPersistentList(),
+                        isPlaying = state.status == PlaybackStatus.PLAYING,
                     )
 
                     2 -> DebugView(
