@@ -53,10 +53,15 @@ class PlayerService : MediaLibraryService() {
     override fun onCreate() {
         super.onCreate()
 
+        val intent = Intent(this, MainActivity::class.java)
+            .apply { flags = Intent.FLAG_ACTIVITY_SINGLE_TOP }
+        val flags = PendingIntent.FLAG_IMMUTABLE or PendingIntent.FLAG_UPDATE_CURRENT
+        val sessionActivity = PendingIntent.getActivity(this, 0, intent, flags)
+
         mediaLibrarySession = MediaLibrarySession
             .Builder(this, player, browseCallback)
             .setId(getString(R.string.app_name) + "_session")
-            .setSessionActivity(buildSessionActivity())
+            .setSessionActivity(sessionActivity)
             .build()
 
         DefaultMediaNotificationProvider.Builder(this)
@@ -72,14 +77,12 @@ class PlayerService : MediaLibraryService() {
             }
         }.also(::setListener)
 
-        scope.launch(Dispatchers.Main) {
-            player.restoreQueue()
-        }
+        scope.launch(Dispatchers.Main) { player.restoreQueue() }
     }
 
     override fun onDestroy() {
-        player.abandonAudioFocus()
         mediaLibrarySession.release()
+        player.abandonAudioFocus()
         player.releaseEngine()
         scope.cancel()
         super.onDestroy()
@@ -93,15 +96,4 @@ class PlayerService : MediaLibraryService() {
     }
 
     override fun onGetSession(controllerInfo: MediaSession.ControllerInfo) = mediaLibrarySession
-
-    /** PendingIntent that brings MainActivity to the foreground when the notification is tapped. */
-    private fun buildSessionActivity(): PendingIntent =
-        PendingIntent.getActivity(
-            this,
-            0,
-            Intent(this, MainActivity::class.java).apply {
-                flags = Intent.FLAG_ACTIVITY_SINGLE_TOP
-            },
-            PendingIntent.FLAG_IMMUTABLE or PendingIntent.FLAG_UPDATE_CURRENT,
-        )
 }

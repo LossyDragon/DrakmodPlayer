@@ -1,14 +1,10 @@
 package com.lossydragon.modplayer.player
 
 import android.content.Context
-import androidx.core.net.toUri
 import com.lossydragon.modplayer.db.AppPreferences
 import com.lossydragon.modplayer.db.entity.ModuleEntity
-import com.lossydragon.modplayer.player.model.ChannelSnapshot
-import com.lossydragon.modplayer.player.model.FrameSnapshot
 import com.lossydragon.modplayer.player.model.NoteCell
 import com.lossydragon.modplayer.player.model.PatternData
-import com.lossydragon.modplayer.player.model.emptyPatternData
 import kotlinx.collections.immutable.toImmutableList
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
@@ -22,7 +18,6 @@ import kotlinx.coroutines.flow.launchIn
 import kotlinx.coroutines.flow.onEach
 import kotlinx.coroutines.runBlocking
 import org.helllabs.libxmp.Xmp
-import org.helllabs.libxmp.model.ChannelInfo
 import org.helllabs.libxmp.model.FrameInfo
 import org.helllabs.libxmp.model.ModInfo
 import org.helllabs.libxmp.model.ModVars
@@ -36,15 +31,14 @@ class PlayerEngine(
     private val prefs: AppPreferences
 ) {
 
-    /** Scope for preference observers. Cancelled only in [stop]. */
     private val scope = CoroutineScope(Dispatchers.Default + SupervisorJob())
 
     /** The dedicated thread running [renderLoop]. Null when stopped. */
     private var renderThread: Thread? = null
 
     /** Per-frame playback snapshot emitted by the render loop; null when idle. */
-    val frameFlow: StateFlow<FrameSnapshot?>
-        field = MutableStateFlow<FrameSnapshot?>(null)
+    val frameInfoFlow: StateFlow<FrameInfo>
+        field = MutableStateFlow<FrameInfo>(FrameInfo())
 
     /** True while the Oboe stream is actively rendering audio. */
     val isPlaying: StateFlow<Boolean>
@@ -54,34 +48,19 @@ class PlayerEngine(
     val positionMs: StateFlow<Long>
         field = MutableStateFlow(0L)
 
-    /** Duration of the current sequence in milliseconds. */
-    val durationMs: StateFlow<Long>
-        field = MutableStateFlow(0L)
-
     /** Index of the currently playing sequence within the loaded module. */
     val currentSequenceFlow: StateFlow<Int>
         field = MutableStateFlow(0)
 
+    val modVarsFlow: StateFlow<ModVars>
+        field = MutableStateFlow(ModVars())
+
     /** Lazily populated by [load] / [loadNext]; read by [renderLoop]. */
     private val patternCache = mutableMapOf<Int, PatternData>()
-    private val modVars = ModVars()
-    private val frameInfo = FrameInfo()
-    private val channelInfo = ChannelInfo()
-    private var currentSequence = 0
 
     /** When true, the render loop advances through all module sequences automatically. */
+    @Volatile
     var playAllSequences = false
-
-    val numPatterns: Int get() = modVars.numPatterns
-    val numChannels: Int get() = modVars.numChannels
-    val numInstruments: Int get() = modVars.numInstruments
-    val numSamples: Int get() = modVars.numSamples
-    val numSequences: Int get() = modVars.numSequence
-
-    /** Pre-allocated snapshot array; resized only when channel count changes. */
-    private var channelSnapshots = Array(64) { ChannelSnapshot(0, 0, 0, 0, 0, 0) }
-    private var channelSnapshotList = channelSnapshots.toImmutableList()
-    private var lastNumCh = -1
 
     /** True while playback is paused (stream is open but not rendering). */
     @Volatile
@@ -134,23 +113,21 @@ class PlayerEngine(
 
     /**
      * Switches to sequence [index] within the loaded module.
-     * Updates [durationMs], [positionMs], and [currentSequenceFlow] on success.
+     * Updates [positionMs] and [currentSequenceFlow] on success.
      *
      * @return true if the sequence index is valid and the switch succeeded.
      */
     fun setSequence(index: Int): Boolean {
         val result = Xmp.setSequence(index)
         if (result) {
-            Xmp.getModVars(modVars)
-            durationMs.value = modVars.seqDuration.toLong()
+            val mv = ModVars()
+            Xmp.getModVars(mv)
+            modVarsFlow.value = mv
             positionMs.value = 0L
             currentSequenceFlow.value = index
         }
         return result
     }
-
-    /** Returns the duration in milliseconds of each sequence in the loaded module. */
-    fun getSequenceDurations(): List<Int> = Xmp.getSeqVars().asList()
 
     /**
      * Full initialisation path: reads audio settings from prefs, inits the Oboe stream,
@@ -161,15 +138,15 @@ class PlayerEngine(
      * @return true on success; false if Oboe or libxmp init fails.
      */
     fun load(file: ModuleEntity): Boolean {
-        clearPatternCache()
-        resetSequenceState()
-
         if (initialized) {
             softStop()
+            clearPatternCache()
             Xmp.releaseModule()
         } else {
+            clearPatternCache()
             if (!initAudio()) return false
         }
+        resetSequenceState()
 
         applyPreLoadSettings()
 
@@ -185,12 +162,11 @@ class PlayerEngine(
      * @return true on success; false if libxmp cannot load the file.
      */
     fun loadNext(file: ModuleEntity): Boolean {
-        clearPatternCache()
-        resetSequenceState()
-
         if (!initialized) return load(file)
 
         softStop()
+        clearPatternCache()
+        resetSequenceState()
         Xmp.releaseModule()
         applyPreLoadSettings()
 
@@ -291,7 +267,7 @@ class PlayerEngine(
 
         isPlaying.value = false
         positionMs.value = 0L
-        frameFlow.value = null
+        frameInfoFlow.value = FrameInfo()
     }
 
     /**
@@ -299,10 +275,13 @@ class PlayerEngine(
      * Used by the pattern visualiser.
      */
     fun getPatternData(patternIndex: Int): PatternData =
-        patternCache.getOrPut(patternIndex) {
-            val numCh = modVars.numChannels
+        patternCache[patternIndex] ?: run {
+            val numCh = modVarsFlow.value.chn
             val numRows = Xmp.getPatternRows(patternIndex)
-            if (numCh == 0 || numRows == 0) return@getOrPut emptyPatternData()
+            // Don't cache invalid results — a race with module teardown can produce
+            // numRows=0 for a valid pattern. Leaving the entry absent lets the next
+            // recomposition retry rather than permanently serving a blank.
+            if (numCh == 0 || numRows == 0) return PatternData()
 
             val notes = ByteArray(64)
             val ins = ByteArray(64)
@@ -326,14 +305,13 @@ class PlayerEngine(
                 numChannels = numCh,
                 numRows = numRows,
                 patternIndex = patternIndex
-            )
+            ).also { patternCache[patternIndex] = it }
         }
 
     /** Resets sequence-tracking fields before loading a new module. */
     private fun resetSequenceState() {
         endedNaturally = false
         stopRequest = false
-        currentSequence = 0
         currentSequenceFlow.value = 0
     }
 
@@ -430,7 +408,7 @@ class PlayerEngine(
     }
 
     /**
-     * Loads [file] into libxmp, populates [modVars], and updates [durationMs].
+     * Loads [file] into libxmp and populates [modVarsFlow].
      *
      * @return true on success; on failure, de-inits and resets [initialized] only
      *   if this is a first-time load (i.e., [softStop] wasn't called).
@@ -446,8 +424,9 @@ class PlayerEngine(
             }
             return false
         }
-        Xmp.getModVars(modVars)
-        durationMs.value = modVars.seqDuration.toLong()
+        val mv = ModVars()
+        Xmp.getModVars(mv)
+        modVarsFlow.value = mv
         positionMs.value = 0L
         return true
     }
@@ -464,17 +443,19 @@ class PlayerEngine(
         Xmp.endPlayer()
         isPlaying.value = false
         positionMs.value = 0L
-        frameFlow.value = null
     }
 
     /** Clears the [patternCache] before loading a new module. */
-    private fun clearPatternCache() = patternCache.clear()
+    private fun clearPatternCache() {
+        patternCache.clear()
+        modVarsFlow.value = ModVars()
+        frameInfoFlow.value = FrameInfo()
+    }
 
     /** The loop! */
     private fun renderLoop() {
         while (!stopRequest) {
             try {
-                // Fast-path: sleep while paused - no JNI overhead.
                 if (paused) {
                     Thread.sleep(50)
                     continue
@@ -483,67 +464,41 @@ class PlayerEngine(
                 while (!Xmp.hasFreeBuffer() && !paused && !stopRequest) {
                     Thread.sleep(40)
                 }
+
                 if (stopRequest) break
 
                 val endReached = Xmp.fillBuffer(false) < 0
 
-                Xmp.getInfo(frameInfo)
-                Xmp.getChannelData(channelInfo)
+                val fi = FrameInfo()
+                Xmp.getFrameInfo(fi)
+                frameInfoFlow.value = fi
 
                 val timeMs = Xmp.time()
-                val numCh = modVars.numChannels.coerceIn(0, 64)
-
-                // Re-allocate snapshots only when the channel count changes.
-                if (numCh != lastNumCh) {
-                    channelSnapshots = Array(numCh) { ChannelSnapshot(0, 0, 0, 0, 0, 0) }
-                    lastNumCh = numCh
-                }
-
-                for (i in 0 until numCh) {
-                    channelSnapshots[i] = ChannelSnapshot(
-                        volume = channelInfo.volumes[i],
-                        finalVol = channelInfo.finalVols[i],
-                        pan = channelInfo.pans[i],
-                        instrument = channelInfo.instruments[i],
-                        note = channelInfo.keys[i],
-                        period = channelInfo.periods[i],
-                    )
-                }
-                channelSnapshotList = channelSnapshots.toImmutableList()
-
-                frameFlow.value = FrameSnapshot(
-                    position = frameInfo.pos,
-                    pattern = frameInfo.pattern,
-                    row = frameInfo.row,
-                    numRows = frameInfo.numRows,
-                    speed = frameInfo.speed,
-                    bpm = frameInfo.bpm,
-                    timeMs = timeMs,
-                    totalTimeMs = modVars.seqDuration,
-                    channels = channelSnapshotList,
-                )
                 positionMs.value = timeMs.toLong()
 
                 if (endReached) {
-                    Timber.i(
-                        "renderLoop: endReached, playAllSequences=$playAllSequences " +
-                            "seq=$currentSequence/$numSequences"
-                    )
+                    Timber.i("renderLoop: endReached, playAllSequences=$playAllSequences")
+
                     if (playAllSequences) {
-                        currentSequence++
-                        if (setSequence(currentSequence)) {
-                            Timber.i("renderLoop: advanced to seq $currentSequence")
+                        currentSequenceFlow.value++
+                        if (setSequence(currentSequenceFlow.value)) {
+                            Timber.i("renderLoop: advanced to seq ${currentSequenceFlow.value}")
                             continue
                         }
                     }
+
                     // Drain any remaining buffers before signaling end.
                     while (Xmp.hasFreeBuffer() && !stopRequest) {
                         if (Xmp.fillBuffer(false) < 0) break
                     }
+
                     endedNaturally = true
                     isPlaying.value = false
+
                     Timber.i("renderLoop: ended naturally, exiting loop")
+
                     Xmp.setExpectSilence(true) // We know we're going to xRun in Oboe.
+
                     break
                 }
             } catch (_: InterruptedException) {

@@ -25,10 +25,7 @@ import com.lossydragon.modplayer.db.entity.ModuleEntity
 import com.lossydragon.modplayer.player.PlaybackStatus
 import com.lossydragon.modplayer.player.PlayerUiState
 import com.lossydragon.modplayer.player.PlayerViewModel
-import com.lossydragon.modplayer.player.model.ChannelSnapshot
-import com.lossydragon.modplayer.player.model.FrameSnapshot
 import com.lossydragon.modplayer.player.model.PatternData
-import com.lossydragon.modplayer.player.model.emptyPatternData
 import com.lossydragon.modplayer.ui.components.BackButton
 import com.lossydragon.modplayer.ui.screens.player.components.ChipList
 import com.lossydragon.modplayer.ui.screens.player.components.DurationsSheet
@@ -38,10 +35,10 @@ import com.lossydragon.modplayer.ui.screens.player.components.PlayerBottomAppBar
 import com.lossydragon.modplayer.ui.screens.player.components.QueueSheet
 import com.lossydragon.modplayer.ui.screens.player.components.TransportRow
 import com.lossydragon.modplayer.ui.screens.player.components.views.ChannelView
+import com.lossydragon.modplayer.ui.screens.player.components.views.DebugView
 import com.lossydragon.modplayer.ui.screens.player.components.views.PatternView
 import com.lossydragon.modplayer.ui.theme.AppTheme
 import kotlin.time.Duration.Companion.seconds
-import kotlinx.collections.immutable.toImmutableList
 import kotlinx.collections.immutable.toPersistentList
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.isActive
@@ -100,14 +97,14 @@ fun PlayerScreen(
     var audioInfoText by remember { mutableStateOf("") }
     var showInstruments by remember { mutableStateOf(false) }
     var showModInfo by remember { mutableStateOf(false) }
+    var showCommentInfo by remember { mutableStateOf(false) }
 
-    val patternIndex = state.frame.pattern
-    val patternData = remember(patternIndex, state.numChannels) {
-        if (patternIndex < 0 || state.numChannels == 0) {
-            emptyPatternData()
-        } else {
-            viewModel.getPatternData(patternIndex)
-        }
+    val patternIndex = state.frameInfo.pattern
+    val channels = state.modVars.chn
+    val patternData = if (patternIndex < 0 || channels == 0) {
+        PatternData()
+    } else {
+        viewModel.getPatternData(patternIndex)
     }
 
     LaunchedEffect(state.currentModule) {
@@ -131,11 +128,11 @@ fun PlayerScreen(
                 Text(
                     text = stringResource(
                         R.string.player_module_info,
-                        state.numChannels,
-                        state.numInstruments,
-                        state.numPatterns,
-                        state.numSamples,
-                        state.numSequences,
+                        state.modVars.chn,
+                        state.modVars.ins,
+                        state.modVars.pat,
+                        state.modVars.smp,
+                        state.modVars.miNumSequences,
                     )
                 )
             },
@@ -151,7 +148,7 @@ fun PlayerScreen(
         )
     }
 
-    if (showInstruments && state.songInstruments.isNotEmpty()) {
+    if (showInstruments && state.modVars.instruments.isNotEmpty()) {
         PlayerAlertDialog(
             onDismissRequest = { showInstruments = false },
             icon = Icons.AutoMirrored.Filled.List,
@@ -162,7 +159,7 @@ fun PlayerScreen(
                     state = listState,
                     content = {
                         items(
-                            items = state.songInstruments,
+                            items = state.modVars.instruments,
                             itemContent = { Text(text = it) }
                         )
                     }
@@ -171,16 +168,16 @@ fun PlayerScreen(
         )
     }
 
-    if (state.songMessage.isNotBlank()) {
+    if (showCommentInfo) {
         PlayerAlertDialog(
-            onDismissRequest = viewModel::closeModComment,
+            onDismissRequest = { showCommentInfo = false },
             icon = Icons.AutoMirrored.Filled.Message,
             title = "Song Message",
             content = {
                 val scrollState = rememberScrollState()
                 Column(
                     modifier = Modifier.verticalScroll(scrollState),
-                    content = { Text(text = state.songMessage) }
+                    content = { Text(text = state.modVars.miComment) }
                 )
             },
         )
@@ -214,7 +211,7 @@ fun PlayerScreen(
                 PlayerAction.OnAllSequences -> viewModel.toggleAllSequences()
 
                 PlayerAction.OnInstruments -> {
-                    if (state.songInstruments.isNotEmpty()) {
+                    if (state.modVars.instruments.isNotEmpty()) {
                         showInstruments = true
                     } else {
                         scope.launch {
@@ -230,7 +227,7 @@ fun PlayerScreen(
                 PlayerAction.OnAudioInfo -> showAudioInfo = true
 
                 PlayerAction.OnSongMessage -> {
-                    if (!viewModel.getModComment()) {
+                    if (state.modVars.miComment.isEmpty()) {
                         scope.launch {
                             snackBarHostState.showSnackbar(
                                 message = "No song message to display"
@@ -294,7 +291,9 @@ private fun PlayerScreenContent(
                         horizontalAlignment = Alignment.CenterHorizontally,
                         content = {
                             Text(
-                                text = state.moduleName,
+                                text = state.modVars.name.trim().ifBlank {
+                                    state.currentModule.name
+                                },
                                 style = MaterialTheme.typography.headlineSmall.copy(
                                     fontWeight = FontWeight.Bold,
                                 ),
@@ -304,7 +303,7 @@ private fun PlayerScreenContent(
                             )
 
                             Text(
-                                text = state.moduleType,
+                                text = state.modVars.type.trim(),
                                 style = MaterialTheme.typography.labelLarge.copy(
                                     fontWeight = FontWeight.Bold,
                                 ),
@@ -334,7 +333,7 @@ private fun PlayerScreenContent(
                 contentPadding = PaddingValues(bottom = 8.dp),
                 content = {
                     HorizontalDivider(modifier = Modifier.fillMaxWidth())
-                    PatternInfoRow(frame = state.frame)
+                    PatternInfoRow(fi = state.frameInfo)
                     PlaybackProgress(state = state, onSeek = { onAction(PlayerAction.OnSeek(it)) })
                     Spacer(modifier = Modifier.height(4.dp))
                     ChipList(
@@ -384,14 +383,20 @@ private fun PlayerScreenContent(
                         modifier = Modifier.fillMaxSize(),
                         module = state.currentModule,
                         pattern = patternData,
-                        currentRow = state.frame.row,
+                        currentRow = state.frameInfo.row,
                         showRowNumbers = state.showRowNumbers,
                     )
 
                     1 -> ChannelView(
                         modifier = Modifier.fillMaxSize(),
-                        frame = state.frame,
-                        instrumentNames = state.songInstruments,
+                        numChannels = state.modVars.chn,
+                        instrumentNames = state.modVars.instruments.toPersistentList(),
+                    )
+
+                    2 -> DebugView(
+                        modifier = Modifier.fillMaxSize(),
+                        state = state,
+                        patternData = patternData
                     )
                 }
             }
@@ -399,7 +404,7 @@ private fun PlayerScreenContent(
             if (showDurations) {
                 DurationsSheet(
                     sheetState = durationsSheetState,
-                    sequenceDurations = state.sequenceDurations,
+                    seqData = state.modVars.seqData.toPersistentList(),
                     currentSequence = state.currentSequence,
                     onItemClick = { onAction(PlayerAction.OnDurationClick(it)) },
                     onDismiss = { onAction(PlayerAction.OnDurationSheet(false)) },
@@ -456,49 +461,14 @@ private val previewQueue = Array(10) {
     )
 }.toPersistentList()
 
+// TODO fix preview
 private val previewPlayerState = PlayerUiState(
     status = PlaybackStatus.PLAYING,
     currentModule = previewQueue[1],
-    moduleName = "A Journey Into Sound",
-    moduleType = "Farandole Composer",
-    positionMs = 1_000_000L,
-    durationMs = 2_000_000L,
     queue = previewQueue,
     currentQueueIndex = 1,
-    isShuffle = false,
     repeatMode = 2,
-    sequenceDurations = listOf(
-        183_000,
-        94_000,
-        211_000,
-        183_000,
-        94_000,
-        183_000,
-        211_000,
-        94_000,
-        211_000,
-    ).toImmutableList(),
     currentSequence = 2,
-    frame = FrameSnapshot(
-        position = 2,
-        pattern = 17,
-        row = 44,
-        numRows = 64,
-        speed = 4,
-        bpm = 125,
-        timeMs = 62000,
-        totalTimeMs = 252849,
-        channels = Array(12) {
-            ChannelSnapshot(
-                volume = (it + 1) * 5,
-                finalVol = (it + 2) * 5,
-                pan = 0,
-                instrument = 0,
-                note = 0,
-                period = 0,
-            )
-        }.toImmutableList(),
-    ),
 )
 
 private class PlayerPreviewParameter :
@@ -533,7 +503,7 @@ private fun Preview(
         PlayerScreenContent(
             state = state,
             snackBarHostState = SnackbarHostState(),
-            patternData = emptyPatternData(),
+            patternData = PatternData(),
             queueSheetState = queueSheetState,
             durationsSheetState = durationsSheetState,
             showQueue = showQueue,

@@ -1,21 +1,18 @@
 package com.lossydragon.modplayer.ui.screens.player.components
 
 import androidx.compose.foundation.layout.*
-import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
-import androidx.compose.ui.Alignment
-import androidx.compose.ui.Modifier
+import androidx.compose.ui.*
 import androidx.compose.ui.text.font.*
 import androidx.compose.ui.tooling.preview.*
-import androidx.compose.ui.unit.dp
-import com.lossydragon.modplayer.player.model.FrameSnapshot
+import androidx.compose.ui.unit.*
 import com.lossydragon.modplayer.ui.theme.AppTheme
-import kotlinx.collections.immutable.persistentListOf
+import org.helllabs.libxmp.model.FrameInfo
 
 @Composable
 internal fun PatternInfoRow(
-    frame: FrameSnapshot,
+    fi: FrameInfo,
     modifier: Modifier = Modifier
 ) {
     Row(
@@ -25,13 +22,13 @@ internal fun PatternInfoRow(
         horizontalArrangement = Arrangement.SpaceAround,
         verticalAlignment = Alignment.CenterVertically,
         content = {
-            val numRows = frame.numRows.toString()
-            val row = "${frame.row.toString().padStart(numRows.length)}/$numRows"
-            InfoChip(label = "Pos", value = "${frame.position}")
-            InfoChip(label = "Pat", value = "${frame.pattern}")
+            val numRows = fi.numRows.toString()
+            val row = "${fi.row.toString().padStart(numRows.length)}/$numRows"
+            InfoChip(label = "Pos", value = "${fi.pos}")
+            InfoChip(label = "Pat", value = "${fi.pattern}")
             InfoChip(label = "Row", value = row) // Pad fix
-            InfoChip(label = "Spd", value = "${frame.speed}")
-            InfoChip(label = "BPM", value = "${frame.bpm}")
+            InfoChip(label = "Spd", value = "${fi.speed}")
+            InfoChip(label = "BPM", value = "${fi.bpm}")
         }
     )
 }
@@ -61,16 +58,13 @@ private fun Preview() {
     AppTheme {
         Surface {
             PatternInfoRow(
-                frame = FrameSnapshot(
-                    position = 3,
+                fi = FrameInfo(
+                    pos = 3,
                     pattern = 4,
                     row = 6,
                     numRows = 64,
                     speed = 12,
                     bpm = 128,
-                    timeMs = 0,
-                    totalTimeMs = 0,
-                    channels = persistentListOf(),
                 )
             )
         }

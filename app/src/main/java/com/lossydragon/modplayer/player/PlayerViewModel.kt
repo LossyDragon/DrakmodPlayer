@@ -10,7 +10,6 @@ import androidx.media3.common.Player
 import androidx.media3.common.util.UnstableApi
 import com.lossydragon.modplayer.db.AppPreferences
 import com.lossydragon.modplayer.db.entity.ModuleEntity
-import com.lossydragon.modplayer.player.model.FrameSnapshot
 import java.nio.charset.StandardCharsets
 import kotlinx.collections.immutable.ImmutableList
 import kotlinx.collections.immutable.persistentListOf
@@ -18,6 +17,7 @@ import kotlinx.collections.immutable.toImmutableList
 import kotlinx.collections.immutable.toPersistentList
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
+import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.launchIn
 import kotlinx.coroutines.flow.onEach
@@ -26,38 +26,31 @@ import kotlinx.coroutines.launch
 import kotlinx.coroutines.runBlocking
 import org.helllabs.libxmp.Xmp
 import org.helllabs.libxmp.model.AudioStats
+import org.helllabs.libxmp.model.FrameInfo
+import org.helllabs.libxmp.model.ModVars
 import timber.log.Timber
 
 /** UI state and domain models for the module player. */
 
 enum class PlaybackStatus { IDLE, LOADING, PLAYING, PAUSED }
 
+private val SCREEN_COUNT = 3
+
 @Immutable
 data class PlayerUiState(
     val currentModule: ModuleEntity? = null,
-    val currentQueueIndex: Int = 0,
-    val currentSequence: Int = 0,
-    val durationMs: Long = 0L,
     val errorMessage: String? = null,
-    val frame: FrameSnapshot = FrameSnapshot(),
-    val isShuffle: Boolean = false,
-    val moduleName: String = "",
-    val moduleType: String = "",
-    val numChannels: Int = 0,
-    val numInstruments: Int = 0,
-    val numPatterns: Int = 0,
-    val numSamples: Int = 0,
-    val numSequences: Int = 0,
     val playAllSequences: Boolean = false,
-    val positionMs: Long = 0L,
     val queue: ImmutableList<ModuleEntity> = persistentListOf(),
-    val repeatMode: Int = Player.REPEAT_MODE_OFF,
-    val sequenceDurations: ImmutableList<Int> = persistentListOf(),
     val showRowNumbers: Boolean = false,
-    val songInstruments: ImmutableList<String> = persistentListOf(),
-    val songMessage: String = "",
     val status: PlaybackStatus = PlaybackStatus.IDLE,
-    val playerView: Int = 0
+    val playerView: Int = 0,
+    val modVars: ModVars = ModVars(),
+    val frameInfo: FrameInfo = FrameInfo(),
+    val currentSequence: Int = 0,
+    val repeatMode: Int = Player.REPEAT_MODE_OFF,
+    val currentQueueIndex: Int = 0,
+    val isShuffle: Boolean = false
 )
 
 /** Bridges [Player] state to the UI via [PlayerUiState]. */
@@ -76,16 +69,10 @@ class PlayerViewModel(
             state.update { it.copy(showRowNumbers = show) }
         }.launchIn(viewModelScope)
 
-        player.frameFlow.onEach { frame ->
-            frame ?: return@onEach
-            state.update {
-                it.copy(
-                    positionMs = frame.timeMs.toLong(),
-                    durationMs = frame.totalTimeMs.toLong(),
-                    frame = frame,
-                )
-            }
-        }.launchIn(viewModelScope)
+        combine(player.modVarsFlow, player.frameInfoFlow) { mv, fi -> mv to fi }
+            .onEach { (mv, fi) ->
+                state.update { it.copy(modVars = mv, frameInfo = fi) }
+            }.launchIn(viewModelScope)
 
         player.currentSequenceFlow.onEach { seq ->
             Timber.d("currentSequenceFlow fired, seq=$seq")
@@ -113,7 +100,6 @@ class PlayerViewModel(
                     queue = queue.toImmutableList(),
                     currentModule = if (empty) null else it.currentModule,
                     status = if (empty) PlaybackStatus.IDLE else it.status,
-                    frame = if (empty) FrameSnapshot() else it.frame,
                 )
             }
         }.launchIn(viewModelScope)
@@ -124,8 +110,6 @@ class PlayerViewModel(
                 it.copy(
                     currentModule = file,
                     currentQueueIndex = index,
-                    moduleName = if (player.isReordering) it.moduleName else file.displayName(),
-                    moduleType = if (player.isReordering) it.moduleType else file.displayType(),
                     currentSequence = if (player.isReordering) it.currentSequence else 0,
                 )
             }
@@ -143,7 +127,9 @@ class PlayerViewModel(
         runBlocking {
             // Meh...
             val view = prefs.getPlayerViewFlow().first()
-            state.update { it.copy(playerView = view) }
+            val subsongs = prefs.getGlobalShuffleFlow().first()
+            player.setPlayAllSequences(subsongs)
+            state.update { it.copy(playerView = view, playAllSequences = subsongs) }
         }
     }
 
@@ -169,8 +155,6 @@ class PlayerViewModel(
             it.copy(
                 status = PlaybackStatus.LOADING,
                 currentModule = file,
-                moduleName = file.displayName(),
-                moduleType = file.displayType(),
             )
         }
         ensureServiceRunning()
@@ -192,8 +176,6 @@ class PlayerViewModel(
             it.copy(
                 status = PlaybackStatus.LOADING,
                 currentModule = files[startIndex],
-                moduleName = files[startIndex].displayName(),
-                moduleType = files[startIndex].displayType(),
                 isShuffle = isShuffle,
                 repeatMode = repeatMode,
             )
@@ -246,47 +228,23 @@ class PlayerViewModel(
     fun toggleAllSequences() {
         val playAllSequences = !state.value.playAllSequences
         player.setPlayAllSequences(playAllSequences)
+        viewModelScope.launch { prefs.setGlobalSubSongs(playAllSequences) }
         state.update { it.copy(playAllSequences = playAllSequences) }
     }
 
-    fun getModComment(): Boolean {
-        val songMessageText = String(Xmp.getComment(), StandardCharsets.UTF_8)
-        state.update { it.copy(songMessage = songMessageText) }
-        return songMessageText.isNotBlank()
-    }
-
     fun onPlayerView() {
-        val next = (state.value.playerView + 1) % 2
+        val next = (state.value.playerView + 1) % SCREEN_COUNT
         viewModelScope.launch { prefs.setPlayerView(next) }
     }
-
-    fun closeModComment() = state.update { it.copy(songMessage = "") }
 
     fun getPatternData(patternIndex: Int) = player.getPatternData(patternIndex)
 
     suspend fun getLastDirectoryUri(): String? = prefs.getLastDirectoryUri()
 
-    private fun ModuleEntity.displayName() =
-        moduleName.ifBlank { filename.ifBlank { "(Untitled)" } }
-
-    private fun ModuleEntity.displayType() =
-        moduleType.ifBlank { fileExtension.uppercase().ifBlank { "???" } }
-
     private fun ensureServiceRunning() =
         Intent(appContext, PlayerService::class.java).also(appContext::startService)
 
     private fun syncModuleInfo() {
-        state.update {
-            it.copy(
-                sequenceDurations = player.sequenceDurations.toImmutableList(),
-                currentSequence = 0,
-                numPatterns = player.numPatterns,
-                numChannels = player.numChannels,
-                numInstruments = player.numInstruments,
-                numSamples = player.numSamples,
-                numSequences = player.numSequences,
-                songInstruments = Xmp.getInstruments().toPersistentList(),
-            )
-        }
+        state.update { it.copy(currentSequence = 0) }
     }
 }

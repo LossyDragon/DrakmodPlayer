@@ -55,25 +55,6 @@ object Xmp {
     const val XMP_DSP_NONE = 0
     const val XMP_DSP_LOWPASS = (1 shl 0)       /* Lowpass filter effect */
 
-    /* error codes */
-    enum class XmpResult(val code: Int) {
-        OK(0),
-        END(1),
-        INTERNAL(2),
-        FORMAT(3),
-        LOAD(4),
-        DEPACK(5),
-        SYSTEM(6),
-        INVALID(7),
-        STATE(8),
-        UNKNOWN(-1);
-
-        companion object {
-            fun fromCode(code: Int): XmpResult =
-                entries.firstOrNull { it.code == abs(code) } ?: UNKNOWN
-        }
-    }
-
     /* Oboe Audio configuration */
     const val OBOE_PERFMODE_LOWLATENCY = -1
     const val OBOE_PERFMODE_NONE = 1
@@ -113,7 +94,7 @@ object Xmp {
 
     external fun fillBuffer(loop: Boolean): Int
 
-    external fun getInfo(values: FrameInfo)
+    external fun getFrameInfo(values: FrameInfo)
 
     external fun getPlayer(parm: Int): Int
 
@@ -138,7 +119,7 @@ object Xmp {
 
     external fun seek(time: Int): Int
 
-    private external fun setPlayerNative(parm: Int, value: Int): Int
+    external fun setPlayer(parm: Int, value: Int): Int
 
     external fun startPlayer(rate: Int, format: Int = 0): Int
 
@@ -152,26 +133,9 @@ object Xmp {
 
     external fun getChannelData(ci: ChannelInfo)
 
-    external fun getComment(): ByteArray
-
     external fun getFormats(): Array<String>
 
-    external fun getInstruments(): Array<String>
-
-    external fun getLoopCount(): Int
-
-    private external fun getMaxSequences(): Int
-
-    external fun getModName(): String
-
-    external fun getModType(): String
-
     external fun getModVars(vars: ModVars)
-
-    fun setPlayer(parm: Int, value: Int) {
-        val res = setPlayerNative(parm, value)
-        Log.d(TAG, "setPlayer($parm, $value) = ${XmpResult.fromCode(res)}($res)")
-    }
 
     external fun getPatternRow(
         pat: Int,
@@ -193,8 +157,6 @@ object Xmp {
         width: Int,
         buffer: ByteArray?
     )
-
-    external fun getSeqVars(): IntArray
 
     external fun getVersion(): String
 

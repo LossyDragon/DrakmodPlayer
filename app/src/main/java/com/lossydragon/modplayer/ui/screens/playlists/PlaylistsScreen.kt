@@ -591,13 +591,10 @@ private val sampleEntries = persistentListOf(
     ),
 )
 
+// TODO fix preview
 private val playingState = PlayerUiState(
     status = PlaybackStatus.PLAYING,
     currentModule = sampleEntries[1],
-    moduleName = "Beneath the Fallen Stars",
-    moduleType = "Impulse Tracker",
-    positionMs = 45_000L,
-    durationMs = 252_849L,
     currentQueueIndex = 1,
 )
 

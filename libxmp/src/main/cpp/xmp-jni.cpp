@@ -30,6 +30,23 @@ constexpr const char* TAG = "Mod Player JNI";
 
 extern "C" {
 
+constexpr const char* xmpErrorString(int code) {
+  constexpr std::array<const char*, 9> table = {
+    "",                     // 0 unused
+    "End of module",        // XMP_END = 1
+    "Internal error",       // XMP_ERROR_INTERNAL = 2
+    "Unsupported format",   // XMP_ERROR_FORMAT = 3
+    "Error loading file",   // XMP_ERROR_LOAD = 4
+    "Error depacking file", // XMP_ERROR_DEPACK = 5
+    "System error",         // XMP_ERROR_SYSTEM = 6
+    "Invalid parameter",    // XMP_ERROR_INVALID = 7
+    "Invalid player state", // XMP_ERROR_STATE = 8
+  };
+  int idx = std::abs(code);
+  if (idx >= static_cast<int>(table.size())) return "Unknown error";
+  return table[idx];
+}
+
 static struct audio_stats {
   jclass clazz = nullptr;
   jfieldID xrunCount = nullptr;
@@ -63,15 +80,29 @@ static struct channel_info {
 
 static struct mod_vars {
   jclass clazz = nullptr;
-  jfieldID currentSequence = nullptr;
-  jfieldID lengthInPatterns = nullptr;
-  jfieldID numChannels = nullptr;
-  jfieldID numInstruments = nullptr;
-  jfieldID numPatterns = nullptr;
-  jfieldID numSamples = nullptr;
-  jfieldID numSequence = nullptr;
-  jfieldID seqDuration = nullptr;
+  jfieldID name = nullptr;
+  jfieldID type = nullptr;
+  jfieldID pat = nullptr;
+  jfieldID trk = nullptr;
+  jfieldID chn = nullptr;
+  jfieldID ins = nullptr;
+  jfieldID smp = nullptr;
+  jfieldID spd = nullptr;
+  jfieldID bpm = nullptr;
+  jfieldID len = nullptr;
+  jfieldID rst = nullptr;
+  jfieldID gvl = nullptr;
+  jfieldID miNumSequences = nullptr;
+  jfieldID miComment = nullptr;
+  jfieldID seqData = nullptr;
+  jfieldID instruments = nullptr;
 } mod_vars;
+
+static struct sequence_info {
+  jclass clazz = nullptr;
+  jfieldID entryPoint = nullptr;
+  jfieldID duration = nullptr;
+} sequence_info;
 
 static struct frame_info {
   jclass clazz = nullptr;
@@ -82,6 +113,16 @@ static struct frame_info {
   jfieldID frame = nullptr;
   jfieldID speed = nullptr;
   jfieldID bpm = nullptr;
+  jfieldID time = nullptr;
+  jfieldID totalTime = nullptr;
+  jfieldID frameTime = nullptr;
+  jfieldID bufferSize = nullptr;
+  jfieldID totalSize = nullptr;
+  jfieldID volume = nullptr;
+  jfieldID loopCount = nullptr;
+  jfieldID virtChannels = nullptr;
+  jfieldID virtUsed = nullptr;
+  jfieldID sequence = nullptr;
 } frame_info;
 
 namespace {
@@ -178,6 +219,16 @@ namespace {
     GET_FIELD(frame_info, frame, "I");
     GET_FIELD(frame_info, speed, "I");
     GET_FIELD(frame_info, bpm, "I");
+    GET_FIELD(frame_info, time, "I");
+    GET_FIELD(frame_info, totalTime, "I");
+    GET_FIELD(frame_info, frameTime, "I");
+    GET_FIELD(frame_info, bufferSize, "I");
+    GET_FIELD(frame_info, totalSize, "I");
+    GET_FIELD(frame_info, volume, "I");
+    GET_FIELD(frame_info, loopCount, "I");
+    GET_FIELD(frame_info, virtChannels, "I");
+    GET_FIELD(frame_info, virtUsed, "I");
+    GET_FIELD(frame_info, sequence, "I");
   }
 
   void initModInfoFields(JNIEnv* env) {
@@ -187,17 +238,44 @@ namespace {
     GET_FIELD(mod_info, type, "Ljava/lang/String;");
   }
 
+  void initSequenceFields(JNIEnv* env) {
+    if (sequence_info.clazz != nullptr) return;
+    GET_CLASS(sequence_info, "org/helllabs/libxmp/model/Sequence");
+    GET_FIELD(sequence_info, entryPoint, "I");
+    GET_FIELD(sequence_info, duration, "I");
+  }
+
+  // TODO verify all fields
   void initModVarsFields(JNIEnv* env) {
     if (mod_vars.clazz != nullptr) return;
     GET_CLASS(mod_vars, "org/helllabs/libxmp/model/ModVars");
-    GET_FIELD(mod_vars, currentSequence, "I");
-    GET_FIELD(mod_vars, lengthInPatterns, "I");
-    GET_FIELD(mod_vars, numChannels, "I");
-    GET_FIELD(mod_vars, numInstruments, "I");
-    GET_FIELD(mod_vars, numPatterns, "I");
-    GET_FIELD(mod_vars, numSamples, "I");
-    GET_FIELD(mod_vars, numSequence, "I");
-    GET_FIELD(mod_vars, seqDuration, "I");
+    GET_FIELD(mod_vars, name, "Ljava/lang/String;");
+    GET_FIELD(mod_vars, type, "Ljava/lang/String;");
+    GET_FIELD(mod_vars, pat, "I");
+    GET_FIELD(mod_vars, trk, "I");
+    GET_FIELD(mod_vars, chn, "I");
+    GET_FIELD(mod_vars, ins, "I");
+    GET_FIELD(mod_vars, smp, "I");
+    GET_FIELD(mod_vars, spd, "I");
+    GET_FIELD(mod_vars, bpm, "I");
+    GET_FIELD(mod_vars, len, "I");
+    GET_FIELD(mod_vars, rst, "I");
+    GET_FIELD(mod_vars, gvl, "I");
+    GET_FIELD(mod_vars, miNumSequences, "I");
+    GET_FIELD(mod_vars, miComment, "Ljava/lang/String;");
+    GET_FIELD(mod_vars, seqData, "[Lorg/helllabs/libxmp/model/Sequence;");
+    GET_FIELD(mod_vars, instruments, "[Ljava/lang/String;");
+  }
+
+  // Tracker strings are CP437/Latin-1; NewStringUTF requires valid Modified UTF-8.
+  // Replace any byte >= 0x80 with '?' so the JNI call never aborts.
+  inline std::string sanitizeForJni(const char* src) {
+    if (!src) return "";
+    std::string out;
+    out.reserve(strlen(src));
+    for (const auto* p = reinterpret_cast<const unsigned char*>(src); *p; ++p)
+      out += (*p < 0x80) ? static_cast<char>(*p) : '?';
+    return out;
   }
 
   xmp_subinstrument* getSubinstrument(const xmp_module_info& mi, int ins, int key) {
@@ -265,6 +343,7 @@ METHOD(jboolean, init)(JNIEnv* env, jobject obj, jint rate, jint ms, jint mode, 
   initFrameInfoFields(env);
   initModInfoFields(env);
   initModVarsFields(env);
+  initSequenceFields(env);
 
   state.initialized = true;
   LOG_INFO("init() completed successfully - actual_rate=%d", actual_rate);
@@ -309,8 +388,8 @@ METHOD(jint, loadModuleFd)(JNIEnv* env, jobject obj, jint fd, jobject modInfo) {
     return -2;
   }
 
-  jstring name = env->NewStringUTF(ti.name);
-  jstring type = env->NewStringUTF(ti.type);
+  jstring name = env->NewStringUTF(sanitizeForJni(ti.name).c_str());
+  jstring type = env->NewStringUTF(sanitizeForJni(ti.type).c_str());
   env->SetObjectField(modInfo, mod_info.name, name);
   env->SetObjectField(modInfo, mod_info.type, type);
   env->DeleteLocalRef(name);
@@ -355,8 +434,8 @@ METHOD(jboolean, testModuleFd)(JNIEnv* env, jobject obj, jint fd, jobject modInf
   if (res == 0) {
     LOG_INFO("testModuleFd() - valid module: '%s' (type: %s)", ti.name, ti.type);
 
-    jstring name = env->NewStringUTF(ti.name);
-    jstring type = env->NewStringUTF(ti.type);
+    jstring name = env->NewStringUTF(sanitizeForJni(ti.name).c_str());
+    jstring type = env->NewStringUTF(sanitizeForJni(ti.type).c_str());
 
     if (!name || !type) {
       LOG_ERROR("testModuleFd() - failed to create Java strings");
@@ -518,7 +597,7 @@ METHOD(jint, mute)(JNIEnv* env, jobject obj, jint chn, jint status) {
   return xmp_channel_mute(state.ctx, chn, status);
 }
 
-METHOD(void, getInfo)(JNIEnv* env, jobject obj, jobject frameInfo) {
+METHOD(void, getFrameInfo)(JNIEnv* env, jobject obj, jobject frameInfo) {
   XmpPlayerState& state = XmpPlayerState::instance();
 
   if (!state.mod_is_loaded) return;
@@ -534,22 +613,29 @@ METHOD(void, getInfo)(JNIEnv* env, jobject obj, jobject frameInfo) {
     env->SetIntField(frameInfo, frame_info.frame, fi.frame);
     env->SetIntField(frameInfo, frame_info.speed, fi.speed);
     env->SetIntField(frameInfo, frame_info.bpm, fi.bpm);
+    env->SetIntField(frameInfo, frame_info.time, fi.time);
+    env->SetIntField(frameInfo, frame_info.totalTime, fi.total_time);
+    env->SetIntField(frameInfo, frame_info.frameTime, fi.frame_time);
+    env->SetIntField(frameInfo, frame_info.bufferSize, fi.buffer_size);
+    env->SetIntField(frameInfo, frame_info.totalSize, fi.total_size);
+    env->SetIntField(frameInfo, frame_info.volume, fi.volume);
+    env->SetIntField(frameInfo, frame_info.loopCount, fi.loop_count);
+    env->SetIntField(frameInfo, frame_info.virtChannels, fi.virt_channels);
+    env->SetIntField(frameInfo, frame_info.virtUsed, fi.virt_used);
+    env->SetIntField(frameInfo, frame_info.sequence, fi.sequence);
   }
 }
 
-METHOD(jint, setPlayerNative)(JNIEnv* env, jobject obj, jint parm, jint value) {
+METHOD(jint, setPlayer)(JNIEnv* env, jobject obj, jint parm, jint value) {
   XmpPlayerState& state = XmpPlayerState::instance();
-  return xmp_set_player(state.ctx, parm, value);
+  auto res = xmp_set_player(state.ctx, parm, value);
+  if (res != 0) LOG_WARN("xmp_play_buffer: %s (%d)", xmpErrorString(res), res);
+  return res;
 }
 
 METHOD(jint, getPlayer)(JNIEnv* env, jobject obj, jint parm) {
   XmpPlayerState& state = XmpPlayerState::instance();
   return xmp_get_player(state.ctx, parm);
-}
-
-METHOD(jint, getLoopCount)(JNIEnv* env, jobject obj) {
-  XmpPlayerState& state = XmpPlayerState::instance();
-  return state.fi.get()[state.before].loop_count;
 }
 
 METHOD(void, getModVars)(JNIEnv* env, jobject obj, jobject modVars) {
@@ -571,14 +657,57 @@ METHOD(void, getModVars)(JNIEnv* env, jobject obj, jobject modVars) {
   const xmp_module_info& mi = state.mi;
   int seq = state.sequence;
 
-  env->SetIntField(modVars, mod_vars.seqDuration, mi.seq_data[seq].duration);
-  env->SetIntField(modVars, mod_vars.lengthInPatterns, mi.mod->len);
-  env->SetIntField(modVars, mod_vars.numPatterns, mi.mod->pat);
-  env->SetIntField(modVars, mod_vars.numChannels, mi.mod->chn);
-  env->SetIntField(modVars, mod_vars.numInstruments, mi.mod->ins);
-  env->SetIntField(modVars, mod_vars.numSamples, mi.mod->smp);
-  env->SetIntField(modVars, mod_vars.numSequence, mi.num_sequences);
-  env->SetIntField(modVars, mod_vars.currentSequence, seq);
+  jstring nameStr = env->NewStringUTF(sanitizeForJni(mi.mod->name).c_str());
+  jstring typeStr = env->NewStringUTF(sanitizeForJni(mi.mod->type).c_str());
+  jstring commentStr = env->NewStringUTF(sanitizeForJni(mi.comment).c_str());
+
+  env->SetObjectField(modVars, mod_vars.name, nameStr);
+  env->SetObjectField(modVars, mod_vars.type, typeStr);
+  env->SetIntField(modVars, mod_vars.pat, mi.mod->pat);
+  env->SetIntField(modVars, mod_vars.trk, mi.mod->trk);
+  env->SetIntField(modVars, mod_vars.chn, mi.mod->chn);
+  env->SetIntField(modVars, mod_vars.ins, mi.mod->ins);
+  env->SetIntField(modVars, mod_vars.smp, mi.mod->smp);
+  env->SetIntField(modVars, mod_vars.spd, mi.mod->spd);
+  env->SetIntField(modVars, mod_vars.bpm, mi.mod->bpm);
+  env->SetIntField(modVars, mod_vars.len, mi.mod->len);
+  env->SetIntField(modVars, mod_vars.rst, mi.mod->rst);
+  env->SetIntField(modVars, mod_vars.gvl, mi.mod->gvl);
+
+  env->SetIntField(modVars, mod_vars.miNumSequences, mi.num_sequences);
+  env->SetObjectField(modVars, mod_vars.miComment, commentStr);
+
+  int numSeq = mi.seq_data ? mi.num_sequences : 0;
+  jclass seqCls = env->FindClass("org/helllabs/libxmp/model/Sequence");
+  jobjectArray seqArray = env->NewObjectArray(numSeq, seqCls, nullptr);
+  for (int i = 0; i < numSeq; i++) {
+    jobject seqObj = env->AllocObject(seqCls);
+    env->SetIntField(seqObj, sequence_info.entryPoint, mi.seq_data[i].entry_point);
+    env->SetIntField(seqObj, sequence_info.duration, mi.seq_data[i].duration);
+    env->SetObjectArrayElement(seqArray, i, seqObj);
+    env->DeleteLocalRef(seqObj);
+  }
+  env->SetObjectField(modVars, mod_vars.seqData, seqArray);
+
+  jclass stringClass = env->FindClass("java/lang/String");
+  jobjectArray insArray = env->NewObjectArray(mi.mod->ins, stringClass, nullptr);
+  for (int i = 0; i < mi.mod->ins; i++) {
+    std::string insName = sanitizeForJni(mi.mod->xxi[i].name);
+    std::array<char, 64> buf{};
+    snprintf(buf.data(), buf.size(), "%02X %s", i + 1, insName.c_str());
+    jstring s = env->NewStringUTF(buf.data());
+    env->SetObjectArrayElement(insArray, i, s);
+    env->DeleteLocalRef(s);
+  }
+  env->SetObjectField(modVars, mod_vars.instruments, insArray);
+
+  env->DeleteLocalRef(nameStr);
+  env->DeleteLocalRef(typeStr);
+  env->DeleteLocalRef(commentStr);
+  env->DeleteLocalRef(seqArray);
+  env->DeleteLocalRef(seqCls);
+  env->DeleteLocalRef(insArray);
+  env->DeleteLocalRef(stringClass);
 }
 
 METHOD(jstring, getVersion)(JNIEnv* env, jobject obj) {
@@ -601,62 +730,6 @@ METHOD(jobjectArray, getFormats)(JNIEnv* env, jobject obj) {
   return result;
 }
 
-METHOD(jstring, getModName)(JNIEnv* env, jobject obj) {
-  XmpPlayerState& state = XmpPlayerState::instance();
-  const char* name = state.mod_is_loaded ? state.mi.mod->name : "";
-  return env->NewStringUTF(name);
-}
-
-METHOD(jstring, getModType)(JNIEnv* env, jobject obj) {
-  XmpPlayerState& state = XmpPlayerState::instance();
-  const char* type = state.mod_is_loaded ? state.mi.mod->type : "";
-  return env->NewStringUTF(type);
-}
-
-METHOD(jbyteArray, getComment)(JNIEnv* env, jobject obj) {
-  XmpPlayerState& state = XmpPlayerState::instance();
-  const xmp_module_info& mi = state.mi;
-
-  if (!mi.comment) return env->NewByteArray(0);
-
-  size_t length = strlen(mi.comment);
-  jbyteArray byteArray = env->NewByteArray(static_cast<jsize>(length));
-  env->SetByteArrayRegion(byteArray, 0, static_cast<jsize>(length), reinterpret_cast<const jbyte*>(mi.comment));
-  return byteArray;
-}
-
-METHOD(jobjectArray, getInstruments)(JNIEnv* env, jobject obj) {
-  XmpPlayerState& state = XmpPlayerState::instance();
-
-  jclass stringClass = env->FindClass("java/lang/String");
-  if (!stringClass) return nullptr;
-
-  if (!state.mod_is_loaded) {
-    jobjectArray empty = env->NewObjectArray(0, stringClass, nullptr);
-    env->DeleteLocalRef(stringClass);
-    return empty;
-  }
-
-  const xmp_module_info& mi = state.mi;
-
-  jobjectArray stringArray = env->NewObjectArray(mi.mod->ins, stringClass, nullptr);
-  if (!stringArray) {
-    jobjectArray empty = env->NewObjectArray(0, stringClass, nullptr);
-    env->DeleteLocalRef(stringClass);
-    return empty;
-  }
-
-  for (int i = 0; i < mi.mod->ins; i++) {
-    std::array<char, 64> buf{};
-    snprintf(buf.data(), buf.size(), "%02X %s", i + 1, mi.mod->xxi[i].name);
-    jstring s = env->NewStringUTF(buf.data());
-    env->SetObjectArrayElement(stringArray, i, s);
-    env->DeleteLocalRef(s);
-  }
-
-  env->DeleteLocalRef(stringClass);
-  return stringArray;
-}
 
 METHOD(void, getChannelData)(JNIEnv* env, jobject obj, jobject channelInfo) {
   XmpPlayerState& state = XmpPlayerState::instance();
@@ -883,30 +956,6 @@ METHOD(jboolean, setSequence)(JNIEnv* env, jobject obj, jint seq) {
   xmp_play_buffer(state.ctx, nullptr, 0, 0);
 
   return JNI_TRUE;
-}
-
-METHOD(jint, getMaxSequences)(JNIEnv* env, jobject obj) {
-  return MAX_SEQUENCES;
-}
-
-METHOD(jintArray, getSeqVars)(JNIEnv* env, jobject obj) {
-  XmpPlayerState& state = XmpPlayerState::instance();
-
-  if (!state.mod_is_loaded) return env->NewIntArray(0);
-
-  const xmp_module_info& mi = state.mi;
-  int num = mi.num_sequences;
-
-  if (num <= 0) return env->NewIntArray(0);
-
-  jintArray result = env->NewIntArray(num);
-  if (!result) return env->NewIntArray(0);
-
-  std::vector<jint> durations(num);
-  for (int i = 0; i < num; i++) durations[i] = mi.seq_data[i].duration;
-  env->SetIntArrayRegion(result, 0, num, durations.data());
-
-  return result;
 }
 
 METHOD(void, setExpectSilence)(JNIEnv* env, jobject obj, jboolean value) {

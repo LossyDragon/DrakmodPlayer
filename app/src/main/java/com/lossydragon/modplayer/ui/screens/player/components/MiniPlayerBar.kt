@@ -29,8 +29,8 @@ fun MiniPlayerBar(
     onNext: () -> Unit,
     onPrevious: () -> Unit
 ) {
-    val duration = state.durationMs.toFloat().coerceAtLeast(1f)
-    val progress = (state.positionMs.toFloat() / duration).coerceIn(0f, 1f)
+    val duration = state.frameInfo.totalTime.toFloat().coerceAtLeast(1f)
+    val progress = (state.frameInfo.time.toFloat() / duration).coerceIn(0f, 1f)
     val isPlaying = state.status == PlaybackStatus.PLAYING
 
     val hasNext = when {
@@ -107,7 +107,7 @@ fun MiniPlayerBar(
         },
         content = {
             Text(
-                text = state.moduleName,
+                text = state.modVars.name.trim(),
                 maxLines = 1,
                 overflow = TextOverflow.Ellipsis
             )
@@ -115,7 +115,7 @@ fun MiniPlayerBar(
         supportingContent = {
             Column {
                 Text(
-                    text = state.moduleType,
+                    text = state.modVars.type.trim(),
                     maxLines = 1,
                     overflow = TextOverflow.Ellipsis
                 )
@@ -148,10 +148,6 @@ private fun PreviewPlaying() {
                     fileExtension = "far",
                     fileSize = 123456L,
                 ),
-                moduleName = "A Journey Into Sound",
-                moduleType = "FAR",
-                positionMs = 62000L,
-                durationMs = 252849L,
             ),
             onTap = {},
             onPlayPause = {},
@@ -160,6 +156,8 @@ private fun PreviewPlaying() {
         )
     }
 }
+
+// TODO fix preview
 
 @Preview
 @Composable
@@ -174,10 +172,6 @@ private fun PreviewPaused() {
                     fileExtension = "it",
                     fileSize = 1820792L,
                 ),
-                moduleName = "Beneath the Fallen Stars",
-                moduleType = "IT",
-                positionMs = 120000L,
-                durationMs = 480000L,
             ),
             onTap = {},
             onPlayPause = {},

@@ -16,7 +16,7 @@ internal fun PlaybackProgress(
     state: PlayerUiState,
     onSeek: (Long) -> Unit
 ) {
-    val duration = state.durationMs.toFloat().coerceAtLeast(1f)
+    val duration = state.frameInfo.totalTime.toFloat().coerceAtLeast(1f)
 
     var isSeeking by remember { mutableStateOf(false) }
     var seekPosition by remember { mutableFloatStateOf(0f) }
@@ -24,7 +24,7 @@ internal fun PlaybackProgress(
     val displayValue = if (isSeeking) {
         seekPosition
     } else {
-        (state.positionMs.toFloat() / duration).coerceIn(0f, 1f)
+        (state.frameInfo.time.toFloat() / duration).coerceIn(0f, 1f)
     }
 
     Row(
@@ -37,7 +37,7 @@ internal fun PlaybackProgress(
                 text = if (isSeeking) {
                     (seekPosition * duration).toLong().formatMs()
                 } else {
-                    state.positionMs.formatMs()
+                    state.frameInfo.time.toLong().formatMs()
                 },
                 style = MaterialTheme.typography.titleMedium,
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
@@ -58,7 +58,7 @@ internal fun PlaybackProgress(
 
             Text(
                 modifier = Modifier.padding(horizontal = 6.dp),
-                text = state.durationMs.formatMs(),
+                text = state.frameInfo.totalTime.toLong().formatMs(),
                 style = MaterialTheme.typography.titleMedium,
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
             )
@@ -66,16 +66,15 @@ internal fun PlaybackProgress(
     )
 }
 
+// TODO fix preview
+
 @Preview
 @Composable
 private fun Preview() {
     AppTheme {
         Surface {
             PlaybackProgress(
-                state = PlayerUiState(
-                    positionMs = 12345,
-                    durationMs = 65535,
-                ),
+                state = PlayerUiState(),
                 onSeek = {}
             )
         }

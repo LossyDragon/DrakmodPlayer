@@ -77,6 +77,10 @@ class AppPreferences(context: Context) {
     fun getGlobalShuffleFlow() = flow(globalShuffle, false)
     suspend fun setGlobalShuffle(v: Boolean) = set(globalShuffle, v)
 
+    private val globalSubSongs = booleanPreferencesKey("global_subsongs")
+    fun getGlobalSubSongsFlow() = flow(globalSubSongs, false)
+    suspend fun setGlobalSubSongs(v: Boolean) = set(globalSubSongs, v)
+
     /* Player */
     private val sampleRate = intPreferencesKey("sample_rate")
     fun getSampleRateFlow() = flow(sampleRate, Xmp.DEFAULT_SAMPLE_RATE)

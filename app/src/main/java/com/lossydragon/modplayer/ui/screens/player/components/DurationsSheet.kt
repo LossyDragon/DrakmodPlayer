@@ -17,12 +17,13 @@ import com.lossydragon.modplayer.R.string.title_subsong_sheet
 import com.lossydragon.modplayer.ui.theme.AppTheme
 import kotlinx.collections.immutable.ImmutableList
 import kotlinx.collections.immutable.toPersistentList
+import org.helllabs.libxmp.model.Sequence
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 internal fun DurationsSheet(
     sheetState: SheetState,
-    sequenceDurations: ImmutableList<Int>,
+    seqData: ImmutableList<Sequence>,
     currentSequence: Int,
     onDismiss: () -> Unit,
     onItemClick: (Int) -> Unit
@@ -40,7 +41,7 @@ internal fun DurationsSheet(
                 contentAlignment = Alignment.Center,
                 content = {
                     Text(
-                        text = stringResource(title_subsong_sheet, sequenceDurations.size),
+                        text = stringResource(title_subsong_sheet, seqData.size),
                         style = MaterialTheme.typography.titleMedium,
                     )
                     IconButton(
@@ -61,13 +62,13 @@ internal fun DurationsSheet(
                 verticalArrangement = Arrangement.spacedBy(2.dp),
                 content = {
                     itemsIndexed(
-                        items = sequenceDurations,
+                        items = seqData,
                         key = { idx, _ -> idx },
                         itemContent = { idx, duration ->
                             DurationItem(
                                 isCurrentItem = idx == currentSequence,
                                 index = idx,
-                                duration = duration,
+                                duration = duration.duration,
                                 onItemClick = onItemClick,
                             )
                         }
@@ -143,17 +144,17 @@ private fun Preview() {
 
             DurationsSheet(
                 sheetState = sheetState,
-                sequenceDurations = listOf(
-                    183_000, // 3:03 - Main Song
-                    94_000, // 1:34
-                    211_000, // 3:31
-                    57_000, // 0:57
-                    142_000, // 2:22
-                    78_000, // 1:18
-                    305_000, // 5:05
-                    33_000, // 0:33
-                    167_000, // 2:47
-                    120_000, // 2:00
+                seqData = listOf(
+                    Sequence(0, 183_000), // 3:03 - Main Song
+                    Sequence(0, 94_000), // 1:34
+                    Sequence(0, 211_000), // 3:31
+                    Sequence(0, 57_000), // 0:57
+                    Sequence(0, 142_000), // 2:22
+                    Sequence(0, 78_000), // 1:18
+                    Sequence(0, 305_000), // 5:05
+                    Sequence(0, 33_000), // 0:33
+                    Sequence(0, 167_000), // 2:47
+                    Sequence(0, 120_000), // 2:00
                 ).toPersistentList(),
                 currentSequence = 5,
                 onItemClick = {},

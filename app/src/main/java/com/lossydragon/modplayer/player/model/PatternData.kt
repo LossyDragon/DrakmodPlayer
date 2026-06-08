@@ -4,19 +4,12 @@ import androidx.compose.runtime.*
 import kotlinx.collections.immutable.ImmutableList
 import kotlinx.collections.immutable.persistentListOf
 
-fun emptyPatternData() = PatternData(
-    cells = persistentListOf(persistentListOf()),
-    numChannels = 0,
-    numRows = 0,
-    patternIndex = -1,
-)
-
 @Immutable
 data class PatternData(
-    val cells: ImmutableList<ImmutableList<NoteCell>>,
-    val numChannels: Int,
-    val numRows: Int,
-    val patternIndex: Int
+    val cells: ImmutableList<ImmutableList<NoteCell>> = persistentListOf(),
+    val numChannels: Int = 0,
+    val numRows: Int = 0,
+    val patternIndex: Int = -1
 )
 
 @Immutable

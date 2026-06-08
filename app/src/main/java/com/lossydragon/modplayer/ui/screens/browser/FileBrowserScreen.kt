@@ -91,7 +91,11 @@ fun FileBrowserScreen(
             if (browserState.files.isNotEmpty()) {
                 playerViewModel.playAll(
                     files = browserState.files,
-                    startAt = 0,
+                    startAt = if (browserState.isShuffle) {
+                        browserState.files.indices.random()
+                    } else {
+                        0
+                    },
                     isShuffle = browserState.isShuffle,
                     repeatMode = browserState.repeatMode,
                 )
@@ -394,13 +398,10 @@ private class BrowserPreviewParameter : PreviewParameterProvider<BrowserPreviewS
         FileItem(name = "Demos", uri = "2".toUri(), isDirectory = true, size = 0L),
     )
 
+    // TODO fix preview
     private val playingState = PlayerUiState(
         status = PlaybackStatus.PLAYING,
         currentModule = sampleFiles[1],
-        moduleName = "Beneath the Fallen Stars",
-        moduleType = "Impulse Tracker",
-        positionMs = 62_000L,
-        durationMs = 252_849L,
         currentQueueIndex = 1,
     )
 

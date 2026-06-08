@@ -31,7 +31,6 @@ import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.runBlocking
 import kotlinx.serialization.json.Json
-import org.helllabs.libxmp.Xmp
 import timber.log.Timber
 
 /**
@@ -84,7 +83,7 @@ class ModPlayer(
     var isReordering = false
 
     /** Per-frame snapshots from the render thread; null when idle. */
-    val frameFlow by engine::frameFlow
+    val frameInfoFlow by engine::frameInfoFlow
 
     /** True while the engine render loop is running. */
     val isPlaying by engine::isPlaying
@@ -92,12 +91,10 @@ class ModPlayer(
     /** Current multi-sequence index, emitted on sequence change. */
     val currentSequenceFlow by engine::currentSequenceFlow
 
-    val numPatterns: Int get() = engine.numPatterns
-    val numChannels: Int get() = engine.numChannels
-    val numInstruments: Int get() = engine.numInstruments
-    val numSamples: Int get() = engine.numSamples
-    val numSequences: Int get() = engine.numSequences
-    val sequenceDurations: List<Int> get() = engine.getSequenceDurations()
+    /**
+     * TODO kdoc
+     */
+    val modVarsFlow by engine::modVarsFlow
 
     /** Index of the currently playing item in [queue]; emitted on navigation. */
     val currentIndexFlow: StateFlow<Int>
@@ -266,10 +263,11 @@ class ModPlayer(
 
                 // todo sucks
                 // Replace the placeholder item with real metadata from libxmp.
+                val duration = engine.modVarsFlow.value.sequenceDuration(currentSequenceFlow.value)
                 val realItem = MediaItem.Builder()
                     .setUri(file.uri)
                     .setMediaId(file.filePath)
-                    .setMediaMetadata(file.toRealMetadata(engine.durationMs.value))
+                    .setMediaMetadata(file.toRealMetadata(duration.toLong()))
                     .build()
 
                 mainHandler.post {
@@ -419,8 +417,13 @@ class ModPlayer(
                 item.localConfiguration?.uri?.toString()
                     ?: i.toString()
             }
-            val durationUs = if (i == currentIndex && engine.durationMs.value > 0) {
-                engine.durationMs.value * 1_000L
+
+            val duration = engine.modVarsFlow.value.sequenceDuration(
+                engine.currentSequenceFlow.value
+            )
+            val durationMs = duration
+            val durationUs = if (i == currentIndex && durationMs > 0) {
+                durationMs * 1_000L
             } else {
                 C.TIME_UNSET
             }
@@ -704,16 +707,15 @@ class ModPlayer(
             .build()
 
     /** Builds [MediaMetadata] from libxmp after the module has been loaded successfully. */
-    private fun ModuleEntity.toRealMetadata(duration: Long): MediaMetadata =
-        MediaMetadata.Builder()
-            .setTitle(Xmp.getModName().ifBlank { moduleName.ifBlank { filename } })
-            .setArtist(
-                Xmp.getModType().ifBlank {
-                    moduleType.ifBlank { fileExtension.uppercase() }
-                }
-            )
+    private fun ModuleEntity.toRealMetadata(duration: Long): MediaMetadata {
+        val name = modVarsFlow.value.name.trim().ifBlank { filename }
+        val type = modVarsFlow.value.type.trim().ifBlank { fileExtension.uppercase() }
+        return MediaMetadata.Builder()
+            .setTitle(name)
+            .setArtist(type)
             .setDurationMs(duration)
             .setArtworkUri(artworkUri)
             .setIsPlayable(true)
             .build()
+    }
 }
