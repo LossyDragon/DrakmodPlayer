@@ -341,7 +341,6 @@ METHOD(jboolean, init)(JNIEnv* env, jobject obj, jint rate, jint ms, jint mode, 
   initAudioStatsFields(env);
   initChannelInfoFields(env);
   initFrameInfoFields(env);
-  initModInfoFields(env);
   initModVarsFields(env);
   initSequenceFields(env);
 
@@ -373,7 +372,7 @@ METHOD(jint, deinit)(JNIEnv* env, jobject obj) {
 
 METHOD(jint, loadModuleFd)(JNIEnv* env, jobject obj, jint fd, jobject modInfo) {
   LOG_INFO("loadModuleFd() called - fd: %d, tid: %d", fd, get_thread_id());
-
+  initModInfoFields(env);
   std::unique_ptr<FILE, decltype(&fclose)> file(fdopen(fd, "rb"), fclose);
   if (!file) {
     LOG_ERROR("loadModuleFd() - fdopen failed: %s", strerror(errno));
@@ -419,6 +418,7 @@ METHOD(jint, loadModuleFd)(JNIEnv* env, jobject obj, jint fd, jobject modInfo) {
 
 METHOD(jboolean, testModuleFd)(JNIEnv* env, jobject obj, jint fd, jobject modInfo) {
   LOG_INFO("testModuleFd() called - fd: %d, tid: %d", fd, get_thread_id());
+  initModInfoFields(env);
 
   std::unique_ptr<FILE, decltype(&fclose)> file(fdopen(fd, "rb"), fclose);
   if (!file) {
