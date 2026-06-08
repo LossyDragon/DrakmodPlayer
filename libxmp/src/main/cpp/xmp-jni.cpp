@@ -28,6 +28,16 @@ constexpr const char* TAG = "Mod Player JNI";
 #define GET_CLASS(a, b) a.clazz = env->FindClass(b)
 #define GET_FIELD(a, b, c) a.b = env->GetFieldID(a.clazz, #b, c)
 
+// Text sanitizer for charsets like CP437.
+inline std::string sanitizeForJni(const char* src) {
+  if (!src) return "";
+  std::string out;
+  out.reserve(strlen(src));
+  for (const auto* p = reinterpret_cast<const unsigned char*>(src); *p; ++p)
+    out += (*p < 0x80) ? static_cast<char>(*p) : '?';
+  return out;
+}
+
 extern "C" {
 
 constexpr const char* xmpErrorString(int code) {
@@ -265,17 +275,6 @@ namespace {
     GET_FIELD(mod_vars, miComment, "Ljava/lang/String;");
     GET_FIELD(mod_vars, seqData, "[Lorg/helllabs/libxmp/model/Sequence;");
     GET_FIELD(mod_vars, instruments, "[Ljava/lang/String;");
-  }
-
-  // Tracker strings are CP437/Latin-1; NewStringUTF requires valid Modified UTF-8.
-  // Replace any byte >= 0x80 with '?' so the JNI call never aborts.
-  inline std::string sanitizeForJni(const char* src) {
-    if (!src) return "";
-    std::string out;
-    out.reserve(strlen(src));
-    for (const auto* p = reinterpret_cast<const unsigned char*>(src); *p; ++p)
-      out += (*p < 0x80) ? static_cast<char>(*p) : '?';
-    return out;
   }
 
   xmp_subinstrument* getSubinstrument(const xmp_module_info& mi, int ins, int key) {

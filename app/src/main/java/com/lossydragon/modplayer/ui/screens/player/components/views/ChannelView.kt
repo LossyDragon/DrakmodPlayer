@@ -110,7 +110,9 @@ fun ChannelView(
 
     // Per-channel mute state; SnapshotStateList so individual toggles trigger recomposition.
     val muteStates = remember(numChannels) {
-        mutableStateListOf<Boolean>().apply { repeat(numChannels) { add(false) } }
+        mutableStateListOf<Boolean>().apply {
+            repeat(numChannels) { i -> add(Xmp.mute(i, -1) == 1) }
+        }
     }
     var soloChannel by remember { mutableIntStateOf(-1) }
 
