@@ -245,19 +245,34 @@ fun PlayerScreen(
 
                 is PlayerAction.OnSeek -> viewModel.seek(action.seek)
 
-                is PlayerAction.OnQueueClick -> {
-                    viewModel.playAtIndex(action.int)
-                    scope.launch { queueSheetState.hide() }
-                }
+                is PlayerAction.OnQueueClick -> viewModel.playAtIndex(action.int)
 
-                is PlayerAction.OnQueueSheet -> showQueue = action.open
+                is PlayerAction.OnQueueSheet -> {
+                    showQueue = action.open
+                    scope.launch {
+                        if (showQueue) {
+                            queueSheetState.expand()
+                        } else {
+                            queueSheetState.hide()
+                        }
+                    }
+                }
 
                 is PlayerAction.OnDurationClick -> {
                     viewModel.setSequence(action.int)
                     scope.launch { durationsSheetState.hide() }
                 }
 
-                is PlayerAction.OnDurationSheet -> showDurations = action.open
+                is PlayerAction.OnDurationSheet -> {
+                    showDurations = action.open
+                    scope.launch {
+                        if (showDurations) {
+                            durationsSheetState.expand()
+                        } else {
+                            durationsSheetState.hide()
+                        }
+                    }
+                }
             }
         }
     )
@@ -396,13 +411,15 @@ private fun PlayerScreenContent(
                         modifier = Modifier.fillMaxSize(),
                         numChannels = state.modVars.chn,
                         instrumentNames = state.modVars.instruments.toPersistentList(),
-                        isPlaying = state.status == PlaybackStatus.PLAYING,
+                        isPlaying = (state.status == PlaybackStatus.PLAYING) &&
+                            !queueSheetState.isVisible && !durationsSheetState.isVisible
                     )
 
                     2 -> DebugView(
                         modifier = Modifier.fillMaxSize(),
                         state = state,
-                        isPlaying = state.status == PlaybackStatus.PLAYING,
+                        isPlaying = (state.status == PlaybackStatus.PLAYING) &&
+                            !queueSheetState.isVisible && !durationsSheetState.isVisible
                     )
                 }
             }

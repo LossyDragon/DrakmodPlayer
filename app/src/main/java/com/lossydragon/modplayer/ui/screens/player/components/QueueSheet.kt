@@ -1,6 +1,5 @@
 package com.lossydragon.modplayer.ui.screens.player.components
 
-import androidx.compose.foundation.*
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.*
 import androidx.compose.material.icons.*
@@ -9,7 +8,8 @@ import androidx.compose.material3.*
 import androidx.compose.material3.SheetValue.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.*
-import androidx.compose.ui.res.stringResource
+import androidx.compose.ui.graphics.*
+import androidx.compose.ui.res.*
 import androidx.compose.ui.text.style.*
 import androidx.compose.ui.tooling.preview.*
 import androidx.compose.ui.unit.*
@@ -41,6 +41,7 @@ internal fun QueueSheet(
         sheetState = sheetState,
         sheetGesturesEnabled = false,
         dragHandle = null,
+        shape = MaterialTheme.shapes.small,
         content = {
             Box(
                 modifier = Modifier.fillMaxWidth(),
@@ -61,7 +62,6 @@ internal fun QueueSheet(
                     )
                 }
             )
-            HorizontalDivider()
             LazyColumn(
                 state = listState,
                 modifier = Modifier.fillMaxWidth(),
@@ -93,13 +93,12 @@ private fun QueueListItem(
     file: ModuleEntity,
     onItemClick: (Int) -> Unit
 ) {
-    val background = if (isCurrentItem) {
-        MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.3f)
-    } else {
-        MaterialTheme.colorScheme.surface
-    }
     ListItem(
+        modifier = Modifier.fillMaxWidth(),
         onClick = { onItemClick(index) },
+        colors = ListItemDefaults.colors(
+            containerColor = Color.Transparent
+        ),
         shapes = ListItemDefaults.shapes(
             shape = MaterialTheme.shapes.small,
             focusedShape = MaterialTheme.shapes.small,
@@ -120,19 +119,22 @@ private fun QueueListItem(
             )
         },
         leadingContent = {
-            if (isCurrentItem) {
+            Text(
+                text = "${index + 1}",
+                style = MaterialTheme.typography.labelSmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+            )
+        },
+        trailingContent = if (isCurrentItem) {
+            {
                 Icon(
-                    imageVector = Icons.Default.PlayArrow,
+                    imageVector = Icons.Default.Equalizer,
                     contentDescription = null,
                     tint = MaterialTheme.colorScheme.primary,
                 )
-            } else {
-                Text(
-                    text = "${index + 1}",
-                    style = MaterialTheme.typography.labelSmall,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant,
-                )
             }
+        } else {
+            null
         },
         supportingContent = {
             Text(
@@ -141,9 +143,6 @@ private fun QueueListItem(
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
             )
         },
-        modifier = Modifier
-            .fillMaxWidth()
-            .background(background),
     )
 }
 
@@ -155,6 +154,7 @@ private fun Preview() {
         initialValue = Expanded,
         enabledValues = setOf(Hidden, Expanded),
     )
+    var currentIndex by remember { mutableIntStateOf(3) }
     AppTheme {
         Scaffold { paddingValues ->
             Box(
@@ -172,8 +172,8 @@ private fun Preview() {
                         fileSize = 669L,
                     )
                 }.toPersistentList(),
-                currentIndex = 3,
-                onItemClick = {},
+                currentIndex = currentIndex,
+                onItemClick = { currentIndex = it },
                 onDismiss = {},
             )
         }

@@ -1,6 +1,5 @@
 package com.lossydragon.modplayer.ui.screens.player.components
 
-import androidx.compose.foundation.*
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.*
 import androidx.compose.material.icons.*
@@ -9,7 +8,8 @@ import androidx.compose.material3.*
 import androidx.compose.material3.SheetValue.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.*
-import androidx.compose.ui.res.stringResource
+import androidx.compose.ui.graphics.*
+import androidx.compose.ui.res.*
 import androidx.compose.ui.text.style.*
 import androidx.compose.ui.tooling.preview.*
 import androidx.compose.ui.unit.*
@@ -35,6 +35,7 @@ internal fun DurationsSheet(
         sheetState = sheetState,
         sheetGesturesEnabled = false,
         dragHandle = null,
+        shape = MaterialTheme.shapes.small,
         content = {
             Box(
                 modifier = Modifier.fillMaxWidth(),
@@ -55,7 +56,6 @@ internal fun DurationsSheet(
                     )
                 }
             )
-            HorizontalDivider()
             LazyColumn(
                 state = listState,
                 modifier = Modifier.fillMaxWidth(),
@@ -92,22 +92,17 @@ private fun DurationItem(
     val label = if (index == 0) "Main Song" else "Sub Song $index"
     val timeText = "%d:%02d - %s".format(minutes, seconds, label)
 
-    val background = if (isCurrentItem) {
-        MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.3f)
-    } else {
-        MaterialTheme.colorScheme.surface
-    }
-
     ListItem(
+        modifier = Modifier.fillMaxWidth(),
         onClick = { onItemClick(index) },
         shapes = ListItemDefaults.shapes(
             shape = MaterialTheme.shapes.small,
             focusedShape = MaterialTheme.shapes.small,
             pressedShape = MaterialTheme.shapes.small,
         ),
-        modifier = Modifier
-            .fillMaxWidth()
-            .background(background),
+        colors = ListItemDefaults.colors(
+            containerColor = Color.Transparent
+        ),
         content = {
             Text(
                 text = timeText,
@@ -134,6 +129,7 @@ private fun Preview() {
         initialValue = Expanded,
         enabledValues = setOf(Hidden, Expanded),
     )
+    var currentSequence by remember { mutableIntStateOf(5) }
     AppTheme {
         Scaffold { paddingValues ->
             Box(
@@ -156,8 +152,8 @@ private fun Preview() {
                     Sequence(0, 167_000), // 2:47
                     Sequence(0, 120_000), // 2:00
                 ).toPersistentList(),
-                currentSequence = 5,
-                onItemClick = {},
+                currentSequence = currentSequence,
+                onItemClick = { currentSequence = it },
                 onDismiss = {},
             )
         }
