@@ -309,7 +309,7 @@ private fun PlayerScreenContent(
                         horizontalAlignment = Alignment.CenterHorizontally,
                         content = {
                             Text(
-                                text = state.modVars.name.trim().ifBlank {
+                                text = state.modVars.modName.ifBlank {
                                     state.currentModule.name
                                 },
                                 style = MaterialTheme.typography.headlineSmall.copy(
@@ -321,7 +321,7 @@ private fun PlayerScreenContent(
                             )
 
                             Text(
-                                text = state.modVars.type.trim(),
+                                text = state.modVars.modType,
                                 style = MaterialTheme.typography.labelLarge.copy(
                                     fontWeight = FontWeight.Bold,
                                 ),

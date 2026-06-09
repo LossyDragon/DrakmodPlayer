@@ -24,6 +24,9 @@ data class ModVars(
     val seqData: Array<Sequence> = emptyArray(),
     val instruments: Array<String> = emptyArray(),
 ) {
+    val modName: String get() = name.trim()
+    val modType: String get() = type.trim()
+
     fun sequenceDuration(idx: Int): Int = seqData.getOrNull(idx)?.duration ?: 0
 
     override fun equals(other: Any?): Boolean {

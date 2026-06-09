@@ -109,7 +109,7 @@ fun MiniPlayerBar(
         },
         content = {
             Text(
-                text = state.modVars.name.trim(),
+                text = state.modVars.modName.ifEmpty { state.currentModule?.name.orEmpty() },
                 maxLines = 1,
                 overflow = TextOverflow.Ellipsis
             )
@@ -117,7 +117,7 @@ fun MiniPlayerBar(
         supportingContent = {
             Column {
                 Text(
-                    text = state.modVars.type.trim(),
+                    text = state.modVars.modType,
                     maxLines = 1,
                     overflow = TextOverflow.Ellipsis
                 )

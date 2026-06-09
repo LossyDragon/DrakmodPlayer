@@ -192,8 +192,8 @@ private fun ModVarsInfo(state: PlayerUiState) {
     val mv = state.modVars
     Column(verticalArrangement = Arrangement.spacedBy(1.dp)) {
         DebugHeader("ModVars")
-        DebugRow("Name", mv.name.ifBlank { "—" })
-        DebugRow("Type", mv.type.ifBlank { "—" })
+        DebugRow("Name", mv.modName.ifBlank { "—" })
+        DebugRow("Type", mv.modType.ifBlank { "—" })
         DebugRow("Pat/Chn/Ins", "${mv.pat} / ${mv.chn} / ${mv.ins}")
         DebugRow("Smp/Spd/BPM", "${mv.smp} / ${mv.spd} / ${mv.bpm}")
         DebugRow("Len/Rst/Gvl", "${mv.len} / ${mv.rst} / ${mv.gvl}")

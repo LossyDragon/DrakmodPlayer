@@ -706,8 +706,8 @@ class ModPlayer(
 
     /** Builds [MediaMetadata] from libxmp after the module has been loaded successfully. */
     private fun ModuleEntity.toRealMetadata(duration: Long): MediaMetadata {
-        val name = modVarsFlow.value.name.trim().ifBlank { filename }
-        val type = modVarsFlow.value.type.trim().ifBlank { fileExtension.uppercase() }
+        val name = modVarsFlow.value.modName.ifBlank { filename }
+        val type = modVarsFlow.value.modType.ifBlank { fileExtension.uppercase() }
         return MediaMetadata.Builder()
             .setTitle(name)
             .setArtist(type)
