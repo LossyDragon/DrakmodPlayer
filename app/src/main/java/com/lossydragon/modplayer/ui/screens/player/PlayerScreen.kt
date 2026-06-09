@@ -402,7 +402,6 @@ private fun PlayerScreenContent(
                     2 -> DebugView(
                         modifier = Modifier.fillMaxSize(),
                         state = state,
-                        patternData = patternData,
                         isPlaying = state.status == PlaybackStatus.PLAYING,
                     )
                 }

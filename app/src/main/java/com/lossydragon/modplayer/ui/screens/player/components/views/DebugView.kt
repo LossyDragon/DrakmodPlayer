@@ -2,9 +2,13 @@ package com.lossydragon.modplayer.ui.screens.player.components.views
 
 import androidx.compose.foundation.*
 import androidx.compose.foundation.layout.*
+import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.foundation.lazy.staggeredgrid.LazyVerticalStaggeredGrid
+import androidx.compose.foundation.lazy.staggeredgrid.StaggeredGridCells
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.*
+import androidx.compose.ui.Modifier
 import androidx.compose.ui.text.*
 import androidx.compose.ui.text.font.*
 import androidx.compose.ui.text.style.*
@@ -15,6 +19,7 @@ import com.lossydragon.modplayer.player.PlayerUiState
 import com.lossydragon.modplayer.player.model.NoteCell
 import com.lossydragon.modplayer.player.model.PatternData
 import com.lossydragon.modplayer.ui.theme.AppTheme
+import io.ktor.http.headers
 import kotlin.time.Duration.Companion.milliseconds
 import kotlinx.collections.immutable.toImmutableList
 import kotlinx.coroutines.Dispatchers
@@ -40,12 +45,32 @@ private fun noteStr(note: Int): String = when {
 fun DebugView(
     modifier: Modifier = Modifier,
     state: PlayerUiState,
-    patternData: PatternData,
     isPlaying: Boolean
 ) {
-    val fi = state.frameInfo
-    val mv = state.modVars
-    val numChannels = mv.chn
+    Column {
+        LazyVerticalStaggeredGrid(
+            modifier = modifier.weight(1f),
+            columns = StaggeredGridCells.Adaptive(200.dp),
+            verticalItemSpacing = 4.dp,
+            horizontalArrangement = Arrangement.spacedBy(4.dp),
+            content = {
+                item { PlaybackInfo(state) }
+                item { ModVarsInfo(state) }
+                item { FrameInfo(state) }
+            },
+        )
+        HorizontalDivider(Modifier.fillMaxWidth())
+        ChannelInfo(Modifier.weight(1f), state, isPlaying)
+    }
+}
+
+@Composable
+private fun ChannelInfo(
+    modifier: Modifier = Modifier,
+    state: PlayerUiState,
+    isPlaying: Boolean
+) {
+    val numChannels = state.modVars.chn
 
     val channelInfoBuffer = remember { ChannelInfo() }
     var channelSnapshot by remember { mutableStateOf(ChannelInfo()) }
@@ -70,111 +95,110 @@ fun DebugView(
                     samples = channelInfoBuffer.samples.copyOf(),
                 )
             }
-            delay(50.milliseconds) // ~20fps is plenty for a debug view
+            delay(50.milliseconds)
         }
     }
 
-    Column(modifier = modifier.fillMaxSize()) {
-        Column(
-            modifier = Modifier
-                .weight(1f)
-                .fillMaxWidth()
-                .verticalScroll(rememberScrollState())
-                .padding(horizontal = 6.dp, vertical = 4.dp),
-            verticalArrangement = Arrangement.spacedBy(1.dp),
-        ) {
-            Row(modifier = Modifier.fillMaxWidth()) {
-                Column(
-                    modifier = Modifier.weight(1f),
-                    verticalArrangement = Arrangement.spacedBy(1.dp),
-                ) {
-                    DebugHeader("Playback")
-                    DebugRow("Status", state.status.name)
-                    DebugRow(
-                        "Module",
-                        state.currentModule?.let { it.moduleName.ifBlank { it.filename } } ?: "—"
-                    )
-                    DebugRow("Queue", "${state.currentQueueIndex + 1} / ${state.queue.size}")
-                    DebugRow("Sequence", state.currentSequence.toString())
-                    DebugRow("Repeat", state.repeatMode.toString())
-                    DebugRow("Shuffle", state.isShuffle.toString())
-                    DebugRow("All seqs", state.playAllSequences.toString())
+    Column(
+        modifier = modifier
+            .fillMaxWidth()
+            .verticalScroll(rememberScrollState())
+            .padding(horizontal = 6.dp, vertical = 4.dp),
+        verticalArrangement = Arrangement.spacedBy(1.dp),
+    ) {
+        if (numChannels > 0) {
+            DebugHeader("Channel Info")
 
-                    Spacer(Modifier.height(6.dp))
-                    DebugHeader("ModVars")
-                    DebugRow("Name", mv.name.ifBlank { "—" })
-                    DebugRow("Type", mv.type.ifBlank { "—" })
-                    DebugRow("Pat/Chn/Ins", "${mv.pat} / ${mv.chn} / ${mv.ins}")
-                    DebugRow("Smp/Spd/BPM", "${mv.smp} / ${mv.spd} / ${mv.bpm}")
-                    DebugRow("Len/Rst/Gvl", "${mv.len} / ${mv.rst} / ${mv.gvl}")
-                    DebugRow("Sequences", mv.miNumSequences.toString())
-                    if (mv.miComment.isNotBlank()) DebugRow("Comment", mv.miComment.take(32))
-                }
+            val ci = channelSnapshot
+            val mono = TextStyle(
+                fontSize = 12.sp,
+                lineHeight = 11.sp,
+                fontFamily = FontFamily.Monospace,
+                platformStyle = PlatformTextStyle(includeFontPadding = false),
+                lineHeightStyle = LineHeightStyle(
+                    alignment = LineHeightStyle.Alignment.Center,
+                    trim = LineHeightStyle.Trim.Both,
+                ),
+            )
+            val hdrColor = MaterialTheme.colorScheme.primary
+            val cellColor = MaterialTheme.colorScheme.onSurface
 
-                Column(
-                    modifier = Modifier.weight(1f),
-                    verticalArrangement = Arrangement.spacedBy(1.dp),
-                ) {
-                    DebugHeader("FrameInfo")
-                    DebugRow("Pos/Pat/Row", "${fi.pos} / ${fi.pattern} / ${fi.row}")
-                    DebugRow("Speed/BPM", "${fi.speed} / ${fi.bpm}")
-                    DebugRow("Time/Total", "${fi.time} / ${fi.totalTime}")
-                    DebugRow("Loop/Seq", "${fi.loopCount} / ${fi.sequence}")
-                    DebugRow("VChn used", "${fi.virtUsed} / ${fi.virtChannels}")
-                }
-            }
-
-            if (numChannels > 0) {
-                Spacer(Modifier.height(6.dp))
-                DebugHeader("Channel Info")
-
-                val ci = channelSnapshot
-                val mono = TextStyle(
-                    fontSize = 8.sp,
-                    lineHeight = 11.sp,
-                    fontFamily = FontFamily.Monospace,
-                    platformStyle = PlatformTextStyle(includeFontPadding = false),
-                    lineHeightStyle = LineHeightStyle(
-                        alignment = LineHeightStyle.Alignment.Center,
-                        trim = LineHeightStyle.Trim.Both,
-                    ),
-                )
-                val hdrColor = MaterialTheme.colorScheme.primary
-                val cellColor = MaterialTheme.colorScheme.onSurface
-
-                Row(modifier = Modifier.horizontalScroll(rememberScrollState())) {
-                    Column {
-                        // Header
+            Row(modifier = Modifier.horizontalScroll(rememberScrollState())) {
+                Column {
+                    Row {
+                        DebugCell("Ch", 4, mono, hdrColor)
+                        DebugCell("Note", 5, mono, hdrColor)
+                        DebugCell("Ins", 4, mono, hdrColor)
+                        DebugCell("Smp", 4, mono, hdrColor)
+                        DebugCell("Vol", 4, mono, hdrColor)
+                        DebugCell("FVol", 5, mono, hdrColor)
+                        DebugCell("Pan", 4, mono, hdrColor)
+                        DebugCell("Period", 7, mono, hdrColor)
+                        DebugCell("Pos", 9, mono, hdrColor)
+                        DebugCell("Bend", 6, mono, hdrColor)
+                    }
+                    for (i in 0 until numChannels) {
                         Row {
-                            DebugCell("Ch", 4, mono, hdrColor)
-                            DebugCell("Note", 5, mono, hdrColor)
-                            DebugCell("Ins", 4, mono, hdrColor)
-                            DebugCell("Smp", 4, mono, hdrColor)
-                            DebugCell("Vol", 4, mono, hdrColor)
-                            DebugCell("FVol", 5, mono, hdrColor)
-                            DebugCell("Pan", 4, mono, hdrColor)
-                            DebugCell("Period", 7, mono, hdrColor)
-                            DebugCell("Pos", 9, mono, hdrColor)
-                            DebugCell("Bend", 6, mono, hdrColor)
-                        }
-                        for (i in 0 until numChannels) {
-                            Row {
-                                DebugCell("%2d".format(i + 1), 4, mono, cellColor)
-                                DebugCell(noteStr(ci.notes[i]), 5, mono, cellColor)
-                                DebugCell("%3d".format(ci.instruments[i]), 4, mono, cellColor)
-                                DebugCell("%3d".format(ci.samples[i]), 4, mono, cellColor)
-                                DebugCell("%3d".format(ci.volumes[i]), 4, mono, cellColor)
-                                DebugCell("%4d".format(ci.finalVols[i]), 5, mono, cellColor)
-                                DebugCell("%3d".format(ci.pans[i]), 4, mono, cellColor)
-                                DebugCell("%6d".format(ci.periods[i]), 7, mono, cellColor)
-                                DebugCell("%8d".format(ci.positions[i]), 9, mono, cellColor)
-                                DebugCell("%5d".format(ci.pitchbends[i]), 6, mono, cellColor)
-                            }
+                            DebugCell("%2d".format(i + 1), 4, mono, cellColor)
+                            DebugCell(noteStr(ci.notes[i]), 5, mono, cellColor)
+                            DebugCell("%3d".format(ci.instruments[i]), 4, mono, cellColor)
+                            DebugCell("%3d".format(ci.samples[i]), 4, mono, cellColor)
+                            DebugCell("%3d".format(ci.volumes[i]), 4, mono, cellColor)
+                            DebugCell("%4d".format(ci.finalVols[i]), 5, mono, cellColor)
+                            DebugCell("%3d".format(ci.pans[i]), 4, mono, cellColor)
+                            DebugCell("%6d".format(ci.periods[i]), 7, mono, cellColor)
+                            DebugCell("%8d".format(ci.positions[i]), 9, mono, cellColor)
+                            DebugCell("%5d".format(ci.pitchbends[i]), 6, mono, cellColor)
                         }
                     }
                 }
             }
         }
+    }
+}
+
+@Composable
+private fun FrameInfo(state: PlayerUiState) {
+    val fi = state.frameInfo
+    Column(verticalArrangement = Arrangement.spacedBy(1.dp)) {
+        DebugHeader("FrameInfo")
+        DebugRow("Pos/Pat/Row", "${fi.pos} / ${fi.pattern} / ${fi.row}")
+        DebugRow("Speed/BPM", "${fi.speed} / ${fi.bpm}")
+        DebugRow("Time/Total", "${fi.time} / ${fi.totalTime}")
+        DebugRow("Loop/Seq", "${fi.loopCount} / ${fi.sequence}")
+        DebugRow("VChn used", "${fi.virtUsed} / ${fi.virtChannels}")
+    }
+}
+
+@Composable
+private fun PlaybackInfo(state: PlayerUiState) {
+    Column(verticalArrangement = Arrangement.spacedBy(1.dp)) {
+        DebugHeader("Playback")
+        DebugRow("Status", state.status.name)
+        DebugRow(
+            "Module",
+            state.currentModule?.let { it.moduleName.ifBlank { it.filename } } ?: "—"
+        )
+        DebugRow("Queue", "${state.currentQueueIndex + 1} / ${state.queue.size}")
+        DebugRow("Sequence", state.currentSequence.toString())
+        DebugRow("Repeat", state.repeatMode.toString())
+        DebugRow("Shuffle", state.isShuffle.toString())
+        DebugRow("All seqs", state.playAllSequences.toString())
+    }
+}
+
+@Composable
+private fun ModVarsInfo(state: PlayerUiState) {
+    val mv = state.modVars
+    Column(verticalArrangement = Arrangement.spacedBy(1.dp)) {
+        DebugHeader("ModVars")
+        DebugRow("Name", mv.name.ifBlank { "—" })
+        DebugRow("Type", mv.type.ifBlank { "—" })
+        DebugRow("Pat/Chn/Ins", "${mv.pat} / ${mv.chn} / ${mv.ins}")
+        DebugRow("Smp/Spd/BPM", "${mv.smp} / ${mv.spd} / ${mv.bpm}")
+        DebugRow("Len/Rst/Gvl", "${mv.len} / ${mv.rst} / ${mv.gvl}")
+        DebugRow("Sequences", mv.miNumSequences.toString())
+        if (mv.miComment.isNotBlank()) DebugRow("Comment", mv.miComment.take(32))
     }
 }
 
@@ -227,36 +251,7 @@ private fun DebugRow(key: String, value: String) {
 @Preview(showBackground = true, widthDp = 480, heightDp = 640)
 @Composable
 private fun Preview() {
-    val fakeCells = (0 until 16).map { row ->
-        (0 until 8).map { ch ->
-            when {
-                row % 4 == 0 && ch % 2 == 0 -> NoteCell(
-                    note = 48 + ch,
-                    instrument = ch + 1,
-                    fxType = 0,
-                    fxParam = 0
-                )
-
-                row == 2 && ch == 1 -> NoteCell(
-                    note = 52,
-                    instrument = 2,
-                    fxType = 10,
-                    fxParam = 0xF0
-                )
-
-                row == 6 && ch == 5 -> NoteCell(
-                    note = 0x80,
-                    instrument = 0,
-                    fxType = -1,
-                    fxParam = 0
-                )
-
-                else -> NoteCell(note = 0, instrument = 0, fxType = -1, fxParam = 0)
-            }
-        }.toImmutableList()
-    }.toImmutableList()
-
-    val fakeState = PlayerUiState(
+    val state = PlayerUiState(
         status = PlaybackStatus.PLAYING,
         modVars = ModVars(
             name = "Space Debris",
@@ -281,13 +276,7 @@ private fun Preview() {
     AppTheme {
         DebugView(
             modifier = Modifier.fillMaxSize(),
-            state = fakeState,
-            patternData = PatternData(
-                cells = fakeCells,
-                numChannels = 8,
-                numRows = 16,
-                patternIndex = 3,
-            ),
+            state = state,
             isPlaying = true,
         )
     }

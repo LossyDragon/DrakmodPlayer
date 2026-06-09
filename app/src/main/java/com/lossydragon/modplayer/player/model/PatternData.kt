@@ -12,6 +12,19 @@ data class PatternData(
     val patternIndex: Int = -1
 )
 
+private val NOTE_NAMES = arrayOf(
+    "C-", "C#", "D-", "D#", "E-", "F-",
+    "F#", "G-", "G#", "A-", "A#", "B-",
+)
+
+private val HEX2 = Array(256) { "%02X".format(it) }
+
+private fun effectChar(effect: Int): Char = when (effect) {
+    in 0..9 -> '0' + effect
+    in 10..35 -> 'A' + (effect - 10)
+    else -> '?'
+}
+
 @Immutable
 data class NoteCell(
     val fxParam: Int,
@@ -29,22 +42,11 @@ data class NoteCell(
         else -> "???"
     }
 
-    val instrumentStr: String = if (instrument > 0) "%02X".format(instrument) else ".."
+    val instrumentStr: String = if (instrument > 0) HEX2[instrument and 0xFF] else ".."
 
-    val effectTypeChar: String = if (fxType >= 0) effectChar(fxType).toString() else "."
+    val effectTypeChar: Char = if (fxType >= 0) effectChar(fxType) else '.'
 
-    val effectParamStr: String = if (fxType >= 0) "%02X".format(fxParam) else ".."
+    val effectTypeStr: String = effectTypeChar.toString()
 
-    companion object {
-        private val NOTE_NAMES = arrayOf(
-            "C-", "C#", "D-", "D#", "E-", "F-",
-            "F#", "G-", "G#", "A-", "A#", "B-",
-        )
-
-        private fun effectChar(effect: Int): Char = when {
-            effect in 0..9 -> '0' + effect
-            effect in 10..35 -> 'A' + (effect - 10)
-            else -> '?'
-        }
-    }
+    val effectParamStr: String = if (fxType >= 0) HEX2[fxParam and 0xFF] else ".."
 }

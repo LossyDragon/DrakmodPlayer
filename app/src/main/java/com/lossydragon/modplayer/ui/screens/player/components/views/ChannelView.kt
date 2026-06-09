@@ -17,7 +17,7 @@ import androidx.compose.ui.platform.*
 import androidx.compose.ui.text.*
 import androidx.compose.ui.text.font.*
 import androidx.compose.ui.tooling.preview.*
-import androidx.compose.ui.tooling.preview.datasource.LoremIpsum
+import androidx.compose.ui.tooling.preview.datasource.*
 import androidx.compose.ui.unit.*
 import com.lossydragon.modplayer.ui.theme.AppTheme
 import com.materialkolor.ktx.darken
@@ -33,8 +33,13 @@ import kotlinx.coroutines.withContext
 import org.helllabs.libxmp.Xmp
 import org.helllabs.libxmp.model.ChannelInfo
 
-/** PCM samples requested per channel per frame - matches getSampleData buffer width. */
 private const val WAVEFORM_SAMPLES = 256
+
+// Packed Long key: [type:4][ch:8][extra:20][fontSizeBits:32]
+// type: 0=ch number, 1=instrument, 2="L [", 3="] R", 4=muted instrument
+private fun textKey(type: Int, ch: Int, extra: Int, fontSizeBits: Int): Long =
+    (type.toLong() shl 60) or (ch.toLong() shl 52) or (extra.toLong() shl 32) or
+        fontSizeBits.toLong()
 
 data class ChannelViewColors(
     val background: Color,
@@ -84,43 +89,25 @@ fun ChannelView(
 ) {
     val view = LocalView.current
 
-    // Pre-allocated buffer reused across polls — JNI fills IntArrays in place via SetIntArrayRegion.
-    val channelInfoBuffer = remember { ChannelInfo() }
-
-    // Per-channel waveform PCM buffers. Re-created only when channel count changes.
-    val waveformBuffers = remember(numChannels) {
-        Array(numChannels) { ByteArray(WAVEFORM_SAMPLES) }
-    }
-
-    // Tracks last active key and instrument per channel.
-    // keys[i] == -1 on held frames so we persist the last real value for getSampleData.
+    val liveData = remember(numChannels) { ChannelInfo() }
+    val liveWave = remember(numChannels) { Array(numChannels) { ByteArray(WAVEFORM_SAMPLES) } }
     val prevKey = remember(numChannels) { IntArray(numChannels) }
     val prevInstrument = remember(numChannels) { IntArray(numChannels) { -1 } }
 
-    // Snapshots published to Canvas after each background poll.
-    var channelSnapshot by remember { mutableStateOf(ChannelInfo()) }
-    var waveformSnapshot by remember { mutableStateOf(emptyArray<ByteArray>()) }
-
-    // Per-channel mute state; SnapshotStateList so individual toggles trigger recomposition.
-    val muteStates = remember(numChannels) {
-        mutableStateListOf<Boolean>().apply {
-            repeat(numChannels) { i ->
-                val value = if (!view.isInEditMode) Xmp.mute(i, -1) == 1 else false
-                add(value)
-            }
-        }
+    val muteArr = remember(numChannels) {
+        IntArray(numChannels) { i -> if (!view.isInEditMode) Xmp.mute(i, -1) else 0 }
     }
-    val isPlayingState = rememberUpdatedState(isPlaying)
+    var muteVersion by remember { mutableIntStateOf(0) }
+    var drawTick by remember { mutableIntStateOf(0) }
     var soloChannel by remember { mutableIntStateOf(-1) }
 
-    // Gesture state
+    val isPlayingState = rememberUpdatedState(isPlaying)
     var zoom by remember { mutableFloatStateOf(1f) }
     val scrollYAnim = remember { Animatable(0f) }
     val scrollY = scrollYAnim.value
     val decay = remember { exponentialDecay<Float>() }
     val coroutineScope = rememberCoroutineScope()
 
-    // Reset per-module state and start the ~50fps poll loop.
     LaunchedEffect(numChannels) {
         zoom = 1f
         scrollYAnim.snapTo(0f)
@@ -131,25 +118,20 @@ fun ChannelView(
         while (isActive) {
             if (isPlayingState.value) {
                 withContext(Dispatchers.Default) {
-                    Xmp.getChannelData(channelInfoBuffer)
-
+                    Xmp.getChannelData(liveData)
                     for (i in 0 until numChannels) {
-                        val period = channelInfoBuffer.periods[i]
-                        val volume = channelInfoBuffer.volumes[i]
-                        val finalVol = channelInfoBuffer.finalVols[i]
-                        val key = channelInfoBuffer.keys[i]
-                        val ins = channelInfoBuffer.instruments[i]
-
+                        val period = liveData.periods[i]
+                        val volume = liveData.volumes[i]
+                        val finalVol = liveData.finalVols[i]
+                        val key = liveData.keys[i]
+                        val ins = liveData.instruments[i]
                         if (period <= 0 || (volume == 0 && finalVol == 0)) {
-                            waveformBuffers[i].fill(0)
+                            liveWave[i].fill(0)
                             continue
                         }
-
-                        // Trigger waveform oscilloscope sync only on real note-on events.
                         val trigger = key >= 0 && (key != prevKey[i] || ins != prevInstrument[i])
                         if (key >= 0) prevKey[i] = key
                         prevInstrument[i] = ins
-
                         Xmp.getSampleData(
                             trigger = trigger,
                             ins = ins,
@@ -157,62 +139,44 @@ fun ChannelView(
                             period = period,
                             chn = i,
                             width = WAVEFORM_SAMPLES,
-                            buffer = waveformBuffers[i],
+                            buffer = liveWave[i],
                         )
                     }
                 }
-
-                // Publish to Canvas on Main. copyOf prevents the JNI from racing the Canvas reader.
-                channelSnapshot = ChannelInfo(
-                    volumes = channelInfoBuffer.volumes.copyOf(),
-                    finalVols = channelInfoBuffer.finalVols.copyOf(),
-                    pans = channelInfoBuffer.pans.copyOf(),
-                    instruments = channelInfoBuffer.instruments.copyOf(),
-                    keys = channelInfoBuffer.keys.copyOf(),
-                    periods = channelInfoBuffer.periods.copyOf(),
-                    holdVols = channelInfoBuffer.holdVols.copyOf(),
-                    positions = channelInfoBuffer.positions.copyOf(),
-                    pitchbends = channelInfoBuffer.pitchbends.copyOf(),
-                    notes = channelInfoBuffer.notes.copyOf(),
-                    samples = channelInfoBuffer.samples.copyOf(),
-                )
-                waveformSnapshot = Array(numChannels) { waveformBuffers[it].copyOf() }
+                drawTick++
             }
-
-            delay(20.milliseconds) // ~50fps
+            delay(20.milliseconds)
         }
     }
 
-    // Layout constants derived from density and zoom.
     val density = LocalDensity.current
     val baseRowHeight = with(density) { 52.dp.toPx() }
-    val baseChannelNumWidth = with(density) { 26.dp.toPx() }
-    val baseWaveBoxWidth = with(density) { 96.dp.toPx() }
+    val baseChNumWidth = with(density) { 26.dp.toPx() }
+    val baseWaveWidth = with(density) { 96.dp.toPx() }
     val basePad = with(density) { 4.dp.toPx() }
 
     val fontSize = 11.sp * zoom
     val textMeasurer = rememberTextMeasurer()
-    val textCache = remember { mutableMapOf<String, TextLayoutResult>() }
+    val textCache = remember { HashMap<Long, TextLayoutResult>(64) }
+
     LaunchedEffect(fontSize) { textCache.clear() }
 
     val textStyle = remember(fontSize) {
         TextStyle(fontSize = fontSize, fontFamily = FontFamily.Monospace)
     }
-    val styleKey = remember(fontSize) { "|$fontSize" }
+    val fontSizeBits = remember(fontSize) { fontSize.value.toBits() }
 
-    // Shared refs so gesture lambdas always read the latest derived values
-    // without the composable re-keying on pointerInput every zoom change.
     val contentHeightRef = remember { mutableFloatStateOf(0f) }
     val scrollYRef = remember { mutableFloatStateOf(0f) }
-    val channelNumWidthRef = remember { mutableFloatStateOf(0f) }
-    val waveBoxWidthRef = remember { mutableFloatStateOf(0f) }
+    val chNumWidthRef = remember { mutableFloatStateOf(0f) }
+    val waveWidthRef = remember { mutableFloatStateOf(0f) }
     val rowHeightRef = remember { mutableFloatStateOf(0f) }
     scrollYRef.floatValue = scrollY
 
     val rowHeight = baseRowHeight * zoom
     contentHeightRef.floatValue = rowHeight * numChannels
-    channelNumWidthRef.floatValue = baseChannelNumWidth * zoom
-    waveBoxWidthRef.floatValue = baseWaveBoxWidth * zoom
+    chNumWidthRef.floatValue = baseChNumWidth * zoom
+    waveWidthRef.floatValue = baseWaveWidth * zoom
     rowHeightRef.floatValue = rowHeight
 
     val waveformPath = remember { Path() }
@@ -222,20 +186,18 @@ fun ChannelView(
             .fillMaxSize()
             .clipToBounds()
             .pointerInput(numChannels) {
-                val velocityTracker = VelocityTracker()
+                val vt = VelocityTracker()
                 awaitEachGesture {
                     awaitFirstDown(requireUnconsumed = false)
                     coroutineScope.launch { scrollYAnim.stop() }
-                    velocityTracker.resetTracking()
-                    var isSingleFinger = false
-
+                    vt.resetTracking()
+                    var singleFinger = false
                     while (true) {
                         val event = awaitPointerEvent()
                         val active = event.changes.filter { it.pressed }
-
                         if (active.isEmpty()) {
-                            if (isSingleFinger) {
-                                val vel = velocityTracker.calculateVelocity()
+                            if (singleFinger) {
+                                val vel = vt.calculateVelocity()
                                 coroutineScope.launch {
                                     val max = (contentHeightRef.floatValue - size.height)
                                         .coerceAtLeast(0f)
@@ -246,36 +208,30 @@ fun ChannelView(
                             }
                             break
                         }
-
                         if (active.size == 1) {
                             val change = active[0]
-                            velocityTracker.addPointerInputChange(change)
+                            vt.addPointerInputChange(change)
                             val dy = change.position.y - change.previousPosition.y
                             if (dy != 0f) {
                                 coroutineScope.launch {
                                     val max = (contentHeightRef.floatValue - size.height)
                                         .coerceAtLeast(0f)
-                                    scrollYAnim.snapTo(
-                                        (scrollYAnim.value - dy)
-                                            .coerceIn(0f, max)
-                                    )
+                                    scrollYAnim.snapTo((scrollYAnim.value - dy).coerceIn(0f, max))
                                 }
                                 change.consume()
                             }
-                            isSingleFinger = true
+                            singleFinger = true
                         } else {
-                            val gestureZoom = event.calculateZoom()
+                            zoom = (zoom * event.calculateZoom()).coerceIn(0.5f, 3f)
                             val pan = event.calculatePan()
-                            zoom = (zoom * gestureZoom).coerceIn(0.5f, 3f)
                             coroutineScope.launch {
-                                val max = (contentHeightRef.floatValue - size.height).coerceAtLeast(
-                                    0f
-                                )
+                                val max = (contentHeightRef.floatValue - size.height)
+                                    .coerceAtLeast(0f)
                                 scrollYAnim.snapTo((scrollYAnim.value - pan.y).coerceIn(0f, max))
                             }
                             event.changes.forEach { it.consume() }
-                            isSingleFinger = false
-                            velocityTracker.resetTracking()
+                            singleFinger = false
+                            vt.resetTracking()
                         }
                     }
                 }
@@ -283,38 +239,39 @@ fun ChannelView(
             .pointerInput(numChannels) {
                 detectTapGestures(
                     onTap = { offset ->
-                        val rh = rowHeightRef.floatValue
-                        val cnw = channelNumWidthRef.floatValue
-                        val wbw = waveBoxWidthRef.floatValue
-                        val ch = ((offset.y + scrollYRef.floatValue) / rh).toInt()
-                        if (ch in 0 until numChannels && offset.x in cnw..(cnw + wbw)) {
-                            val nowMuted = !muteStates[ch]
-                            muteStates[ch] = nowMuted
-                            Xmp.mute(ch, if (nowMuted) 1 else 0)
+                        // Good formatting
+                        val ch = ((offset.y + scrollYRef.floatValue) / rowHeightRef.floatValue)
+                            .toInt()
+                        val chnNumRef = chNumWidthRef.floatValue
+                        val values = chnNumRef..(chnNumRef + waveWidthRef.floatValue)
+                        if (ch in 0 until numChannels && offset.x in values) {
+                            muteArr[ch] = if (muteArr[ch] == 0) 1 else 0
+                            Xmp.mute(ch, muteArr[ch])
+                            muteVersion++
                         }
                     },
                     onLongPress = { offset ->
-                        val rh = rowHeightRef.floatValue
-                        val cnw = channelNumWidthRef.floatValue
-                        val wbw = waveBoxWidthRef.floatValue
-                        val ch = ((offset.y + scrollYRef.floatValue) / rh).toInt()
-                        if (ch in 0 until numChannels && offset.x in cnw..(cnw + wbw)) {
+                        // Good formatting
+                        val ch = ((offset.y + scrollYRef.floatValue) / rowHeightRef.floatValue)
+                            .toInt()
+                        val chnNumRef = chNumWidthRef.floatValue
+                        val values = chnNumRef..(chnNumRef + waveWidthRef.floatValue)
+                        if (ch in 0 until numChannels && offset.x in values) {
                             if (soloChannel < 0) {
                                 for (i in 0 until numChannels) {
-                                    val mute = i != ch
-                                    muteStates[i] = mute
-                                    Xmp.mute(i, if (mute) 1 else 0)
+                                    muteArr[i] = if (i != ch) 1 else 0
+                                    Xmp.mute(i, muteArr[i])
                                 }
                                 soloChannel = ch
                             } else {
                                 for (i in 0 until numChannels) {
-                                    muteStates[i] = false
+                                    muteArr[i] = 0
                                     Xmp.mute(i, 0)
                                 }
                                 soloChannel = -1
                             }
+                            muteVersion++
                         } else {
-                            // Long-press outside the waveform box resets zoom and scroll.
                             zoom = 1f
                             coroutineScope.launch { scrollYAnim.snapTo(0f) }
                         }
@@ -322,14 +279,12 @@ fun ChannelView(
                 )
             }
     ) {
-        if (numChannels == 0) return@Canvas
-        val ci = channelSnapshot
-        val wavSnap = waveformSnapshot
+        if ((drawTick == 0 && !view.isInEditMode) || numChannels == 0) return@Canvas
 
         val pad = basePad * zoom
-        val channelNumWidth = baseChannelNumWidth * zoom
-        val waveBoxWidth = baseWaveBoxWidth * zoom
-        val infoX = channelNumWidth + waveBoxWidth + pad * 2
+        val chNumWidth = baseChNumWidth * zoom
+        val waveWidth = baseWaveWidth * zoom
+        val infoX = chNumWidth + waveWidth + pad * 2
 
         drawRect(color = colors.background, size = size)
 
@@ -338,198 +293,172 @@ fun ChannelView(
                 val rowTop = ch * rowHeight - scrollY
                 if (rowTop + rowHeight < 0f || rowTop > size.height) continue
 
-                val muted = muteStates[ch]
-                val muteAlpha = if (muted) 0.3f else 1f
+                val muted = muteArr[ch] == 1
+                val alpha = if (muted) 0.3f else 1f
+                val period = liveData.periods[ch]
+                val volume = liveData.volumes[ch]
+                val finalVol = liveData.finalVols[ch]
+                val pan = liveData.pans[ch]
+                val instrument = liveData.instruments[ch]
 
-                val period = ci.periods[ch]
-                val volume = ci.volumes[ch]
-                val finalVol = ci.finalVols[ch]
-                val pan = ci.pans[ch]
-                val instrument = ci.instruments[ch]
-
-                // Row separator
+                // row separator
                 if (ch > 0) {
                     drawLine(
                         color = colors.rowSeparator,
                         start = Offset(0f, rowTop),
                         end = Offset(size.width, rowTop),
-                        strokeWidth = 1f,
+                        strokeWidth = 1f
                     )
                 }
 
-                // Channel number
-                val chLabel = (ch + 1).toString()
-                val chLayout = textCache.getOrPut("chn$chLabel$styleKey") {
-                    textMeasurer.measure(chLabel, textStyle)
+                // channel number
+                val chLayout = textCache.getOrPut(textKey(0, ch, 0, fontSizeBits)) {
+                    textMeasurer.measure((ch + 1).toString(), textStyle)
                 }
                 drawText(
-                    chLayout,
-                    color = colors.channelNumber.copy(alpha = muteAlpha),
+                    textLayoutResult = chLayout,
+                    color = colors.channelNumber.copy(alpha = alpha),
                     topLeft = Offset(
-                        x = (channelNumWidth - chLayout.size.width) / 2f,
-                        y = rowTop + (rowHeight - chLayout.size.height) / 2f,
+                        (chNumWidth - chLayout.size.width) / 2f,
+                        rowTop + (rowHeight - chLayout.size.height) / 2f
                     ),
                 )
 
-                /************
-                 * Waveform *
-                 ************/
-
+                // waveform box
                 val waveTop = rowTop + pad
                 val waveH = rowHeight - pad * 2
-
                 drawRect(
                     color = colors.waveformBackground,
-                    topLeft = Offset(channelNumWidth, waveTop),
-                    size = Size(waveBoxWidth, waveH),
+                    topLeft = Offset(chNumWidth, waveTop),
+                    size = Size(waveWidth, waveH)
                 )
                 drawRect(
                     color = colors.waveformBorder,
-                    topLeft = Offset(channelNumWidth, waveTop),
-                    size = Size(waveBoxWidth, waveH),
-                    style = Stroke(width = 1f),
+                    topLeft = Offset(chNumWidth, waveTop),
+                    size = Size(waveWidth, waveH),
+                    style = Stroke(1f)
                 )
                 val midY = waveTop + waveH / 2f
                 drawLine(
                     color = colors.waveformBaseline,
-                    start = Offset(channelNumWidth + 1f, midY),
-                    end = Offset(channelNumWidth + waveBoxWidth - 1f, midY),
-                    strokeWidth = 1f,
+                    start = Offset(chNumWidth + 1f, midY),
+                    end = Offset(chNumWidth + waveWidth - 1f, midY),
+                    strokeWidth = 1f
                 )
 
-                if (period > 0 && ch < wavSnap.size) {
-                    val buf = wavSnap[ch]
-                    val ampScale = (finalVol / 64f).coerceIn(0f, 1f)
-                    val halfH = (waveH / 2f) * 0.88f * ampScale
-                    val xStep = (waveBoxWidth - 2f) / WAVEFORM_SAMPLES.toFloat()
+                // waveform
+                if (period > 0 && ch < liveWave.size) {
+                    val buf = liveWave[ch]
+                    val halfH = (waveH / 2f) * 0.88f * (finalVol / 64f).coerceIn(0f, 1f)
+                    val xStep = (waveWidth - 2f) / WAVEFORM_SAMPLES.toFloat()
                     waveformPath.reset()
                     for (i in 0 until WAVEFORM_SAMPLES) {
-                        val sx = channelNumWidth + 1f + i * xStep
+                        val sx = chNumWidth + 1f + i * xStep
                         val sy = midY - (buf[i].toFloat() / 128f) * halfH
                         if (i == 0) waveformPath.moveTo(sx, sy) else waveformPath.lineTo(sx, sy)
                     }
                     drawPath(
                         path = waveformPath,
-                        color = colors.waveformLine.copy(alpha = muteAlpha),
-                        style = Stroke(
-                            width = (1.5f * zoom).coerceAtLeast(1f),
-                            cap = StrokeCap.Round,
-                        ),
+                        color = colors.waveformLine.copy(alpha = alpha),
+                        style = Stroke((1.5f * zoom).coerceAtLeast(1f), cap = StrokeCap.Butt)
                     )
                 }
-
-                /****************
-                 * Channel info *
-                 ****************/
 
                 val infoWidth = (size.width - infoX - pad).coerceAtLeast(0f)
                 if (infoWidth < 16f) continue
-
                 val lineH = rowHeight / 3f
 
-                // Instrument index + name
-                val insRaw = instrumentNames.getOrNull(instrument) ?: ".."
-                val insPrefix = insRaw.take(2)
-                val insText = if (muted) "$insPrefix Muted" else insRaw
-                val insColor = if (muted) Color.Red else colors.instrumentText
-                val insLayout = textCache.getOrPut("ins|$insText$styleKey") {
-                    textMeasurer.measure(insText, textStyle)
+                // instrument name
+                val insLayout = textCache.getOrPut(
+                    textKey(if (muted) 4 else 1, ch, instrument, fontSizeBits)
+                ) {
+                    val raw = instrumentNames.getOrNull(instrument) ?: ".."
+                    textMeasurer.measure(if (muted) "${raw.take(2)} Muted" else raw, textStyle)
                 }
                 drawText(
-                    insLayout,
-                    color = insColor,
-                    topLeft = Offset(
-                        x = infoX,
-                        y = rowTop + (lineH - insLayout.size.height) / 2f,
-                    ),
+                    textLayoutResult = insLayout,
+                    color = if (muted) Color.Red else colors.instrumentText,
+                    topLeft = Offset(infoX, rowTop + (lineH - insLayout.size.height) / 2f)
                 )
 
-                /**************
-                 * Volume bar *
-                 **************/
-
+                // volume bar
                 val barH = lineH * 0.5f
                 val barTop = rowTop + lineH + (lineH - barH) / 2f
-                val volFrac = (volume / 64f).coerceIn(0f, 1f)
-                val finalVolFrac = (finalVol / 64f).coerceIn(0f, 1f)
-
+                val fvf = (finalVol / 64f).coerceIn(0f, 1f)
+                val vf = (volume / 64f).coerceIn(0f, 1f)
                 drawRect(
                     color = colors.volumeBarTrack,
                     topLeft = Offset(infoX, barTop),
-                    size = Size(infoWidth, barH),
+                    size = Size(infoWidth, barH)
                 )
-                if (finalVolFrac > 0f) {
+                if (fvf > 0f) {
                     drawRect(
-                        color = colors.finalVolumeBar.copy(alpha = 0.35f * muteAlpha),
+                        color = colors.finalVolumeBar.copy(alpha = 0.35f * alpha),
                         topLeft = Offset(infoX, barTop),
-                        size = Size(infoWidth * finalVolFrac, barH),
+                        size = Size(infoWidth * fvf, barH)
                     )
                 }
-                if (volFrac > 0f) {
+                if (vf > 0f) {
                     drawRect(
-                        color = colors.volumeBar.copy(alpha = muteAlpha),
+                        color = colors.volumeBar.copy(alpha = alpha),
                         topLeft = Offset(infoX, barTop),
-                        size = Size(infoWidth * volFrac, barH),
+                        size = Size(infoWidth * vf, barH)
                     )
                 }
 
-                /*******
-                 * Pan *
-                 *******/
-
+                // pan
                 val panCenterY = rowTop + lineH * 2.5f
-                // libxmp pan is 0 (full-left) - 128 (center) - 255 (full-right)
                 val panFrac = (pan / 255f).coerceIn(0f, 1f)
-
-                val lLayout = textCache.getOrPut("pan_L$styleKey") {
+                val lLayout = textCache.getOrPut(textKey(2, 0, 0, fontSizeBits)) {
                     textMeasurer.measure("L [", textStyle)
                 }
-                val rLayout = textCache.getOrPut("pan_R$styleKey") {
+                val rLayout = textCache.getOrPut(textKey(3, 0, 0, fontSizeBits)) {
                     textMeasurer.measure("] R", textStyle)
                 }
-                val labelGap = pad * 0.5f
-
-                val railStartX = infoX + lLayout.size.width + labelGap
-                val railEndX = infoX + infoWidth - rLayout.size.width - labelGap
-                val railWidth = (railEndX - railStartX).coerceAtLeast(0f)
-
-                val cursorW = (railWidth * 0.06f).coerceIn(
-                    minOf(4f * zoom, railWidth),
-                    minOf(14f * zoom, railWidth),
+                val gap = pad * 0.5f
+                val railX0 = infoX + lLayout.size.width + gap
+                val railX1 = infoX + infoWidth - rLayout.size.width - gap
+                val railW = (railX1 - railX0).coerceAtLeast(0f)
+                val cursorW = (railW * 0.06f).coerceIn(
+                    minOf(4f * zoom, railW),
+                    minOf(14f * zoom, railW)
                 )
                 val cursorH = lineH * 0.45f
-                val cursorX = (railStartX + railWidth * panFrac - cursorW / 2f)
-                    .coerceIn(railStartX, (railEndX - cursorW).coerceAtLeast(railStartX))
+                val cursorX = (railX0 + railW * panFrac - cursorW / 2f)
+                    .coerceIn(railX0, (railX1 - cursorW).coerceAtLeast(railX0))
 
                 drawText(
-                    lLayout,
+                    textLayoutResult = lLayout,
                     color = colors.panRail,
-                    topLeft = Offset(infoX, panCenterY - lLayout.size.height / 2f),
+                    topLeft = Offset(
+                        infoX,
+                        panCenterY - lLayout.size.height / 2f
+                    )
                 )
                 drawText(
-                    rLayout,
+                    textLayoutResult = rLayout,
                     color = colors.panRail,
                     topLeft = Offset(
                         infoX + infoWidth - rLayout.size.width,
-                        panCenterY - rLayout.size.height / 2f,
-                    ),
+                        panCenterY - rLayout.size.height / 2f
+                    )
                 )
                 drawLine(
                     color = colors.panRail,
-                    start = Offset(railStartX, panCenterY),
-                    end = Offset(railEndX, panCenterY),
-                    strokeWidth = 1f,
+                    start = Offset(railX0, panCenterY),
+                    end = Offset(railX1, panCenterY),
+                    strokeWidth = 1f
                 )
                 drawLine(
                     color = colors.panRail,
-                    start = Offset(railStartX + railWidth / 2f, panCenterY - cursorH / 2f),
-                    end = Offset(railStartX + railWidth / 2f, panCenterY + cursorH / 2f),
-                    strokeWidth = 1f,
+                    start = Offset(railX0 + railW / 2f, panCenterY - cursorH / 2f),
+                    end = Offset(railX0 + railW / 2f, panCenterY + cursorH / 2f),
+                    strokeWidth = 1f
                 )
                 drawRect(
-                    color = colors.panCursor.copy(alpha = muteAlpha),
+                    color = colors.panCursor.copy(alpha = alpha),
                     topLeft = Offset(cursorX, panCenterY - cursorH / 2f),
-                    size = Size(cursorW, cursorH),
+                    size = Size(cursorW, cursorH)
                 )
             }
         }
