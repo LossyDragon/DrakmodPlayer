@@ -214,15 +214,13 @@ fun PlayerScreen(
                 PlayerAction.OnAllSequences -> viewModel.toggleAllSequences()
 
                 PlayerAction.OnInstruments -> {
-                    if (state.modVars.instruments.isNotEmpty()) {
-                        showInstruments = true
-                    } else {
+                    if (state.modVars.instruments.isEmpty()) {
                         scope.launch {
                             val text = resource.getString(R.string.snack_no_instruments)
-                            snackBarHostState.showSnackbar(
-                                message = text
-                            )
+                            snackBarHostState.showSnackbar(message = text)
                         }
+                    } else {
+                        showInstruments = true
                     }
                 }
 
@@ -234,10 +232,10 @@ fun PlayerScreen(
                     if (state.modVars.miComment.isEmpty()) {
                         scope.launch {
                             val text = resource.getString(R.string.snack_no_song_message)
-                            snackBarHostState.showSnackbar(
-                                message = text
-                            )
+                            snackBarHostState.showSnackbar(message = text)
                         }
+                    } else {
+                        showCommentInfo = true
                     }
                 }
 
