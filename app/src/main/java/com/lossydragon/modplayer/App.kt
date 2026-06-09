@@ -19,13 +19,13 @@ class App : Application() {
     override fun onCreate() {
         super.onCreate()
 
-        CrashHandler.initialize(this@App)
-
         startKoin {
             androidContext(this@App)
             modules(appModule)
         }
 
         Timber.plant(if (BuildConfig.DEBUG) Timber.DebugTree() else ReleaseTree())
+
+        CrashHandler.initialize(this@App)
     }
 }
