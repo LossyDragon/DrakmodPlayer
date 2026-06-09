@@ -101,6 +101,7 @@ fun NavPlaylists(
                     onMiniPlayerToggle = playerViewModel::togglePlayPause,
                     onMiniPlayerNext = playerViewModel::next,
                     onMiniPlayerPrev = playerViewModel::previous,
+                    onMiniPlayerStop = playerViewModel::stop,
                     onSelectPlaylist = { playlist ->
                         val entry = NavKeyPlaylists.Entries(
                             playlistId = playlist.id,
@@ -135,6 +136,7 @@ fun NavPlaylists(
                     onMiniPlayerToggle = playerViewModel::togglePlayPause,
                     onMiniPlayerNext = playerViewModel::next,
                     onMiniPlayerPrev = playerViewModel::previous,
+                    onMiniPlayerStop = playerViewModel::stop,
                     onPlayEntry = playlistsViewModel::playEntry,
                     onPlayAll = { playlistsViewModel.playPlaylist() },
                     onShuffle = { playlistsViewModel.playPlaylist(isShuffle = true) },
@@ -158,6 +160,7 @@ private fun PlaylistListScreen(
     onMiniPlayerToggle: () -> Unit,
     onMiniPlayerNext: () -> Unit,
     onMiniPlayerPrev: () -> Unit,
+    onMiniPlayerStop: () -> Unit,
     onSelectPlaylist: (PlaylistEntity) -> Unit,
     onCreatePlaylist: (String, String) -> Unit,
     onDeletePlaylist: (PlaylistEntity) -> Unit,
@@ -335,6 +338,7 @@ private fun PlaylistListScreen(
                         onPlayPause = onMiniPlayerToggle,
                         onNext = onMiniPlayerNext,
                         onPrevious = onMiniPlayerPrev,
+                        onDismiss = onMiniPlayerStop,
                     )
                 }
             )
@@ -418,6 +422,7 @@ private fun PlaylistEntriesScreen(
     onMiniPlayerToggle: () -> Unit,
     onMiniPlayerNext: () -> Unit,
     onMiniPlayerPrev: () -> Unit,
+    onMiniPlayerStop: () -> Unit,
     onPlayEntry: (ModuleEntity) -> Unit,
     onPlayAll: () -> Unit,
     onShuffle: () -> Unit,
@@ -462,6 +467,7 @@ private fun PlaylistEntriesScreen(
                     onPlayPause = onMiniPlayerToggle,
                     onNext = onMiniPlayerNext,
                     onPrevious = onMiniPlayerPrev,
+                    onDismiss = onMiniPlayerStop,
                 )
             }
         },
@@ -707,6 +713,7 @@ private fun PreviewPlaylistListScreen(
             onMiniPlayerToggle = {},
             onMiniPlayerNext = {},
             onMiniPlayerPrev = {},
+            onMiniPlayerStop = {},
             onSelectPlaylist = {},
             onCreatePlaylist = { _, _ -> },
             onDeletePlaylist = {},
@@ -737,6 +744,7 @@ private fun PreviewPlaylistEntriesScreen(
             onMiniPlayerToggle = {},
             onMiniPlayerNext = {},
             onMiniPlayerPrev = {},
+            onMiniPlayerStop = {},
             onPlayEntry = {},
             onPlayAll = {},
             onShuffle = {},

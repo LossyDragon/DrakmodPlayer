@@ -228,4 +228,5 @@
     <string name="untitled">(untitled)</string>
     <string name="value_percent">%d%%</string>
     <string name="value_x">%dx</string>
+    <string name="desc_stop">Swipe to stop playing</string>
 </resources>

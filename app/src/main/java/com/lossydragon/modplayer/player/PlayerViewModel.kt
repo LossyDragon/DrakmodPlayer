@@ -34,7 +34,7 @@ import timber.log.Timber
 
 enum class PlaybackStatus { IDLE, LOADING, PLAYING, PAUSED }
 
-private val SCREEN_COUNT = 3
+private const val SCREEN_COUNT = 3
 
 @Immutable
 data class PlayerUiState(

@@ -122,6 +122,7 @@ fun FileBrowserScreen(
         onMiniPlayerToggle = playerViewModel::togglePlayPause,
         onMiniPlayerNext = playerViewModel::next,
         onMiniPlayerPrev = playerViewModel::previous,
+        onMiniPlayerStop = playerViewModel::stop,
     )
 }
 
@@ -145,7 +146,8 @@ private fun FileBrowserScreenContent(
     onMiniPlayerTap: () -> Unit,
     onMiniPlayerToggle: () -> Unit,
     onMiniPlayerNext: () -> Unit,
-    onMiniPlayerPrev: () -> Unit
+    onMiniPlayerPrev: () -> Unit,
+    onMiniPlayerStop: () -> Unit
 ) {
     val searchBarState = rememberSearchBarWithGapState()
     val textFieldState = rememberTextFieldState()
@@ -290,6 +292,7 @@ private fun FileBrowserScreenContent(
                     onPlayPause = onMiniPlayerToggle,
                     onNext = onMiniPlayerNext,
                     onPrevious = onMiniPlayerPrev,
+                    onDismiss = onMiniPlayerStop,
                 )
             }
         },
@@ -513,6 +516,7 @@ private fun Preview(
             onMiniPlayerToggle = {},
             onMiniPlayerNext = {},
             onMiniPlayerPrev = {},
+            onMiniPlayerStop = {},
         )
     }
 }
