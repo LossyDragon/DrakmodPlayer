@@ -626,7 +626,7 @@ class ModPlayer(
             }
         }
         scope.cancel("Releasing Engine")
-        Thread { engine.stop() }.start()
+        Thread { engine.release() }.start()
     }
 
     /**

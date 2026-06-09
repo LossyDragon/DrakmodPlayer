@@ -88,17 +88,17 @@ object Xmp {
 
     external fun deinit(): Int
 
-    external fun dropAudio()
-
     external fun endPlayer(): Int
-
-    external fun fillBuffer(loop: Boolean): Int
 
     external fun getFrameInfo(values: FrameInfo)
 
     external fun getPlayer(parm: Int): Int
 
-    external fun hasFreeBuffer(): Boolean
+    external fun hasModuleEnded(): Boolean
+
+    external fun setXmpPlaying(value: Boolean)
+
+    external fun setLoopMode(loop: Boolean)
 
     external fun init(
         rate: Int,
@@ -171,8 +171,6 @@ object Xmp {
     external fun setSequence(seq: Int): Boolean
 
     external fun getAudioStats(stats: AudioStats)
-
-    external fun setExpectSilence(value: Boolean)
 
     fun testFromFd(context: Context, uri: Uri, modInfo: ModInfo = ModInfo()): Boolean {
         Log.d(TAG, "Testing: $uri")

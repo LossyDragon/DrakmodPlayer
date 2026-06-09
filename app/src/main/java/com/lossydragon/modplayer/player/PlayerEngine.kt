@@ -120,6 +120,7 @@ class PlayerEngine(
      */
     fun isRepeatingOne(value: Boolean) {
         isRepeatOne = value
+        if (initialized) Xmp.setLoopMode(value)
     }
 
     /**
@@ -194,9 +195,10 @@ class PlayerEngine(
         if (!initialized) return
         if (renderThread?.isAlive == true) return
 
-        Xmp.setExpectSilence(false)
         stopRequest = false
         paused = false
+
+        Xmp.setLoopMode(isRepeatOne)
 
         val sampleRate = runBlocking { prefs.getSampleRateFlow().first() }
         val format = runBlocking { prefs.getPlayerFormatFlow().first() }
@@ -209,7 +211,6 @@ class PlayerEngine(
         for (i in 0 until 64) Xmp.mute(i, 0)
 
         applyRuntimeSettings()
-        prefillBuffer()
 
         Xmp.playAudio()
         isPlaying.value = true
@@ -227,8 +228,7 @@ class PlayerEngine(
     fun pause() {
         endedNaturally = false
         paused = true
-        Xmp.setExpectSilence(true)
-        Xmp.dropAudio()
+        Xmp.setXmpPlaying(false)
         isPlaying.value = false
     }
 
@@ -238,7 +238,7 @@ class PlayerEngine(
     fun resume() {
         if (!paused) return
         paused = false
-        Xmp.setExpectSilence(false)
+        Xmp.setXmpPlaying(true)
         isPlaying.value = true
     }
 
@@ -253,9 +253,11 @@ class PlayerEngine(
     }
 
     /**
-     * Full teardown: stops the render thread, closes the Oboe stream, releases
-     * the module, and cancels the preference observer scope.
-     * After this call the engine must be re-initialized via [load] before use.
+     * Stops playback and releases the current module, but keeps the Oboe stream
+     * open and outputting silence. The next [load] / [loadNext] call reuses the
+     * live stream so the hardware DAC never deactivates — no hardware pop.
+     *
+     * Call [release] when the engine is truly being torn down (service destroyed).
      */
     fun stop() {
         endedNaturally = false
@@ -265,20 +267,27 @@ class PlayerEngine(
         renderThread = null
 
         if (initialized) {
-            Xmp.setExpectSilence(true) // We know we're going to xRun in Oboe, so silence is OK.
-            Xmp.dropAudio()
-            Thread.sleep(60) // allow Oboe to drain
-            Xmp.endPlayer()
-            Xmp.releaseModule()
-            Xmp.deinit()
-            initialized = false
+            Xmp.endPlayer()      // set_playing(0) → callback silences; xmp_end_player
+            Xmp.releaseModule()  // stream stays open, initialized stays true
         }
-
-        scope.cancel()
 
         isPlaying.value = false
         positionMs.value = 0L
         frameInfoFlow.value = FrameInfo()
+    }
+
+    /**
+     * Full teardown: closes the Oboe stream and cancels the preference observer scope.
+     * Called only when the PlayerService is destroyed. Do not call during normal
+     * stop/play transitions — use [stop] for those.
+     */
+    fun release() {
+        stop()
+        if (initialized) {
+            Xmp.deinit()
+            initialized = false
+        }
+        scope.cancel()
     }
 
     /**
@@ -410,14 +419,6 @@ class PlayerEngine(
         )
     }
 
-    /** Pre-fills the Oboe buffer to reduce start latency. */
-    private fun prefillBuffer() {
-        var count = 0
-        while (Xmp.hasFreeBuffer() && count++ < 100) {
-            if (Xmp.fillBuffer(false) < 0) break
-        }
-    }
-
     /**
      * Loads [file] into libxmp and populates [modVarsFlow].
      *
@@ -467,29 +468,19 @@ class PlayerEngine(
     private fun renderLoop() {
         while (!stopRequest) {
             try {
-                if (paused) {
-                    Thread.sleep(50)
-                    continue
-                }
+                Thread.sleep(20)
 
-                while (!Xmp.hasFreeBuffer() && !paused && !stopRequest) {
-                    Thread.sleep(40)
-                }
-
-                if (stopRequest) break
-
-                val endReached = Xmp.fillBuffer(isRepeatOne) < 0
+                if (paused || stopRequest) continue
 
                 // TODO why do I need to init a new class every frame for flows?
                 val fi = FrameInfo()
                 Xmp.getFrameInfo(fi)
                 frameInfoFlow.value = fi
 
-                val timeMs = Xmp.time()
-                positionMs.value = timeMs.toLong()
+                positionMs.value = fi.time.toLong().coerceAtLeast(0L)
 
-                if (endReached) {
-                    Timber.i("renderLoop: endReached, playAllSequences=$playAllSequences")
+                if (Xmp.hasModuleEnded()) {
+                    Timber.i("renderLoop: module ended, playAllSequences=$playAllSequences")
 
                     if (playAllSequences) {
                         currentSequenceFlow.value++
@@ -499,18 +490,9 @@ class PlayerEngine(
                         }
                     }
 
-                    // Drain any remaining buffers before signaling end.
-                    while (Xmp.hasFreeBuffer() && !stopRequest) {
-                        if (Xmp.fillBuffer(false) < 0) break
-                    }
-
                     endedNaturally = true
                     isPlaying.value = false
-
-                    Timber.i("renderLoop: ended naturally, exiting loop")
-
-                    Xmp.setExpectSilence(true) // We know we're going to xRun in Oboe.
-
+                    Timber.i("renderLoop: ended naturally")
                     break
                 }
             } catch (_: InterruptedException) {

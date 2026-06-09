@@ -20,17 +20,13 @@ struct AudioStats {
   const char* audio_format;
 };
 
-void drop_audio(void);
+int get_audio_stats(struct AudioStats* stats);
 
-int fill_buffer(int);
-
-int has_free_buffer(void);
+int get_effective_format_flags(void);
 
 int open_audio(int, int, int, int, int, int);
 
 int play_audio(void);
-
-int play_buffer(void*, int, int);
 
 int restart_audio(void);
 
@@ -38,11 +34,13 @@ int stop_audio(void);
 
 void close_audio(void);
 
-void set_expect_silence(int val);
+int has_module_ended(void); // returns 1 when xmp_play_buffer signals XMP_END
 
-int get_audio_stats(struct AudioStats* stats);
+void set_loop_mode(int loop_flag); // 0 = loop forever (repeat-one), 1 = play once
 
-int get_effective_format_flags(void);
+void set_playing(int val); // 0 = silence+sync, 1 = play; waits for in-flight callback on stop
+
+void set_xmp_context(void* ctx); // must be called after init(), before startPlayer()
 
 #ifdef __cplusplus
 }

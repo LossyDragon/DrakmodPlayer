@@ -143,8 +143,6 @@ static struct frame_info {
 namespace {
   constexpr int MAX_BUFFER_SIZE = 1024;
   constexpr int PERIOD_BASE = 13696;
-  constexpr int BUFFER_TIME_MS = 40;
-  constexpr int MIN_BUFFER_NUM = 3;
 
   inline pid_t get_thread_id() {
     return gettid();
@@ -163,23 +161,14 @@ namespace {
       return std::unique_lock<std::mutex>(mutex);
     }
 
-    void incrementBefore() {
-      before = (before + 1) % buffer_num;
-    }
-
     std::mutex mutex;
     bool initialized = false;
     bool mod_is_loaded = false;
     bool playing = false;
     int actual_rate = 0;
-    int buffer_num = 0;
-    int loop_count = 0;
     int sequence = 0;
     int decay = 4;
-    int before = 0;
-    int now = 0;
 
-    std::unique_ptr<xmp_frame_info[]> fi;
     xmp_context ctx = nullptr;
     xmp_module_info mi{};
 
@@ -292,25 +281,6 @@ namespace {
 
 }
 
-int play_buffer(void* buffer, int size, int looped) {
-  XmpPlayerState& state = XmpPlayerState::instance();
-  std::unique_lock<std::mutex> lock = state.lock();
-
-  if (!state.playing) return -XMP_END;
-
-  int num_loop = looped ? 0 : state.loop_count + 1;
-  int ret = xmp_play_buffer(state.ctx, buffer, size, num_loop);
-
-  xmp_frame_info* fi = state.fi.get();
-  xmp_get_frame_info(state.ctx, &fi[state.now]);
-
-  state.incrementBefore();
-  state.now = (state.before + state.buffer_num - 1) % state.buffer_num;
-  state.loop_count = fi[state.now].loop_count;
-
-  return ret;
-}
-
 METHOD(jboolean, init)(JNIEnv* env, jobject obj, jint rate, jint ms, jint mode, jint channels, jint api, jint flags) {
   LOG_INFO("init() called - rate: %d, ms: %d, tid: %d", rate, ms, get_thread_id());
 
@@ -331,10 +301,7 @@ METHOD(jboolean, init)(JNIEnv* env, jobject obj, jint rate, jint ms, jint mode, 
 
   state.ctx = ctx;
   state.actual_rate = actual_rate;
-
-  int buffer_num = ms / BUFFER_TIME_MS;
-  if (buffer_num < MIN_BUFFER_NUM) buffer_num = MIN_BUFFER_NUM;
-  state.buffer_num = buffer_num;
+  set_xmp_context(ctx);
 
   if (actual_rate != rate) {
     LOG_INFO("init() - sample rate adjusted: requested=%d, actual=%d", rate, actual_rate);
@@ -361,6 +328,8 @@ METHOD(jint, deinit)(JNIEnv* env, jobject obj) {
     std::unique_lock<std::mutex> lock = state.lock();
     LOG_DEBUG("deinit() - acquired lock");
     state.initialized = false;
+    set_playing(0); // silence callback and drain any in-flight invocation
+    set_xmp_context(nullptr);
     xmp_free_context(state.ctx);
     LOG_DEBUG("deinit() - freed context");
   }
@@ -483,20 +452,15 @@ METHOD(jint, startPlayer)(JNIEnv* env, jobject obj, jint rate, jint format) {
   std::unique_lock<std::mutex> lock = state.lock();
   LOG_DEBUG("startPlayer() - acquired lock");
 
-  state.fi = std::make_unique<xmp_frame_info[]>(state.buffer_num);
-  if (!state.fi) {
-    LOG_ERROR("startPlayer() - failed to allocate frame info");
-    return -101;
-  }
-
   state.last_key.fill(-1);
-
-  state.before = 0;
-  state.now = 0;
-  state.loop_count = 0;
   state.playing = true;
 
   int ret = xmp_start_player(state.ctx, use_rate, get_effective_format_flags());
+  if (ret == 0) {
+    set_playing(1); // tell callback to start calling xmp_play_buffer
+  } else {
+    state.playing = false;
+  }
 
   LOG_INFO("startPlayer() completed - result: %d, tid: %d", ret, get_thread_id());
   return ret;
@@ -510,11 +474,10 @@ METHOD(jint, endPlayer)(JNIEnv* env, jobject obj) {
   LOG_DEBUG("endPlayer() - acquired lock");
 
   if (state.playing) {
+    set_playing(0); // silence callback and wait for in-flight invocation to finish
     state.playing = false;
     LOG_DEBUG("endPlayer() - stopping player");
     xmp_end_player(state.ctx);
-    state.fi.reset();
-    LOG_DEBUG("endPlayer() - freed frame info");
   }
 
   LOG_INFO("endPlayer() completed - tid: %d", get_thread_id());
@@ -525,10 +488,6 @@ METHOD(jint, playAudio)(JNIEnv* env, jobject obj) {
   return play_audio();
 }
 
-METHOD(void, dropAudio)(JNIEnv* env, jobject obj) {
-  drop_audio();
-}
-
 METHOD(jboolean, stopAudio)(JNIEnv* env, jobject obj) {
   return stop_audio() == 0 ? JNI_TRUE : JNI_FALSE;
 }
@@ -537,12 +496,18 @@ METHOD(jboolean, restartAudio)(JNIEnv* env, jobject obj) {
   return restart_audio() == 0 ? JNI_TRUE : JNI_FALSE;
 }
 
-METHOD(jboolean, hasFreeBuffer)(JNIEnv* env, jobject obj) {
-  return has_free_buffer() ? JNI_TRUE : JNI_FALSE;
+METHOD(jboolean, hasModuleEnded)(JNIEnv* env, jobject obj) {
+  return has_module_ended() ? JNI_TRUE : JNI_FALSE;
 }
 
-METHOD(jint, fillBuffer)(JNIEnv* env, jobject obj, jboolean looped) {
-  return fill_buffer(looped);
+METHOD(void, setXmpPlaying)(JNIEnv* env, jobject obj, jboolean value) {
+  set_playing(value == JNI_TRUE ? 1 : 0);
+}
+
+METHOD(void, setLoopMode)(JNIEnv* env, jobject obj, jboolean loop) {
+  // loop=true  → xmp_play_buffer loop=0 (loop forever, repeat-one)
+  // loop=false → xmp_play_buffer loop=1 (play once, signal end)
+  set_loop_mode(loop == JNI_TRUE ? 0 : 1);
 }
 
 METHOD(jint, nextPosition)(JNIEnv* env, jobject obj) {
@@ -575,22 +540,15 @@ METHOD(jint, restartModule)(JNIEnv* env, jobject obj) {
 METHOD(jint, seek)(JNIEnv* env, jobject obj, jint time) {
   XmpPlayerState& state = XmpPlayerState::instance();
   std::unique_lock<std::mutex> lock = state.lock();
-
-  int ret = xmp_seek_time(state.ctx, time);
-
-  if (state.playing) {
-    xmp_frame_info* fi = state.fi.get();
-    for (int i = 0; i < state.buffer_num; i++) {
-      fi[i].time = time;
-    }
-  }
-
-  return ret;
+  return xmp_seek_time(state.ctx, time);
 }
 
 METHOD(jint, time)(JNIEnv* env, jobject obj) {
   XmpPlayerState& state = XmpPlayerState::instance();
-  return state.playing ? state.fi.get()[state.before].time : -1;
+  if (!state.playing) return -1;
+  xmp_frame_info fi;
+  xmp_get_frame_info(state.ctx, &fi);
+  return fi.time;
 }
 
 METHOD(jint, mute)(JNIEnv* env, jobject obj, jint chn, jint status) {
@@ -611,7 +569,8 @@ METHOD(void, getFrameInfo)(JNIEnv* env, jobject obj, jobject frameInfo) {
   {
     std::unique_lock<std::mutex> lock = state.lock();
     if (!state.mod_is_loaded || !state.playing) return;
-    const xmp_frame_info& fi = state.fi.get()[state.before];
+    xmp_frame_info fi;
+    xmp_get_frame_info(state.ctx, &fi);
     s = {fi.pos,
       fi.pattern,
       fi.row,
@@ -798,7 +757,8 @@ METHOD(void, getChannelData)(JNIEnv* env, jobject obj, jobject channelInfo) {
 
     const xmp_module_info& mi = state.mi;
     chn = mi.mod->chn;
-    const xmp_frame_info& fi = state.fi.get()[state.before];
+    xmp_frame_info fi;
+    xmp_get_frame_info(state.ctx, &fi);
 
     for (int i = 0; i < chn; i++) {
       const xmp_channel_info& ci = fi.channel_info[i];
@@ -992,17 +952,13 @@ METHOD(jboolean, setSequence)(JNIEnv* env, jobject obj, jint seq) {
   if (mi.seq_data[seq].duration <= 0) return JNI_FALSE;
   if (state.sequence == seq) return JNI_FALSE;
 
+  set_playing(0);
   state.sequence = seq;
-  state.loop_count = 0;
-
   xmp_set_position(state.ctx, mi.seq_data[seq].entry_point);
   xmp_play_buffer(state.ctx, nullptr, 0, 0);
+  set_playing(1);
 
   return JNI_TRUE;
-}
-
-METHOD(void, setExpectSilence)(JNIEnv* env, jobject obj, jboolean value) {
-  set_expect_silence(value == JNI_TRUE ? 1 : 0);
 }
 
 METHOD(void, getAudioStats)(JNIEnv* env, jobject obj, jobject info) {
