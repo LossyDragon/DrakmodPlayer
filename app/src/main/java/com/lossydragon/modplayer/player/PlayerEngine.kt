@@ -59,6 +59,9 @@ class PlayerEngine(
     /** Lazily populated by [load] / [loadNext]; read by [renderLoop]. */
     private val patternCache = mutableMapOf<Int, PatternData>()
 
+    @Volatile
+    private var isRepeatOne: Boolean = false
+
     /** When true, the render loop advances through all module sequences automatically. */
     @Volatile
     var playAllSequences = false
@@ -110,6 +113,13 @@ class PlayerEngine(
                 Xmp.setPlayer(Xmp.XMP_PLAYER_CFLAGS, newCflags)
             }
         }.launchIn(scope)
+    }
+
+    /**
+     * TODO kdoc
+     */
+    fun isRepeatingOne(value: Boolean) {
+        isRepeatOne = value
     }
 
     /**
@@ -468,8 +478,9 @@ class PlayerEngine(
 
                 if (stopRequest) break
 
-                val endReached = Xmp.fillBuffer(false) < 0
+                val endReached = Xmp.fillBuffer(isRepeatOne) < 0
 
+                // TODO why do I need to init a new class every frame for flows?
                 val fi = FrameInfo()
                 Xmp.getFrameInfo(fi)
                 frameInfoFlow.value = fi

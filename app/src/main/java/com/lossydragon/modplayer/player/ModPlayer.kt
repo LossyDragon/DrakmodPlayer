@@ -135,6 +135,9 @@ class ModPlayer(
         }
     }
 
+    /* TODO kDoc */
+    fun isRepeatingOne(value: Boolean) = engine.isRepeatingOne(value)
+
     /** Wraps [engine.setSequence] updates duration and position flows on success. */
     fun setSequence(index: Int): Boolean = engine.setSequence(index)
 
@@ -152,6 +155,7 @@ class ModPlayer(
     ) {
         this.shuffleMode = shuffleMode
         this.repeatMode = repeatMode
+        isRepeatingOne(this.repeatMode == REPEAT_MODE_ONE)
 
         requestAudioFocus()
 
@@ -482,6 +486,7 @@ class ModPlayer(
     /** Stores the new repeat mode and persists it with the queue. */
     override fun handleSetRepeatMode(repeatMode: Int): ListenableFuture<*> {
         this.repeatMode = repeatMode
+        isRepeatingOne(this.repeatMode == REPEAT_MODE_ONE)
         invalidateState()
         persistQueue()
         return Futures.immediateVoidFuture()
@@ -674,6 +679,7 @@ class ModPlayer(
         originalQueue.addAll(files)
         this.shuffleMode = state.shuffle
         this.repeatMode = state.repeat
+        isRepeatingOne(this.repeatMode == REPEAT_MODE_ONE)
         applyQueueOrder(startAt = state.index)
 
         if (prefs.getAutoResume()) {
