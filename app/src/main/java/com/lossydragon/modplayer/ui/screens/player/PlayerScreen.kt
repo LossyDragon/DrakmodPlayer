@@ -13,6 +13,7 @@ import androidx.compose.material3.SheetValue.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.*
 import androidx.compose.ui.graphics.vector.*
+import androidx.compose.ui.platform.*
 import androidx.compose.ui.res.*
 import androidx.compose.ui.text.font.*
 import androidx.compose.ui.text.style.*
@@ -38,14 +39,15 @@ import com.lossydragon.modplayer.ui.screens.player.components.views.ChannelView
 import com.lossydragon.modplayer.ui.screens.player.components.views.DebugView
 import com.lossydragon.modplayer.ui.screens.player.components.views.PatternView
 import com.lossydragon.modplayer.ui.theme.AppTheme
+import kotlin.time.Duration.Companion.seconds
 import kotlinx.collections.immutable.toPersistentList
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.isActive
 import kotlinx.coroutines.launch
+import org.helllabs.libxmp.model.FrameInfo
+import org.helllabs.libxmp.model.ModVars
+import org.helllabs.libxmp.model.Sequence
 import org.koin.compose.viewmodel.koinViewModel
-import kotlin.time.Duration.Companion.seconds
-
-// TODO localize hard coded text
 
 private sealed class PlayerAction {
     data class OnDurationClick(val int: Int) : PlayerAction()
@@ -75,6 +77,7 @@ fun PlayerScreen(
     onBack: () -> Unit
 ) {
     val scope = rememberCoroutineScope()
+    val resource = LocalResources.current
 
     val snackBarHostState = remember { SnackbarHostState() }
     val viewModel = koinViewModel<PlayerViewModel>(
@@ -123,7 +126,7 @@ fun PlayerScreen(
         PlayerAlertDialog(
             onDismissRequest = { showModInfo = false },
             icon = Icons.Default.MusicNote,
-            title = "Mod Info",
+            title = stringResource(R.string.dialog_title_mod_info),
             content = {
                 Text(
                     text = stringResource(
@@ -143,7 +146,7 @@ fun PlayerScreen(
         PlayerAlertDialog(
             onDismissRequest = { showAudioInfo = false },
             icon = Icons.Default.Info,
-            title = "Audio Info",
+            title = stringResource(R.string.dialog_title_audio_info),
             content = { Text(text = audioInfoText) },
         )
     }
@@ -152,7 +155,7 @@ fun PlayerScreen(
         PlayerAlertDialog(
             onDismissRequest = { showInstruments = false },
             icon = Icons.AutoMirrored.Filled.List,
-            title = "Song Instruments",
+            title = stringResource(R.string.dialog_title_song_instruments),
             content = {
                 val listState = rememberLazyListState()
                 LazyColumn(
@@ -172,7 +175,7 @@ fun PlayerScreen(
         PlayerAlertDialog(
             onDismissRequest = { showCommentInfo = false },
             icon = Icons.AutoMirrored.Filled.Message,
-            title = "Song Message",
+            title = stringResource(R.string.dialog_title_song_message),
             content = {
                 val scrollState = rememberScrollState()
                 Column(
@@ -215,8 +218,9 @@ fun PlayerScreen(
                         showInstruments = true
                     } else {
                         scope.launch {
+                            val text = resource.getString(R.string.snack_no_instruments)
                             snackBarHostState.showSnackbar(
-                                message = "No instruments to display"
+                                message = text
                             )
                         }
                     }
@@ -229,8 +233,9 @@ fun PlayerScreen(
                 PlayerAction.OnSongMessage -> {
                     if (state.modVars.miComment.isEmpty()) {
                         scope.launch {
+                            val text = resource.getString(R.string.snack_no_song_message)
                             snackBarHostState.showSnackbar(
-                                message = "No song message to display"
+                                message = text
                             )
                         }
                     }
@@ -463,7 +468,6 @@ private val previewQueue = Array(10) {
     )
 }.toPersistentList()
 
-// TODO fix preview
 private val previewPlayerState = PlayerUiState(
     status = PlaybackStatus.PLAYING,
     currentModule = previewQueue[1],
@@ -471,6 +475,26 @@ private val previewPlayerState = PlayerUiState(
     currentQueueIndex = 1,
     repeatMode = 2,
     currentSequence = 2,
+    modVars = ModVars(
+        name = "Beneath the Fallen Stars",
+        type = "Impulse Tracker",
+        seqData = arrayOf(
+            Sequence(entryPoint = 0, duration = 237_000),
+            Sequence(entryPoint = 0, duration = 237_000),
+            Sequence(entryPoint = 0, duration = 237_000),
+        ),
+        instruments = Array(12) { "Instrument ${it + 1}" },
+    ),
+    frameInfo = FrameInfo(
+        pos = 3,
+        pattern = 5,
+        row = 14,
+        numRows = 64,
+        speed = 6,
+        bpm = 125,
+        time = 47_000,
+        totalTime = 237_000,
+    ),
 )
 
 private class PlayerPreviewParameter :

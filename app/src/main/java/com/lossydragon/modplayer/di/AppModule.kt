@@ -41,7 +41,7 @@ val appModule = module {
             androidContext(),
             AppDatabase::class.java,
             Constants.ROOM_DATABASE_NAME,
-        ).build()
+        ).fallbackToDestructiveMigration(true).build()
     }
     single { get<AppDatabase>().moduleMetadataDao() }
     single { get<AppDatabase>().downloadHistoryDao() }

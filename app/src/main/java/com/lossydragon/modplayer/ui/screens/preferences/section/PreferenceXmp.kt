@@ -32,7 +32,7 @@ private fun formatFlagsLabel(resources: Resources, flags: Int): String {
         if (flags and Xmp.XMP_FORMAT_8BIT != 0) {
             add(resources.getString(R.string.eight_bit))
         } else if (flags and Xmp.XMP_FORMAT_32BIT != 0) {
-            add(resources.getString(R.string.thirtytwo_bit))
+            add(resources.getString(R.string.thirty_two_bit))
         } else {
             add(resources.getString(R.string.sixteen_bit))
         }

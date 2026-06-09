@@ -17,10 +17,12 @@ import androidx.compose.ui.platform.*
 import androidx.compose.ui.text.*
 import androidx.compose.ui.text.font.*
 import androidx.compose.ui.tooling.preview.*
+import androidx.compose.ui.tooling.preview.datasource.LoremIpsum
 import androidx.compose.ui.unit.*
 import com.lossydragon.modplayer.ui.theme.AppTheme
 import com.materialkolor.ktx.darken
 import com.materialkolor.ktx.lighten
+import kotlin.time.Duration.Companion.milliseconds
 import kotlinx.collections.immutable.ImmutableList
 import kotlinx.collections.immutable.toPersistentList
 import kotlinx.coroutines.Dispatchers
@@ -30,7 +32,6 @@ import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import org.helllabs.libxmp.Xmp
 import org.helllabs.libxmp.model.ChannelInfo
-import kotlin.time.Duration.Companion.milliseconds
 
 /** PCM samples requested per channel per frame - matches getSampleData buffer width. */
 private const val WAVEFORM_SAMPLES = 256
@@ -81,6 +82,8 @@ fun ChannelView(
     modifier: Modifier = Modifier,
     colors: ChannelViewColors = rememberDefaultChannelViewColors()
 ) {
+    val view = LocalView.current
+
     // Pre-allocated buffer reused across polls — JNI fills IntArrays in place via SetIntArrayRegion.
     val channelInfoBuffer = remember { ChannelInfo() }
 
@@ -101,7 +104,10 @@ fun ChannelView(
     // Per-channel mute state; SnapshotStateList so individual toggles trigger recomposition.
     val muteStates = remember(numChannels) {
         mutableStateListOf<Boolean>().apply {
-            repeat(numChannels) { i -> add(Xmp.mute(i, -1) == 1) }
+            repeat(numChannels) { i ->
+                val value = if (!view.isInEditMode) Xmp.mute(i, -1) == 1 else false
+                add(value)
+            }
         }
     }
     val isPlayingState = rememberUpdatedState(isPlaying)
@@ -533,12 +539,10 @@ fun ChannelView(
 @Preview(showBackground = true, widthDp = 420, heightDp = 520)
 @Composable
 private fun PreviewChannelView() {
-    // LaunchedEffect does not run in preview, so numChannels=0 shows the blank-canvas guard.
-    // Set to a positive value during local dev to inspect layout metrics without JNI.
     AppTheme {
         ChannelView(
-            numChannels = 0,
-            instrumentNames = emptyList<String>().toPersistentList(),
+            numChannels = 10,
+            instrumentNames = LoremIpsum(4).values.toPersistentList(),
             isPlaying = false,
             modifier = Modifier.fillMaxSize(),
         )

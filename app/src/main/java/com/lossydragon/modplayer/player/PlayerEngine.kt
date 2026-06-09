@@ -52,6 +52,7 @@ class PlayerEngine(
     val currentSequenceFlow: StateFlow<Int>
         field = MutableStateFlow(0)
 
+    /** Module metadata, emitted once after each successful load. */
     val modVarsFlow: StateFlow<ModVars>
         field = MutableStateFlow(ModVars())
 

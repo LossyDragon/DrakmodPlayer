@@ -40,17 +40,13 @@ fun Context.shareLink(message: String) {
     this.startActivity(shareIntent)
 }
 
-/**
- * TODO kDoc
- */
+/** Persists a read-only SAF URI permission across reboots. */
 fun Context.takeReadPermission(uri: Uri) {
     val flags = Intent.FLAG_GRANT_READ_URI_PERMISSION
     this.contentResolver.takePersistableUriPermission(uri, flags)
 }
 
-/**
- * TODO kDoc
- */
+/** Persists a read-write SAF URI permission across reboots. */
 fun Context.takeReadWritePermission(uri: Uri) {
     val flags = Intent.FLAG_GRANT_READ_URI_PERMISSION or Intent.FLAG_GRANT_WRITE_URI_PERMISSION
     this.contentResolver.takePersistableUriPermission(uri, flags)

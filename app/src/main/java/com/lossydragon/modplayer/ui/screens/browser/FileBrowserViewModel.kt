@@ -223,6 +223,13 @@ class FileBrowserViewModel(
         state.update { it.copy(directories = dirs, files = files) }
     }
 
-    private fun displayName(path: String): String =
-        path.substringAfterLast('/').substringAfterLast(':').ifBlank { "Root" }
+    suspend fun getRecursiveModules(): List<ModuleEntity> {
+        val path = currentPath.value ?: return emptyList()
+        return db.getDescendantModules(path)
+    }
+
+    private fun displayName(path: String): String = Uri.decode(path)
+        .substringAfterLast('/')
+        .substringAfterLast(':')
+        .ifBlank { "Root" }
 }

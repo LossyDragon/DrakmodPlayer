@@ -91,9 +91,7 @@ class ModPlayer(
     /** Current multi-sequence index, emitted on sequence change. */
     val currentSequenceFlow by engine::currentSequenceFlow
 
-    /**
-     * TODO kdoc
-     */
+    /** Module metadata, emitted once after each successful load. */
     val modVarsFlow by engine::modVarsFlow
 
     /** Index of the currently playing item in [queue]; emitted on navigation. */

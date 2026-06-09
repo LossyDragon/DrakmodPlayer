@@ -45,6 +45,8 @@ import com.lossydragon.modplayer.ui.theme.AppTheme
 import kotlinx.collections.immutable.persistentListOf
 import kotlinx.coroutines.launch
 import kotlinx.serialization.Serializable
+import org.helllabs.libxmp.model.FrameInfo
+import org.helllabs.libxmp.model.ModVars
 import org.koin.compose.viewmodel.koinViewModel
 import sh.calvin.reorderable.ReorderableItem
 import sh.calvin.reorderable.rememberReorderableLazyListState
@@ -178,14 +180,22 @@ private fun PlaylistListScreen(
         scope.launch { snackbarHostState.showSnackbar(message = it) }
     }
 
-    // TODO localize
     // Import result snackbar
     LaunchedEffect(state.importResult) {
         state.importResult?.let { result ->
-            val message = buildString {
-                append("Imported ${result.playlistsImported} playlists, ")
-                append("${result.entriesImported} entries")
-                if (result.skipped > 0) append(", ${result.skipped} skipped")
+            val message = if (result.skipped > 0) {
+                resource.getString(
+                    R.string.snack_import_ok_skipped,
+                    result.playlistsImported,
+                    result.entriesImported,
+                    result.skipped
+                )
+            } else {
+                resource.getString(
+                    R.string.snack_import_ok,
+                    result.playlistsImported,
+                    result.entriesImported
+                )
             }
             snackbarHostState.showSnackbar(
                 message = message,
@@ -517,9 +527,9 @@ private fun PlaylistEntriesScreen(
     }
 }
 
-/**
- * Preview
- */
+/***********
+ * Preview *
+ ***********/
 
 private val samplePlaylists = persistentListOf(
     PlaylistEntity(
@@ -591,11 +601,16 @@ private val sampleEntries = persistentListOf(
     ),
 )
 
-// TODO fix preview
 private val playingState = PlayerUiState(
     status = PlaybackStatus.PLAYING,
     currentModule = sampleEntries[1],
     currentQueueIndex = 1,
+    queue = sampleEntries,
+    modVars = ModVars(
+        name = "Beneath the Fallen Stars",
+        type = "Impulse Tracker",
+    ),
+    frameInfo = FrameInfo(time = 47_000, totalTime = 237_000,),
 )
 
 private data class PlaylistPreviewState(

@@ -38,7 +38,10 @@ import com.lossydragon.modplayer.ui.screens.player.components.MiniPlayerBar
 import com.lossydragon.modplayer.ui.theme.AppTheme
 import com.lossydragon.modplayer.util.takeReadWritePermission
 import kotlinx.collections.immutable.persistentListOf
+import kotlinx.collections.immutable.toImmutableList
 import kotlinx.coroutines.launch
+import org.helllabs.libxmp.model.FrameInfo
+import org.helllabs.libxmp.model.ModVars
 import org.koin.androidx.compose.koinViewModel
 
 @Composable
@@ -88,20 +91,17 @@ fun FileBrowserScreen(
         onSortOrder = browserViewModel::setSortOrder,
         onBreadcrumb = browserViewModel::navigateToBreadcrumb,
         onPlayAll = {
-            if (browserState.files.isNotEmpty()) {
-                playerViewModel.playAll(
-                    files = browserState.files,
-                    startAt = if (browserState.isShuffle) {
-                        browserState.files.indices.random()
-                    } else {
-                        0
-                    },
-                    isShuffle = browserState.isShuffle,
-                    repeatMode = browserState.repeatMode,
-                )
-                onNavigateToPlayer()
-            } else {
-                scope.launch {
+            scope.launch {
+                val files = browserViewModel.getRecursiveModules().toImmutableList()
+                if (files.isNotEmpty()) {
+                    playerViewModel.playAll(
+                        files = files,
+                        startAt = if (browserState.isShuffle) files.indices.random() else 0,
+                        isShuffle = browserState.isShuffle,
+                        repeatMode = browserState.repeatMode,
+                    )
+                    onNavigateToPlayer()
+                } else {
                     val text = resources.getString(R.string.snack_nothing_to_play)
                     snackbarHostState.showSnackbar(text)
                 }
@@ -398,11 +398,19 @@ private class BrowserPreviewParameter : PreviewParameterProvider<BrowserPreviewS
         FileItem(name = "Demos", uri = "2".toUri(), isDirectory = true, size = 0L),
     )
 
-    // TODO fix preview
     private val playingState = PlayerUiState(
         status = PlaybackStatus.PLAYING,
         currentModule = sampleFiles[1],
         currentQueueIndex = 1,
+        queue = sampleFiles,
+        modVars = ModVars(
+            name = "Beneath the Fallen Stars",
+            type = "Impulse Tracker",
+        ),
+        frameInfo = FrameInfo(
+            time = 47_000,
+            totalTime = 237_000,
+        ),
     )
 
     private val baseBrowserState = BrowserUiState(

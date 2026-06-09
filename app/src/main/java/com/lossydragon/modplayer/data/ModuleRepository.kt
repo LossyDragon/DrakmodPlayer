@@ -17,6 +17,24 @@ class ModuleRepository(
 
     fun getChildren(parentPath: String): Flow<List<ModuleEntity>> = dao.getChildren(parentPath)
 
+    suspend fun getDescendantModules(rootPath: String): List<ModuleEntity> {
+        val result = mutableListOf<ModuleEntity>()
+        val stack = ArrayDeque<String>()
+        stack.addLast(rootPath)
+        while (stack.isNotEmpty()) {
+            val path = stack.removeLast()
+            val children = dao.getChildrenOnce(path)
+            children.filter { it.isValidModule && !it.isDirectory }
+                .sortedBy { it.filename.lowercase() }
+                .forEach { result.add(it) }
+            // Push in reverse so the first alphabetically is popped next
+            children.filter { it.isDirectory }
+                .sortedByDescending { it.filename.lowercase() }
+                .forEach { stack.addLast(it.filePath) }
+        }
+        return result
+    }
+
     suspend fun indexDirectory(uri: Uri) {
         val existingPaths = dao.getAllFilePaths().toHashSet()
         indexInternal(uri, existingPaths)

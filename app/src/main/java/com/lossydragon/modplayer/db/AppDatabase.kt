@@ -1,6 +1,5 @@
 package com.lossydragon.modplayer.db
 
-import androidx.room.AutoMigration
 import androidx.room.Database
 import androidx.room.RoomDatabase
 import com.lossydragon.modplayer.db.dao.DownloadHistoryDao
@@ -18,7 +17,7 @@ import com.lossydragon.modplayer.db.entity.PlaylistEntryEntity
         PlaylistEntity::class,
         PlaylistEntryEntity::class
     ],
-    version = 6,
+    version = 7,
     exportSchema = true,
 )
 abstract class AppDatabase : RoomDatabase() {

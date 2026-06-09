@@ -12,13 +12,15 @@ import androidx.compose.ui.res.*
 import androidx.compose.ui.text.style.*
 import androidx.compose.ui.tooling.preview.*
 import androidx.compose.ui.unit.*
-import androidx.core.net.toUri
 import androidx.media3.common.Player
 import com.lossydragon.modplayer.R
 import com.lossydragon.modplayer.db.entity.ModuleEntity
 import com.lossydragon.modplayer.player.PlaybackStatus
 import com.lossydragon.modplayer.player.PlayerUiState
 import com.lossydragon.modplayer.ui.theme.AppTheme
+import kotlinx.collections.immutable.persistentListOf
+import org.helllabs.libxmp.model.FrameInfo
+import org.helllabs.libxmp.model.ModVars
 
 @OptIn(ExperimentalMaterial3ExpressiveApi::class)
 @Composable
@@ -135,44 +137,116 @@ fun MiniPlayerBar(
     )
 }
 
-@Preview
-@Composable
-private fun PreviewPlaying() {
-    AppTheme {
-        MiniPlayerBar(
+/***********
+ * Preview *
+ ***********/
+
+private data class MiniPlayerPreviewState(
+    val description: String,
+    val state: PlayerUiState
+)
+
+private class MiniPlayerPreviewParameter : PreviewParameterProvider<MiniPlayerPreviewState> {
+
+    private val sampleFiles = persistentListOf(
+        ModuleEntity(
+            fileExtension = "far",
+            moduleName = "A Journey Into Sound",
+            moduleType = "Farandole Composer",
+        ),
+        ModuleEntity(
+            fileExtension = "it",
+            moduleName = "Beneath the Fallen Stars",
+            moduleType = "Impulse Tracker",
+        ),
+        ModuleEntity(
+            fileExtension = "mod",
+            moduleName = "alpharapii",
+            moduleType = "Amiga Protracker/Compatible",
+        ),
+        ModuleEntity(
+            fileExtension = "mod",
+            moduleName = "Chiptune No. 184",
+            moduleType = "Amiga Protracker/Compatible",
+        ),
+    )
+
+    private val itModVars = ModVars(name = "Beneath the Fallen Stars", type = "Impulse Tracker")
+
+    private val baseFrameInfo = FrameInfo(time = 47_000, totalTime = 237_000)
+
+    override val values = sequenceOf(
+        MiniPlayerPreviewState(
+            description = "Playing - mid queue",
             state = PlayerUiState(
                 status = PlaybackStatus.PLAYING,
-                currentModule = ModuleEntity(
-                    filePath = "content://preview/1",
-                    filename = "a_journey_into_sound.far",
-                    fileExtension = "far",
-                    fileSize = 123456L,
-                ),
+                currentModule = sampleFiles[1],
+                currentQueueIndex = 1,
+                queue = sampleFiles,
+                modVars = itModVars,
+                frameInfo = baseFrameInfo,
             ),
-            onTap = {},
-            onPlayPause = {},
-            onNext = {},
-            onPrevious = {},
-        )
+        ),
+        MiniPlayerPreviewState(
+            description = "Paused - mid queue",
+            state = PlayerUiState(
+                status = PlaybackStatus.PAUSED,
+                currentModule = sampleFiles[1],
+                currentQueueIndex = 1,
+                queue = sampleFiles,
+                modVars = itModVars,
+                frameInfo = baseFrameInfo,
+            ),
+        ),
+        MiniPlayerPreviewState(
+            description = "Playing - first track (no prev)",
+            state = PlayerUiState(
+                status = PlaybackStatus.PLAYING,
+                currentModule = sampleFiles[0],
+                currentQueueIndex = 0,
+                queue = sampleFiles,
+                modVars = itModVars,
+                frameInfo = baseFrameInfo.copy(time = 12_000),
+            ),
+        ),
+        MiniPlayerPreviewState(
+            description = "Playing - last track (no next)",
+            state = PlayerUiState(
+                status = PlaybackStatus.PLAYING,
+                currentModule = sampleFiles[3],
+                currentQueueIndex = 3,
+                queue = sampleFiles,
+                modVars = itModVars,
+                frameInfo = baseFrameInfo.copy(time = 190_000),
+            ),
+        ),
+        MiniPlayerPreviewState(
+            description = "Playing - repeat all",
+            state = PlayerUiState(
+                status = PlaybackStatus.PLAYING,
+                currentModule = sampleFiles[3],
+                currentQueueIndex = 3,
+                queue = sampleFiles,
+                repeatMode = Player.REPEAT_MODE_ALL,
+                modVars = itModVars,
+                frameInfo = baseFrameInfo,
+            ),
+        ),
+    )
+
+    override fun getDisplayName(index: Int): String {
+        return values.toList()[index].description
     }
 }
 
-// TODO fix preview
-
-@Preview
+@Preview(showBackground = true)
 @Composable
-private fun PreviewPaused() {
+private fun Preview(
+    @PreviewParameter(MiniPlayerPreviewParameter::class) params: MiniPlayerPreviewState
+) {
     AppTheme {
         MiniPlayerBar(
-            state = PlayerUiState(
-                status = PlaybackStatus.PAUSED,
-                currentModule = ModuleEntity(
-                    filePath = "content://preview/1",
-                    filename = "aegis_-_beneath_the_fallen_stars.it",
-                    fileExtension = "it",
-                    fileSize = 1820792L,
-                ),
-            ),
+            state = params.state,
             onTap = {},
             onPlayPause = {},
             onNext = {},

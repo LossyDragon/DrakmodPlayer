@@ -15,6 +15,7 @@ import com.lossydragon.modplayer.player.PlayerUiState
 import com.lossydragon.modplayer.player.model.NoteCell
 import com.lossydragon.modplayer.player.model.PatternData
 import com.lossydragon.modplayer.ui.theme.AppTheme
+import kotlin.time.Duration.Companion.milliseconds
 import kotlinx.collections.immutable.toImmutableList
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.delay
@@ -24,7 +25,6 @@ import org.helllabs.libxmp.Xmp
 import org.helllabs.libxmp.model.ChannelInfo
 import org.helllabs.libxmp.model.FrameInfo
 import org.helllabs.libxmp.model.ModVars
-import kotlin.time.Duration.Companion.milliseconds
 
 private val NOTE_NAMES = arrayOf(
     "C-", "C#", "D-", "D#", "E-", "F-",
@@ -41,7 +41,7 @@ fun DebugView(
     modifier: Modifier = Modifier,
     state: PlayerUiState,
     patternData: PatternData,
-    isPlaying: Boolean,
+    isPlaying: Boolean
 ) {
     val fi = state.frameInfo
     val mv = state.modVars
@@ -73,17 +73,6 @@ fun DebugView(
             delay(50.milliseconds) // ~20fps is plenty for a debug view
         }
     }
-
-    val patternTextStyle = TextStyle(
-        fontSize = 8.sp,
-        lineHeight = 10.sp,
-        fontFamily = FontFamily.Monospace,
-        platformStyle = PlatformTextStyle(includeFontPadding = false),
-        lineHeightStyle = LineHeightStyle(
-            alignment = LineHeightStyle.Alignment.Center,
-            trim = LineHeightStyle.Trim.Both,
-        ),
-    )
 
     Column(modifier = modifier.fillMaxSize()) {
         Column(
@@ -157,85 +146,45 @@ fun DebugView(
                     Column {
                         // Header
                         Row {
-                            DebugCell("Ch",    4, mono, hdrColor)
-                            DebugCell("Note",  5, mono, hdrColor)
-                            DebugCell("Ins",   4, mono, hdrColor)
-                            DebugCell("Smp",   4, mono, hdrColor)
-                            DebugCell("Vol",   4, mono, hdrColor)
-                            DebugCell("FVol",  5, mono, hdrColor)
-                            DebugCell("Pan",   4, mono, hdrColor)
-                            DebugCell("Period",7, mono, hdrColor)
-                            DebugCell("Pos",   9, mono, hdrColor)
-                            DebugCell("Bend",  6, mono, hdrColor)
+                            DebugCell("Ch", 4, mono, hdrColor)
+                            DebugCell("Note", 5, mono, hdrColor)
+                            DebugCell("Ins", 4, mono, hdrColor)
+                            DebugCell("Smp", 4, mono, hdrColor)
+                            DebugCell("Vol", 4, mono, hdrColor)
+                            DebugCell("FVol", 5, mono, hdrColor)
+                            DebugCell("Pan", 4, mono, hdrColor)
+                            DebugCell("Period", 7, mono, hdrColor)
+                            DebugCell("Pos", 9, mono, hdrColor)
+                            DebugCell("Bend", 6, mono, hdrColor)
                         }
                         for (i in 0 until numChannels) {
                             Row {
-                                DebugCell("%2d".format(i + 1),              4, mono, cellColor)
-                                DebugCell(noteStr(ci.notes[i]),             5, mono, cellColor)
-                                DebugCell("%3d".format(ci.instruments[i]),  4, mono, cellColor)
-                                DebugCell("%3d".format(ci.samples[i]),      4, mono, cellColor)
-                                DebugCell("%3d".format(ci.volumes[i]),      4, mono, cellColor)
-                                DebugCell("%4d".format(ci.finalVols[i]),    5, mono, cellColor)
-                                DebugCell("%3d".format(ci.pans[i]),         4, mono, cellColor)
-                                DebugCell("%6d".format(ci.periods[i]),      7, mono, cellColor)
-                                DebugCell("%8d".format(ci.positions[i]),    9, mono, cellColor)
-                                DebugCell("%5d".format(ci.pitchbends[i]),   6, mono, cellColor)
+                                DebugCell("%2d".format(i + 1), 4, mono, cellColor)
+                                DebugCell(noteStr(ci.notes[i]), 5, mono, cellColor)
+                                DebugCell("%3d".format(ci.instruments[i]), 4, mono, cellColor)
+                                DebugCell("%3d".format(ci.samples[i]), 4, mono, cellColor)
+                                DebugCell("%3d".format(ci.volumes[i]), 4, mono, cellColor)
+                                DebugCell("%4d".format(ci.finalVols[i]), 5, mono, cellColor)
+                                DebugCell("%3d".format(ci.pans[i]), 4, mono, cellColor)
+                                DebugCell("%6d".format(ci.periods[i]), 7, mono, cellColor)
+                                DebugCell("%8d".format(ci.positions[i]), 9, mono, cellColor)
+                                DebugCell("%5d".format(ci.pitchbends[i]), 6, mono, cellColor)
                             }
                         }
                     }
                 }
             }
         }
-
-//        HorizontalDivider()
-
-//        Column(
-//            modifier = Modifier
-//                .weight(1f)
-//                .fillMaxWidth()
-//                .verticalScroll(rememberScrollState())
-//                .padding(horizontal = 6.dp, vertical = 4.dp),
-//        ) {
-//            DebugHeader(
-//                "Pat #${patternData.patternIndex}  ${patternData.numRows}r × ${patternData.numChannels}ch"
-//            )
-//            Row(modifier = Modifier.horizontalScroll(rememberScrollState())) {
-//                Column {
-//                    patternData.cells.forEachIndexed { rowIdx, row ->
-//                        val isCurrent = patternData.patternIndex == fi.pattern && rowIdx == fi.row
-//                        Row {
-//                            Text(
-//                                text = "%02X ".format(rowIdx),
-//                                style = patternTextStyle,
-//                                fontWeight = if (isCurrent) FontWeight.Bold else FontWeight.Normal,
-//                                color = when {
-//                                    isCurrent -> MaterialTheme.colorScheme.primary
-//                                    rowIdx % 4 == 0 -> MaterialTheme.colorScheme.onSurface.copy(alpha = 0.8f)
-//                                    else -> MaterialTheme.colorScheme.onSurface.copy(alpha = 0.4f)
-//                                },
-//                            )
-//                            row.forEach { cell ->
-//                                Text(
-//                                    text = "${cell.noteStr}${cell.instrumentStr}" +
-//                                        "${cell.effectTypeChar}${cell.effectParamStr} ",
-//                                    style = patternTextStyle,
-//                                    color = when {
-//                                        isCurrent -> MaterialTheme.colorScheme.primary
-//                                        cell.isEmpty -> MaterialTheme.colorScheme.onSurface.copy(alpha = 0.2f)
-//                                        else -> MaterialTheme.colorScheme.onSurface
-//                                    },
-//                                )
-//                            }
-//                        }
-//                    }
-//                }
-//            }
-//        }
     }
 }
 
 @Composable
-private fun DebugCell(text: String, minChars: Int, style: TextStyle, color: androidx.compose.ui.graphics.Color) {
+private fun DebugCell(
+    text: String,
+    minChars: Int,
+    style: TextStyle,
+    color: androidx.compose.ui.graphics.Color
+) {
     Text(
         text = text.padEnd(minChars),
         style = style,
@@ -287,18 +236,21 @@ private fun Preview() {
                     fxType = 0,
                     fxParam = 0
                 )
+
                 row == 2 && ch == 1 -> NoteCell(
                     note = 52,
                     instrument = 2,
                     fxType = 10,
                     fxParam = 0xF0
                 )
+
                 row == 6 && ch == 5 -> NoteCell(
                     note = 0x80,
                     instrument = 0,
                     fxType = -1,
                     fxParam = 0
                 )
+
                 else -> NoteCell(note = 0, instrument = 0, fxType = -1, fxParam = 0)
             }
         }.toImmutableList()

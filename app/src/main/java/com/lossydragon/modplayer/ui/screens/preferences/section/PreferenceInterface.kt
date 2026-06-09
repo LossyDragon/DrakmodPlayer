@@ -66,8 +66,8 @@ private val styleItems = persistentListOf(
     ),
     PreferenceItem(
         key = PaletteStyle.Monochrome.name,
-        title = R.string.pref_style_item_monocrhome,
-        description = R.string.pref_style_item_monocrhome_desc
+        title = R.string.pref_style_item_monochrome,
+        description = R.string.pref_style_item_monochrome_desc
     ),
     PreferenceItem(
         key = PaletteStyle.Fidelity.name,

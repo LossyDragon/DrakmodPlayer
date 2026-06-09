@@ -4,12 +4,12 @@ import androidx.compose.foundation.layout.*
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.*
-import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.tooling.preview.*
 import androidx.compose.ui.unit.*
 import com.lossydragon.modplayer.player.PlayerUiState
 import com.lossydragon.modplayer.ui.theme.AppTheme
 import com.lossydragon.modplayer.util.formatMs
+import org.helllabs.libxmp.model.FrameInfo
 
 @Composable
 internal fun PlaybackProgress(
@@ -66,15 +66,18 @@ internal fun PlaybackProgress(
     )
 }
 
-// TODO fix preview
-
 @Preview
 @Composable
 private fun Preview() {
     AppTheme {
         Surface {
             PlaybackProgress(
-                state = PlayerUiState(),
+                state = PlayerUiState(
+                    frameInfo = FrameInfo(
+                        time = 47_000,
+                        totalTime = 237_000,
+                    )
+                ),
                 onSeek = {}
             )
         }

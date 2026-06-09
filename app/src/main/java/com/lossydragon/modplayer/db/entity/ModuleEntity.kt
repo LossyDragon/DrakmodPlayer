@@ -1,9 +1,8 @@
 package com.lossydragon.modplayer.db.entity
 
 import android.net.Uri
-import androidx.compose.runtime.Immutable
+import androidx.compose.runtime.*
 import androidx.core.net.toUri
-import androidx.room.ColumnInfo
 import androidx.room.Entity
 import androidx.room.PrimaryKey
 import kotlinx.serialization.Serializable
@@ -17,9 +16,9 @@ data class ModuleEntity(
     val filename: String = "",
     val fileExtension: String = "",
     val filePath: String = "",
-    @ColumnInfo(defaultValue = "") val parentPath: String = "", // TODO why ColumnInfo
+    val parentPath: String = "",
     val fileSize: Long = 0L,
-    @ColumnInfo(defaultValue = "0") val isDirectory: Boolean = false, // TODO why ColumnInfo
+    val isDirectory: Boolean = false,
     val isValidModule: Boolean = false,
     val moduleName: String = "",
     val moduleType: String = ""
