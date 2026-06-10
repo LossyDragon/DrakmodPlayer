@@ -34,6 +34,6 @@ google-services.json
 # Android Profiling
 *.hprof
 
-# LibXmp
+# Mod Tracker Renderers
 src/main/cpp/libxmp
 src/main/cpp/openmpt
