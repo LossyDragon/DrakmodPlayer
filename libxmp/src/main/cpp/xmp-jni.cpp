@@ -455,6 +455,7 @@ METHOD(jint, startPlayer)(JNIEnv* env, jobject obj, jint rate, jint format) {
   state.last_key.fill(-1);
   state.playing = true;
 
+  reset_render_callback();
   int ret = xmp_start_player(state.ctx, use_rate, get_effective_format_flags());
   if (ret == 0) {
     set_playing(1); // tell callback to start calling xmp_play_buffer

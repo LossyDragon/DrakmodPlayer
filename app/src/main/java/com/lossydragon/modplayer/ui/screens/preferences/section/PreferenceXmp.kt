@@ -15,6 +15,7 @@ import com.alorma.compose.settings.ui.expressive.SettingsMenuLink
 import com.alorma.compose.settings.ui.expressive.SettingsSwitch
 import com.lossydragon.modplayer.R
 import com.lossydragon.modplayer.db.AppPreferences
+import com.lossydragon.modplayer.player.ResamplerMode
 import com.lossydragon.modplayer.ui.screens.preferences.components.FlagItem
 import com.lossydragon.modplayer.ui.screens.preferences.components.MultiChoiceAlertDialog
 import com.lossydragon.modplayer.ui.screens.preferences.components.PreferenceItem
@@ -96,19 +97,29 @@ private val flagItems = persistentListOf(
 
 private val interpOptions = persistentListOf(
     PreferenceItem(
-        key = Xmp.XMP_INTERP_NEAREST.toString(),
+        key = ResamplerMode.NEAREST.id.toString(),
         title = R.string.pref_interp_item_nearest,
         description = R.string.pref_interp_item_nearest_desc
     ),
     PreferenceItem(
-        key = Xmp.XMP_INTERP_LINEAR.toString(),
+        key = ResamplerMode.LINEAR.id.toString(),
         title = R.string.pref_interp_item_linear,
         description = R.string.pref_interp_item_linear_desc
     ),
     PreferenceItem(
-        key = Xmp.XMP_INTERP_SPLINE.toString(),
+        key = ResamplerMode.CUBIC.id.toString(),
         title = R.string.pref_interp_item_spline,
         description = R.string.pref_interp_item_spline_desc
+    ),
+    PreferenceItem(
+        key = ResamplerMode.OPENMPT_AMIGA_A500.id.toString(),
+        title = R.string.pref_interp_item_amiga_a500,
+        description = R.string.pref_interp_item_amiga_a500_desc
+    ),
+    PreferenceItem(
+        key = ResamplerMode.OPENMPT_AMIGA_A1200.id.toString(),
+        title = R.string.pref_interp_item_amiga_a1200,
+        description = R.string.pref_interp_item_amiga_a1200_desc
     ),
 )
 
@@ -255,9 +266,13 @@ fun PreferenceXmp(
                 subtitle = { Text(text = stringResource(R.string.pref_interpolation_type_desc)) },
                 action = {
                     val text = when (interp) {
-                        Xmp.XMP_INTERP_NEAREST -> stringResource(R.string.interp_nearest)
-                        Xmp.XMP_INTERP_LINEAR -> stringResource(R.string.interp_linear)
-                        Xmp.XMP_INTERP_SPLINE -> stringResource(R.string.interp_spline)
+                        ResamplerMode.NEAREST.id -> stringResource(R.string.interp_nearest)
+                        ResamplerMode.LINEAR.id -> stringResource(R.string.interp_linear)
+                        ResamplerMode.CUBIC.id -> stringResource(R.string.interp_spline)
+                        ResamplerMode.OPENMPT_AMIGA_A500.id ->
+                            stringResource(R.string.interp_openmpt_amiga_a500)
+                        ResamplerMode.OPENMPT_AMIGA_A1200.id ->
+                            stringResource(R.string.interp_openmpt_amiga_a1200)
                         else -> stringResource(R.string.unknown)
                     }
                     Text(text = text)

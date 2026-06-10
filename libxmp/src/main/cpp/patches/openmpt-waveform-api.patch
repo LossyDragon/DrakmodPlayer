@@ -1,0 +1,237 @@
+diff --git a/libopenmpt/libopenmpt.h b/libopenmpt/libopenmpt.h
+index f06e8acd5..b2cbfb3e5 100644
+--- a/libopenmpt/libopenmpt.h
++++ b/libopenmpt/libopenmpt.h
+@@ -659,6 +659,32 @@ LIBOPENMPT_API int openmpt_probe_file_header_from_stream( uint64_t flags, openmp
+  */
+ typedef struct openmpt_module openmpt_module;
+ 
++typedef struct openmpt_module_current_channel_state {
++	int32_t volume;
++	int32_t final_volume;
++	int32_t pan;
++	int32_t instrument;
++	int32_t key;
++	int32_t period;
++	int32_t position;
++	int64_t increment;
++	int32_t pitchbend;
++	int32_t note;
++	int32_t sample;
++	int32_t muted;
++} openmpt_module_current_channel_state;
++
++typedef struct openmpt_module_sample_state {
++	const void * data;
++	int32_t length;
++	int32_t loop_start;
++	int32_t loop_end;
++	int32_t flags;
++	int32_t c5speed;
++	int32_t channels;
++	int32_t bits_per_sample;
++} openmpt_module_sample_state;
++
+ typedef struct openmpt_module_initial_ctl {
+ 	const char * ctl;
+ 	const char * value;
+@@ -1266,6 +1292,10 @@ LIBOPENMPT_API float openmpt_module_get_current_channel_vu_rear_left( openmpt_mo
+  */
+ LIBOPENMPT_API float openmpt_module_get_current_channel_vu_rear_right( openmpt_module * mod, int32_t channel );
+ 
++LIBOPENMPT_API int openmpt_module_get_current_channel_state( openmpt_module * mod, int32_t channel, openmpt_module_current_channel_state * state );
++LIBOPENMPT_API int openmpt_module_get_sample_state( openmpt_module * mod, int32_t sample, openmpt_module_sample_state * state );
++LIBOPENMPT_API int32_t openmpt_module_channel_mute( openmpt_module * mod, int32_t channel, int32_t status );
++
+ /*! \brief Get the number of sub-songs
+  *
+  * \param mod The module handle to work on.
+diff --git a/libopenmpt/libopenmpt_c.cpp b/libopenmpt/libopenmpt_c.cpp
+index 99a85805b..7886581c2 100644
+--- a/libopenmpt/libopenmpt_c.cpp
++++ b/libopenmpt/libopenmpt_c.cpp
+@@ -1102,6 +1102,70 @@ float openmpt_module_get_current_channel_vu_rear_right( openmpt_module * mod, in
+ 	return 0.0;
+ }
+ 
++int openmpt_module_get_current_channel_state( openmpt_module * mod, int32_t channel, openmpt_module_current_channel_state * state ) {
++	try {
++		openmpt::interface::check_soundfile( mod );
++		if ( !state ) {
++			throw openmpt::interface::argument_null_pointer();
++		}
++		openmpt::module_impl::current_channel_state cpp_state;
++		if ( !mod->impl->get_current_channel_state( channel, cpp_state ) ) {
++			return 0;
++		}
++		state->volume = cpp_state.volume;
++		state->final_volume = cpp_state.final_volume;
++		state->pan = cpp_state.pan;
++		state->instrument = cpp_state.instrument;
++		state->key = cpp_state.key;
++		state->period = cpp_state.period;
++		state->position = cpp_state.position;
++		state->increment = cpp_state.increment;
++		state->pitchbend = cpp_state.pitchbend;
++		state->note = cpp_state.note;
++		state->sample = cpp_state.sample;
++		state->muted = cpp_state.muted;
++		return 1;
++	} catch ( ... ) {
++		openmpt::report_exception( __func__, mod );
++	}
++	return 0;
++}
++
++int openmpt_module_get_sample_state( openmpt_module * mod, int32_t sample, openmpt_module_sample_state * state ) {
++	try {
++		openmpt::interface::check_soundfile( mod );
++		if ( !state ) {
++			throw openmpt::interface::argument_null_pointer();
++		}
++		openmpt::module_impl::sample_state cpp_state;
++		if ( !mod->impl->get_sample_state( sample, cpp_state ) ) {
++			return 0;
++		}
++		state->data = cpp_state.data;
++		state->length = cpp_state.length;
++		state->loop_start = cpp_state.loop_start;
++		state->loop_end = cpp_state.loop_end;
++		state->flags = cpp_state.flags;
++		state->c5speed = cpp_state.c5speed;
++		state->channels = cpp_state.channels;
++		state->bits_per_sample = cpp_state.bits_per_sample;
++		return 1;
++	} catch ( ... ) {
++		openmpt::report_exception( __func__, mod );
++	}
++	return 0;
++}
++
++int32_t openmpt_module_channel_mute( openmpt_module * mod, int32_t channel, int32_t status ) {
++	try {
++		openmpt::interface::check_soundfile( mod );
++		return mod->impl->set_channel_mute( channel, status );
++	} catch ( ... ) {
++		openmpt::report_exception( __func__, mod );
++	}
++	return -1;
++}
++
+ int32_t openmpt_module_get_num_subsongs( openmpt_module * mod ) {
+ 	try {
+ 		openmpt::interface::check_soundfile( mod );
+diff --git a/libopenmpt/libopenmpt_impl.cpp b/libopenmpt/libopenmpt_impl.cpp
+index f95929642..a3d575a36 100644
+--- a/libopenmpt/libopenmpt_impl.cpp
++++ b/libopenmpt/libopenmpt_impl.cpp
+@@ -1405,6 +1405,71 @@ float module_impl::get_current_channel_vu_rear_right( std::int32_t channel ) con
+ 	return m_sndFile->m_PlayState.Chn[channel].dwFlags[OpenMPT::CHN_SURROUND] ? m_sndFile->m_PlayState.Chn[channel].nRightVU * (1.0f/128.0f) : 0.0f;
+ }
+ 
++bool module_impl::get_current_channel_state( std::int32_t channel, current_channel_state & state ) const {
++	if ( channel < 0 || channel >= m_sndFile->GetNumChannels() ) {
++		return false;
++	}
++	const OpenMPT::ModChannel & chn = m_sndFile->m_PlayState.Chn[channel];
++	state.volume = std::clamp( chn.nVolume / 4, 0, 64 );
++	state.final_volume = std::clamp( static_cast<std::int32_t>( std::round( get_current_channel_vu_mono( channel ) * 64.0f ) ), 0, 64 );
++	state.pan = std::clamp( chn.nPan, 0, 256 );
++	state.instrument = chn.nNewIns > 0 ? static_cast<std::int32_t>( chn.nNewIns ) - 1 : -1;
++	state.key = OpenMPT::ModCommand::IsNote( chn.nNote ) ? static_cast<std::int32_t>( chn.nNote ) - 1 : -1;
++	state.period = chn.nPeriod;
++	state.position = static_cast<std::int32_t>( chn.position.GetUInt() );
++	state.increment = chn.increment.GetRaw();
++	state.pitchbend = chn.GetMIDIPitchBend();
++	state.note = chn.nNote;
++	state.sample = 0;
++	if ( chn.pModSample != nullptr ) {
++		for ( OpenMPT::SAMPLEINDEX i = 1; i <= m_sndFile->GetNumSamples(); ++i ) {
++			if ( chn.pModSample == &m_sndFile->GetSample( i ) ) {
++				state.sample = i;
++				if ( state.instrument < 0 ) {
++					state.instrument = static_cast<std::int32_t>( i ) - 1;
++				}
++				break;
++			}
++		}
++	}
++	state.muted = chn.dwFlags[OpenMPT::CHN_MUTE] ? 1 : 0;
++	return true;
++}
++
++bool module_impl::get_sample_state( std::int32_t sample, sample_state & state ) const {
++	if ( sample <= 0 || sample > m_sndFile->GetNumSamples() ) {
++		return false;
++	}
++	const OpenMPT::ModSample & smp = m_sndFile->GetSample( static_cast<OpenMPT::SAMPLEINDEX>( sample ) );
++	if ( !smp.HasSampleData() || smp.uFlags[OpenMPT::CHN_ADLIB] ) {
++		return false;
++	}
++	state.data = smp.samplev();
++	state.length = static_cast<std::int32_t>( smp.nLength );
++	state.loop_start = static_cast<std::int32_t>( smp.nLoopStart );
++	state.loop_end = static_cast<std::int32_t>( smp.nLoopEnd );
++	state.flags = static_cast<std::int32_t>( static_cast<std::uint16_t>( smp.uFlags ) );
++	state.c5speed = static_cast<std::int32_t>( smp.nC5Speed );
++	state.channels = static_cast<std::int32_t>( smp.GetNumChannels() );
++	state.bits_per_sample = static_cast<std::int32_t>( smp.GetElementarySampleSize() * 8 );
++	return true;
++}
++
++std::int32_t module_impl::set_channel_mute( std::int32_t channel, std::int32_t status ) {
++	if ( channel < 0 || channel >= m_sndFile->GetNumChannels() ) {
++		return -1;
++	}
++	OpenMPT::ModChannel & chn = m_sndFile->m_PlayState.Chn[channel];
++	const bool muted = chn.dwFlags[OpenMPT::CHN_MUTE] || m_sndFile->ChnSettings[channel].dwFlags[OpenMPT::CHN_MUTE];
++	if ( status < 0 ) {
++		return muted ? 1 : 0;
++	}
++	const bool setMuted = status != 0;
++	chn.dwFlags.set( OpenMPT::CHN_MUTE, setMuted );
++	m_sndFile->ChnSettings[channel].dwFlags.set( OpenMPT::CHN_MUTE, setMuted );
++	return muted ? 1 : 0;
++}
++
+ std::int32_t module_impl::get_num_subsongs() const {
+ 	std::unique_ptr<subsongs_type> subsongs_temp = has_subsongs_inited() ? std::unique_ptr<subsongs_type>() : std::make_unique<subsongs_type>( get_subsongs() );
+ 	const subsongs_type & subsongs = has_subsongs_inited() ? m_subsongs : *subsongs_temp;
+diff --git a/libopenmpt/libopenmpt_impl.hpp b/libopenmpt/libopenmpt_impl.hpp
+index dab69810c..8be114c49 100644
+--- a/libopenmpt/libopenmpt_impl.hpp
++++ b/libopenmpt/libopenmpt_impl.hpp
+@@ -238,6 +238,33 @@ public:
+ 	float get_current_channel_vu_right( std::int32_t channel ) const;
+ 	float get_current_channel_vu_rear_left( std::int32_t channel ) const;
+ 	float get_current_channel_vu_rear_right( std::int32_t channel ) const;
++	struct current_channel_state {
++		std::int32_t volume = 0;
++		std::int32_t final_volume = 0;
++		std::int32_t pan = 128;
++		std::int32_t instrument = -1;
++		std::int32_t key = -1;
++		std::int32_t period = 0;
++		std::int32_t position = 0;
++		std::int64_t increment = 0;
++		std::int32_t pitchbend = 0;
++		std::int32_t note = 0;
++		std::int32_t sample = 0;
++		std::int32_t muted = 0;
++	};
++	struct sample_state {
++		const void * data = nullptr;
++		std::int32_t length = 0;
++		std::int32_t loop_start = 0;
++		std::int32_t loop_end = 0;
++		std::int32_t flags = 0;
++		std::int32_t c5speed = 0;
++		std::int32_t channels = 0;
++		std::int32_t bits_per_sample = 0;
++	};
++	bool get_current_channel_state( std::int32_t channel, current_channel_state & state ) const;
++	bool get_sample_state( std::int32_t sample, sample_state & state ) const;
++	std::int32_t set_channel_mute( std::int32_t channel, std::int32_t status );
+ 	std::int32_t get_num_subsongs() const;
+ 	std::int32_t get_num_channels() const;
+ 	std::int32_t get_num_orders() const;

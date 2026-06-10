@@ -409,6 +409,8 @@ private fun PlayerScreenContent(
                         modifier = Modifier.fillMaxSize(),
                         numChannels = state.modVars.chn,
                         instrumentNames = state.modVars.instruments.toPersistentList(),
+                        renderingBackend = state.renderingBackend,
+                        supportsRawChannelSamples = state.supportsRawChannelSamples,
                         isPlaying = (state.status == PlaybackStatus.PLAYING) &&
                             !queueSheetState.isVisible && !durationsSheetState.isVisible
                     )
@@ -416,6 +418,8 @@ private fun PlayerScreenContent(
                     2 -> DebugView(
                         modifier = Modifier.fillMaxSize(),
                         state = state,
+                        renderingBackend = state.renderingBackend,
+                        supportsRawChannelSamples = state.supportsRawChannelSamples,
                         isPlaying = (state.status == PlaybackStatus.PLAYING) &&
                             !queueSheetState.isVisible && !durationsSheetState.isVisible
                     )

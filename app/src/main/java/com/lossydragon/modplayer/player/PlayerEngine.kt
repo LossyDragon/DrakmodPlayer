@@ -18,6 +18,8 @@ import kotlinx.coroutines.flow.launchIn
 import kotlinx.coroutines.flow.onEach
 import kotlinx.coroutines.runBlocking
 import org.helllabs.libxmp.Xmp
+import org.helllabs.libxmp.model.AudioStats
+import org.helllabs.libxmp.model.ChannelInfo
 import org.helllabs.libxmp.model.FrameInfo
 import org.helllabs.libxmp.model.ModInfo
 import org.helllabs.libxmp.model.ModVars
@@ -58,6 +60,13 @@ class PlayerEngine(
 
     /** Lazily populated by [load] / [loadNext]; read by [renderLoop]. */
     private val patternCache = mutableMapOf<Int, PatternData>()
+    private var native: NativeModuleBackend = RenderingBackend.OPENMPT.nativeBackend()
+
+    private val mutableBackendFlow = MutableStateFlow(native.renderingBackend)
+    val backendFlow: StateFlow<RenderingBackend> = mutableBackendFlow
+
+    private val mutableSupportsRawChannelSamplesFlow = MutableStateFlow(native.supportsRawChannelSamples)
+    val supportsRawChannelSamplesFlow: StateFlow<Boolean> = mutableSupportsRawChannelSamplesFlow
 
     @Volatile
     private var isRepeatOne: Boolean = false
@@ -88,29 +97,29 @@ class PlayerEngine(
 
     init {
         prefs.getVolumeBoostFlow().distinctUntilChanged().onEach {
-            if (initialized) Xmp.setPlayer(Xmp.XMP_PLAYER_AMP, it)
+            if (initialized) native.setPlayer(Xmp.XMP_PLAYER_AMP, it)
         }.launchIn(scope)
         prefs.getStereoMixFlow().distinctUntilChanged().onEach {
-            if (initialized) Xmp.setPlayer(Xmp.XMP_PLAYER_MIX, it)
+            if (initialized) native.setPlayer(Xmp.XMP_PLAYER_MIX, it)
         }.launchIn(scope)
         prefs.getDspEffectFlow().distinctUntilChanged().onEach {
-            if (initialized) Xmp.setPlayer(Xmp.XMP_PLAYER_DSP, it)
+            if (initialized) native.setPlayer(Xmp.XMP_PLAYER_DSP, it)
         }.launchIn(scope)
         prefs.getPlayerVolumeFlow().distinctUntilChanged().onEach {
-            if (initialized) Xmp.setPlayer(Xmp.XMP_PLAYER_VOLUME, it)
+            if (initialized) native.setPlayer(Xmp.XMP_PLAYER_VOLUME, it)
         }.launchIn(scope)
         prefs.getInterpolationTypeFlow().distinctUntilChanged().onEach {
-            if (initialized) Xmp.setPlayer(Xmp.XMP_PLAYER_INTERP, it)
+            if (initialized) native.setResampler(ResamplerMode.fromId(it))
         }.launchIn(scope)
         prefs.getPlayerFlagsFlow().distinctUntilChanged().onEach {
-            if (initialized) {
+            if (initialized && native.renderingBackend == RenderingBackend.LIBXMP) {
                 val cflags = Xmp.getPlayer(Xmp.XMP_PLAYER_CFLAGS)
                 val newCflags = if ((it and Xmp.XMP_FLAGS_A500) != 0) {
                     cflags or Xmp.XMP_FLAGS_A500
                 } else {
                     cflags and Xmp.XMP_FLAGS_A500.inv()
                 }
-                Xmp.setPlayer(Xmp.XMP_PLAYER_CFLAGS, newCflags)
+                native.setPlayer(Xmp.XMP_PLAYER_CFLAGS, newCflags)
             }
         }.launchIn(scope)
     }
@@ -120,7 +129,7 @@ class PlayerEngine(
      */
     fun isRepeatingOne(value: Boolean) {
         isRepeatOne = value
-        if (initialized) Xmp.setLoopMode(value)
+        if (initialized) native.setLoopMode(value)
     }
 
     /**
@@ -130,10 +139,10 @@ class PlayerEngine(
      * @return true if the sequence index is valid and the switch succeeded.
      */
     fun setSequence(index: Int): Boolean {
-        val result = Xmp.setSequence(index)
+        val result = native.setSequence(index)
         if (result) {
             val mv = ModVars()
-            Xmp.getModVars(mv)
+            native.getModVars(mv)
             modVarsFlow.value = mv
             positionMs.value = 0L
             currentSequenceFlow.value = index
@@ -150,10 +159,11 @@ class PlayerEngine(
      * @return true on success; false if Oboe or libxmp init fails.
      */
     fun load(file: ModuleEntity): Boolean {
+        selectBackendForNextLoad()
         if (initialized) {
             softStop()
             clearPatternCache()
-            Xmp.releaseModule()
+            native.releaseModule()
         } else {
             clearPatternCache()
             if (!initAudio()) return false
@@ -174,12 +184,19 @@ class PlayerEngine(
      * @return true on success; false if libxmp cannot load the file.
      */
     fun loadNext(file: ModuleEntity): Boolean {
+        val selected = runBlocking { prefs.getRenderingBackendFlow().first() }.nativeBackend()
+        if (initialized && selected.renderingBackend != native.renderingBackend) {
+            stop()
+            native.deinit()
+            initialized = false
+            native = selected
+        }
         if (!initialized) return load(file)
 
         softStop()
         clearPatternCache()
         resetSequenceState()
-        Xmp.releaseModule()
+        native.releaseModule()
         applyPreLoadSettings()
 
         return loadModule(file)
@@ -198,21 +215,21 @@ class PlayerEngine(
         stopRequest = false
         paused = false
 
-        Xmp.setLoopMode(isRepeatOne)
+        native.setLoopMode(isRepeatOne)
 
         val sampleRate = runBlocking { prefs.getSampleRateFlow().first() }
         val format = runBlocking { prefs.getPlayerFormatFlow().first() }
-        if (Xmp.startPlayer(sampleRate, format) != 0) {
-            Timber.e("Xmp.startPlayer() failed")
+        if (native.startPlayer(sampleRate, format) != 0) {
+            Timber.e("${native.renderingBackend}.startPlayer() failed")
             return
         }
 
         // Unmute all channels on every start.
-        for (i in 0 until 64) Xmp.mute(i, 0)
+        for (i in 0 until 64) native.mute(i, 0)
 
         applyRuntimeSettings()
 
-        Xmp.playAudio()
+        native.playAudio()
         isPlaying.value = true
 
         renderThread = Thread(::renderLoop, "ModPlayerThread").also {
@@ -228,7 +245,7 @@ class PlayerEngine(
     fun pause() {
         endedNaturally = false
         paused = true
-        Xmp.setXmpPlaying(false)
+        native.setPlaying(false)
         isPlaying.value = false
     }
 
@@ -238,7 +255,7 @@ class PlayerEngine(
     fun resume() {
         if (!paused) return
         paused = false
-        Xmp.setXmpPlaying(true)
+        native.setPlaying(true)
         isPlaying.value = true
     }
 
@@ -248,7 +265,7 @@ class PlayerEngine(
      */
     fun seek(posMs: Int) {
         Timber.d("engine.seek posMs=$posMs")
-        Xmp.seek(posMs)
+        native.seek(posMs)
         positionMs.value = posMs.toLong()
     }
 
@@ -267,8 +284,8 @@ class PlayerEngine(
         renderThread = null
 
         if (initialized) {
-            Xmp.endPlayer() // set_playing(0) → callback silences; xmp_end_player
-            Xmp.releaseModule() // stream stays open, initialized stays true
+            native.endPlayer()
+            native.releaseModule()
         }
 
         isPlaying.value = false
@@ -284,7 +301,7 @@ class PlayerEngine(
     fun release() {
         stop()
         if (initialized) {
-            Xmp.deinit()
+            native.deinit()
             initialized = false
         }
         scope.cancel()
@@ -297,7 +314,7 @@ class PlayerEngine(
     fun getPatternData(patternIndex: Int): PatternData =
         patternCache[patternIndex] ?: run {
             val numCh = modVarsFlow.value.chn
-            val numRows = Xmp.getPatternRows(patternIndex)
+            val numRows = native.getPatternRows(patternIndex)
             // Don't cache invalid results — a race with module teardown can produce
             // numRows=0 for a valid pattern. Leaving the entry absent lets the next
             // recomposition retry rather than permanently serving a blank.
@@ -309,7 +326,7 @@ class PlayerEngine(
             val fxp = ByteArray(64)
 
             val cells = Array(numRows) { row ->
-                Xmp.getPatternRow(patternIndex, row, notes, ins, fxt, fxp)
+                native.getPatternRow(patternIndex, row, notes, ins, fxt, fxp)
                 Array(numCh) { ch ->
                     NoteCell(
                         note = notes[ch].toInt() and 0xFF,
@@ -328,11 +345,45 @@ class PlayerEngine(
             ).also { patternCache[patternIndex] = it }
         }
 
+    fun getAudioStats(stats: AudioStats) = native.getAudioStats(stats)
+
+    fun getChannelData(info: ChannelInfo) = native.getChannelData(info)
+
+    fun getSampleData(
+        trigger: Boolean,
+        ins: Int,
+        key: Int,
+        period: Int,
+        chn: Int,
+        width: Int,
+        buffer: ByteArray?
+    ) = native.getSampleData(trigger, ins, key, period, chn, width, buffer)
+
+    fun mute(chn: Int, status: Int): Int = native.mute(chn, status)
+
     /** Resets sequence-tracking fields before loading a new module. */
     private fun resetSequenceState() {
         endedNaturally = false
         stopRequest = false
         currentSequenceFlow.value = 0
+    }
+
+    /** Selects the persisted backend for the next module load. */
+    private fun selectBackendForNextLoad() {
+        val selected = runBlocking { prefs.getRenderingBackendFlow().first() }.nativeBackend()
+        if (selected.renderingBackend == native.renderingBackend) {
+            mutableBackendFlow.value = native.renderingBackend
+            mutableSupportsRawChannelSamplesFlow.value = native.supportsRawChannelSamples
+            return
+        }
+        if (initialized) {
+            stop()
+            native.deinit()
+            initialized = false
+        }
+        native = selected
+        mutableBackendFlow.value = native.renderingBackend
+        mutableSupportsRawChannelSamplesFlow.value = native.supportsRawChannelSamples
     }
 
     /**
@@ -352,7 +403,8 @@ class PlayerEngine(
                     "format=$format perfMode=$perfMode audioApi=$audioApi"
             )
 
-            val result = Xmp.init(
+            selectBackendForNextLoad()
+            val result = native.init(
                 rate = sampleRate,
                 ms = bufferMs,
                 perfMode = perfMode,
@@ -365,7 +417,7 @@ class PlayerEngine(
                 initialized = true
                 return@runBlocking true
             } else {
-                Timber.e("Xmp.init() failed")
+                Timber.e("${native.renderingBackend}.init() failed")
                 return@runBlocking false
             }
         }
@@ -376,11 +428,11 @@ class PlayerEngine(
         val playerFlags = runBlocking { prefs.getPlayerFlagsFlow().first() }
         val defaultPan = runBlocking { prefs.getDefaultPanFlow().first() }
         val preLoadMask = Xmp.XMP_FLAGS_VBLANK or Xmp.XMP_FLAGS_FX9BUG or Xmp.XMP_FLAGS_FIXLOOP
-        Xmp.setPlayer(
+        native.setPlayer(
             parm = Xmp.XMP_PLAYER_FLAGS,
             value = playerFlags and preLoadMask
         )
-        Xmp.setPlayer(
+        native.setPlayer(
             parm = Xmp.XMP_PLAYER_DEFPAN,
             value = defaultPan
         )
@@ -390,33 +442,32 @@ class PlayerEngine(
     private fun applyRuntimeSettings() {
         runBlocking {
             val playerFlags = prefs.getPlayerFlagsFlow().first()
-            val cflags = Xmp.getPlayer(Xmp.XMP_PLAYER_CFLAGS)
-            val newCflags = if ((playerFlags and Xmp.XMP_FLAGS_A500) != 0) {
-                cflags or Xmp.XMP_FLAGS_A500
-            } else {
-                cflags and Xmp.XMP_FLAGS_A500.inv()
-            }
-            Xmp.setPlayer(
+            native.setPlayer(
                 parm = Xmp.XMP_PLAYER_AMP,
                 value = prefs.getVolumeBoostFlow().first()
             )
-            Xmp.setPlayer(
-                parm = Xmp.XMP_PLAYER_CFLAGS,
-                value = newCflags
-            )
-            Xmp.setPlayer(
+            if (native.renderingBackend == RenderingBackend.LIBXMP) {
+                val cflags = Xmp.getPlayer(Xmp.XMP_PLAYER_CFLAGS)
+                val newCflags = if ((playerFlags and Xmp.XMP_FLAGS_A500) != 0) {
+                    cflags or Xmp.XMP_FLAGS_A500
+                } else {
+                    cflags and Xmp.XMP_FLAGS_A500.inv()
+                }
+                native.setPlayer(
+                    parm = Xmp.XMP_PLAYER_CFLAGS,
+                    value = newCflags
+                )
+            }
+            native.setPlayer(
                 parm = Xmp.XMP_PLAYER_DSP,
                 value = prefs.getDspEffectFlow().first()
             )
-            Xmp.setPlayer(
-                parm = Xmp.XMP_PLAYER_INTERP,
-                value = prefs.getInterpolationTypeFlow().first()
-            )
-            Xmp.setPlayer(
+            native.setResampler(ResamplerMode.fromId(prefs.getInterpolationTypeFlow().first()))
+            native.setPlayer(
                 parm = Xmp.XMP_PLAYER_MIX,
                 value = prefs.getStereoMixFlow().first()
             )
-            Xmp.setPlayer(
+            native.setPlayer(
                 parm = Xmp.XMP_PLAYER_VOLUME,
                 value = prefs.getPlayerVolumeFlow().first()
             )
@@ -431,17 +482,17 @@ class PlayerEngine(
      */
     private fun loadModule(file: ModuleEntity): Boolean {
         val modInfo = ModInfo()
-        val result = Xmp.loadFromFd(context, file.uri, modInfo)
+        val result = native.loadFromFd(context, file.uri, modInfo)
         if (result != 0) {
-            Timber.e("Xmp.loadFromFd() returned $result")
+            Timber.e("${native.renderingBackend}.loadFromFd() returned $result")
             if (!initialized) {
-                Xmp.deinit()
+                native.deinit()
                 initialized = false
             }
             return false
         }
         val mv = ModVars()
-        Xmp.getModVars(mv)
+        native.getModVars(mv)
         modVarsFlow.value = mv
         positionMs.value = 0L
         return true
@@ -456,7 +507,7 @@ class PlayerEngine(
         renderThread?.interrupt()
         renderThread?.join(2_000)
         renderThread = null
-        Xmp.endPlayer()
+        native.endPlayer()
         isPlaying.value = false
         positionMs.value = 0L
     }
@@ -477,12 +528,12 @@ class PlayerEngine(
                 if (paused || stopRequest) continue
 
                 val fi = FrameInfo()
-                Xmp.getFrameInfo(fi)
+                native.getFrameInfo(fi)
                 frameInfoFlow.value = fi
 
                 positionMs.value = fi.time.toLong().coerceAtLeast(0L)
 
-                if (Xmp.hasModuleEnded()) {
+                if (native.hasModuleEnded()) {
                     Timber.i("renderLoop: module ended, playAllSequences=$playAllSequences")
 
                     if (playAllSequences) {

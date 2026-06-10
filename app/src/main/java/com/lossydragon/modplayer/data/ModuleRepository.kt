@@ -7,6 +7,7 @@ import com.lossydragon.modplayer.db.entity.ModuleEntity
 import com.lossydragon.modplayer.util.queryDirectoryEntries
 import com.lossydragon.modplayer.util.resolveDocId
 import kotlinx.coroutines.flow.Flow
+import org.helllabs.libxmp.OpenMpt
 import org.helllabs.libxmp.Xmp
 import org.helllabs.libxmp.model.ModInfo
 
@@ -86,7 +87,8 @@ class ModuleRepository(
                     if (path !in skipPaths) {
                         val ext = entry.name.substringAfterLast('.', "").lowercase()
                         val modInfo = ModInfo()
-                        val isValid = Xmp.testFromFd(context, entry.childUri, modInfo)
+                        val isValid = OpenMpt.testFromFd(context, entry.childUri, modInfo) ||
+                            Xmp.testFromFd(context, entry.childUri, modInfo)
                         dao.upsert(
                             ModuleEntity(
                                 filename = entry.name.trim(),

@@ -19,6 +19,7 @@ import androidx.compose.ui.text.font.*
 import androidx.compose.ui.tooling.preview.*
 import androidx.compose.ui.tooling.preview.datasource.*
 import androidx.compose.ui.unit.*
+import com.lossydragon.modplayer.player.RenderingBackend
 import com.lossydragon.modplayer.ui.theme.AppTheme
 import com.materialkolor.ktx.darken
 import com.materialkolor.ktx.lighten
@@ -30,6 +31,7 @@ import kotlinx.coroutines.delay
 import kotlinx.coroutines.isActive
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
+import org.helllabs.libxmp.OpenMpt
 import org.helllabs.libxmp.Xmp
 import org.helllabs.libxmp.model.ChannelInfo
 
@@ -83,6 +85,8 @@ fun rememberDefaultChannelViewColors(): ChannelViewColors {
 fun ChannelView(
     numChannels: Int,
     instrumentNames: ImmutableList<String>,
+    renderingBackend: RenderingBackend,
+    supportsRawChannelSamples: Boolean,
     isPlaying: Boolean,
     modifier: Modifier = Modifier,
     colors: ChannelViewColors = rememberDefaultChannelViewColors()
@@ -94,14 +98,21 @@ fun ChannelView(
     val prevKey = remember(numChannels) { IntArray(numChannels) }
     val prevInstrument = remember(numChannels) { IntArray(numChannels) { -1 } }
 
-    val muteArr = remember(numChannels) {
-        IntArray(numChannels) { i -> if (!view.isInEditMode) Xmp.mute(i, -1) else 0 }
+    val muteArr = remember(numChannels, renderingBackend, supportsRawChannelSamples) {
+        IntArray(numChannels) { i ->
+            if (!view.isInEditMode && supportsRawChannelSamples) {
+                muteChannel(renderingBackend, i, -1)
+            } else {
+                0
+            }
+        }
     }
     var muteVersion by remember { mutableIntStateOf(0) }
     var drawTick by remember { mutableIntStateOf(0) }
     var soloChannel by remember { mutableIntStateOf(-1) }
 
     val isPlayingState = rememberUpdatedState(isPlaying)
+    val backendState = rememberUpdatedState(renderingBackend)
     var zoom by remember { mutableFloatStateOf(1f) }
     val scrollYAnim = remember { Animatable(0f) }
     val scrollY = scrollYAnim.value
@@ -118,21 +129,22 @@ fun ChannelView(
         while (isActive) {
             if (isPlayingState.value) {
                 withContext(Dispatchers.Default) {
-                    Xmp.getChannelData(liveData)
+                    getChannelData(backendState.value, liveData)
                     for (i in 0 until numChannels) {
                         val period = liveData.periods[i]
                         val volume = liveData.volumes[i]
                         val finalVol = liveData.finalVols[i]
                         val key = liveData.keys[i]
                         val ins = liveData.instruments[i]
-                        if (period <= 0 || (volume == 0 && finalVol == 0)) {
+                        if (!supportsRawChannelSamples || period <= 0 || (volume == 0 && finalVol == 0)) {
                             liveWave[i].fill(0)
                             continue
                         }
                         val trigger = key >= 0 && (key != prevKey[i] || ins != prevInstrument[i])
                         if (key >= 0) prevKey[i] = key
                         prevInstrument[i] = ins
-                        Xmp.getSampleData(
+                        getSampleData(
+                            backend = backendState.value,
                             trigger = trigger,
                             ins = ins,
                             key = prevKey[i],
@@ -246,7 +258,9 @@ fun ChannelView(
                         val values = chnNumRef..(chnNumRef + waveWidthRef.floatValue)
                         if (ch in 0 until numChannels && offset.x in values) {
                             muteArr[ch] = if (muteArr[ch] == 0) 1 else 0
-                            Xmp.mute(ch, muteArr[ch])
+                            if (supportsRawChannelSamples) {
+                                muteChannel(backendState.value, ch, muteArr[ch])
+                            }
                             muteVersion++
                         }
                     },
@@ -260,13 +274,17 @@ fun ChannelView(
                             if (soloChannel < 0) {
                                 for (i in 0 until numChannels) {
                                     muteArr[i] = if (i != ch) 1 else 0
-                                    Xmp.mute(i, muteArr[i])
+                                    if (supportsRawChannelSamples) {
+                                        muteChannel(backendState.value, i, muteArr[i])
+                                    }
                                 }
                                 soloChannel = ch
                             } else {
                                 for (i in 0 until numChannels) {
                                     muteArr[i] = 0
-                                    Xmp.mute(i, 0)
+                                    if (supportsRawChannelSamples) {
+                                        muteChannel(backendState.value, i, 0)
+                                    }
                                 }
                                 soloChannel = -1
                             }
@@ -465,6 +483,35 @@ fun ChannelView(
     }
 }
 
+private fun getChannelData(backend: RenderingBackend, info: ChannelInfo) {
+    when (backend) {
+        RenderingBackend.LIBXMP -> Xmp.getChannelData(info)
+        RenderingBackend.OPENMPT -> OpenMpt.getChannelData(info)
+    }
+}
+
+private fun getSampleData(
+    backend: RenderingBackend,
+    trigger: Boolean,
+    ins: Int,
+    key: Int,
+    period: Int,
+    chn: Int,
+    width: Int,
+    buffer: ByteArray?
+) {
+    when (backend) {
+        RenderingBackend.LIBXMP -> Xmp.getSampleData(trigger, ins, key, period, chn, width, buffer)
+        RenderingBackend.OPENMPT -> OpenMpt.getSampleData(trigger, ins, key, period, chn, width, buffer)
+    }
+}
+
+private fun muteChannel(backend: RenderingBackend, chn: Int, status: Int): Int =
+    when (backend) {
+        RenderingBackend.LIBXMP -> Xmp.mute(chn, status)
+        RenderingBackend.OPENMPT -> OpenMpt.mute(chn, status)
+    }
+
 @Preview(showBackground = true, widthDp = 420, heightDp = 520)
 @Composable
 private fun PreviewChannelView() {
@@ -472,6 +519,8 @@ private fun PreviewChannelView() {
         ChannelView(
             numChannels = 10,
             instrumentNames = LoremIpsum(4).values.toPersistentList(),
+            renderingBackend = RenderingBackend.LIBXMP,
+            supportsRawChannelSamples = true,
             isPlaying = false,
             modifier = Modifier.fillMaxSize(),
         )

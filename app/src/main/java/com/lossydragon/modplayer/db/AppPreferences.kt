@@ -12,6 +12,7 @@ import androidx.datastore.preferences.core.intPreferencesKey
 import androidx.datastore.preferences.core.longPreferencesKey
 import androidx.datastore.preferences.core.stringPreferencesKey
 import androidx.datastore.preferences.preferencesDataStore
+import com.lossydragon.modplayer.player.RenderingBackend
 import com.lossydragon.modplayer.ui.theme.seed
 import com.materialkolor.PaletteStyle
 import kotlinx.coroutines.flow.Flow
@@ -82,6 +83,11 @@ class AppPreferences(context: Context) {
     suspend fun setGlobalSubSongs(v: Boolean) = set(globalSubSongs, v)
 
     /* Player */
+    private val renderingBackend = intPreferencesKey("rendering_backend")
+    fun getRenderingBackendFlow() =
+        flow(renderingBackend, RenderingBackend.OPENMPT.id).map(RenderingBackend::fromId)
+    suspend fun setRenderingBackend(v: RenderingBackend) = set(renderingBackend, v.id)
+
     private val sampleRate = intPreferencesKey("sample_rate")
     fun getSampleRateFlow() = flow(sampleRate, Xmp.DEFAULT_SAMPLE_RATE)
     suspend fun setSampleRate(v: Int) = set(sampleRate, v)

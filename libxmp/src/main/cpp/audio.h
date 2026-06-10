@@ -20,6 +20,8 @@ struct AudioStats {
   const char* audio_format;
 };
 
+typedef int (*AudioRenderCallback)(void* audioData, int32_t numFrames, int32_t numChannels, int32_t bytesPerSample);
+
 int get_audio_stats(struct AudioStats* stats);
 
 int get_effective_format_flags(void);
@@ -35,6 +37,10 @@ int stop_audio(void);
 void close_audio(void);
 
 int has_module_ended(void); // returns 1 when xmp_play_buffer signals XMP_END
+
+void reset_render_callback(void);
+
+void set_render_callback(AudioRenderCallback callback);
 
 void set_loop_mode(int loop_flag); // 0 = loop forever (repeat-one), 1 = play once
 
