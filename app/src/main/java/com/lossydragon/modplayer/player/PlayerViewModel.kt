@@ -24,7 +24,6 @@ import kotlinx.coroutines.flow.onEach
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.runBlocking
-import org.helllabs.libxmp.Xmp
 import org.helllabs.libxmp.model.AudioStats
 import org.helllabs.libxmp.model.FrameInfo
 import org.helllabs.libxmp.model.ModVars
@@ -50,7 +49,9 @@ data class PlayerUiState(
     val currentSequence: Int = 0,
     val repeatMode: Int = Player.REPEAT_MODE_OFF,
     val currentQueueIndex: Int = 0,
-    val isShuffle: Boolean = false
+    val isShuffle: Boolean = false,
+    val renderingBackend: RenderingBackend = RenderingBackend.OPENMPT,
+    val supportsRawChannelSamples: Boolean = false
 )
 
 /** Bridges [Player] state to the UI via [PlayerUiState]. */
@@ -67,6 +68,14 @@ class PlayerViewModel(
     init {
         prefs.getRowNumbersFlow().onEach { show ->
             state.update { it.copy(showRowNumbers = show) }
+        }.launchIn(viewModelScope)
+
+        player.backendFlow.onEach { backend ->
+            state.update { it.copy(renderingBackend = backend) }
+        }.launchIn(viewModelScope)
+
+        player.supportsRawChannelSamplesFlow.onEach { supported ->
+            state.update { it.copy(supportsRawChannelSamples = supported) }
         }.launchIn(viewModelScope)
 
         combine(player.modVarsFlow, player.frameInfoFlow) { mv, fi -> mv to fi }
@@ -136,7 +145,7 @@ class PlayerViewModel(
     /** Returns a formatted string of current Oboe audio stream statistics. */
     fun getAudioStats(): String {
         val stats = AudioStats()
-        Xmp.getAudioStats(stats)
+        player.getAudioStats(stats)
         return """
                 Audio API: ${stats.audioApi}
                 Audio Format: ${stats.audioFormat}

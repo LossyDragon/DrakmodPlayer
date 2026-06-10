@@ -24,6 +24,7 @@ static std::atomic<bool> in_callback(false);
 static std::atomic<bool> module_ended(false);
 // passed as the loop arg to xmp_play_buffer: 0 = loop forever, 1 = play once
 static std::atomic<int> xmp_loop_flag(1);
+static std::atomic<AudioRenderCallback> render_callback(nullptr);
 
 static std::atomic<int32_t> underrun_count(0);
 static std::shared_ptr<oboe::AudioStream> audio_stream;
@@ -64,8 +65,9 @@ public:
     const int bytesPerSample = (audioStream->getFormat() == oboe::AudioFormat::I32) ? 4 : 2;
     const int numBytes = numFrames * numChannels * bytesPerSample;
 
-    if (xmp_playing.load(std::memory_order_acquire) && xmp_ctx != nullptr) {
-      int ret = xmp_play_buffer(xmp_ctx, audioData, numBytes, xmp_loop_flag.load(std::memory_order_relaxed));
+    AudioRenderCallback callback = render_callback.load(std::memory_order_acquire);
+    if (xmp_playing.load(std::memory_order_acquire) && callback != nullptr) {
+      int ret = callback(audioData, numFrames, numChannels, bytesPerSample);
       if (ret < 0) {
         module_ended.store(true, std::memory_order_release);
         memset(audioData, 0, numBytes);
@@ -88,6 +90,20 @@ public:
 
 void set_xmp_context(void* ctx) {
   xmp_ctx = static_cast<xmp_context>(ctx);
+}
+
+static int render_xmp(void* audioData, int32_t numFrames, int32_t numChannels, int32_t bytesPerSample) {
+  if (xmp_ctx == nullptr) return -1;
+  int numBytes = numFrames * numChannels * bytesPerSample;
+  return xmp_play_buffer(xmp_ctx, audioData, numBytes, xmp_loop_flag.load(std::memory_order_relaxed));
+}
+
+void reset_render_callback() {
+  render_callback.store(render_xmp, std::memory_order_release);
+}
+
+void set_render_callback(AudioRenderCallback callback) {
+  render_callback.store(callback, std::memory_order_release);
 }
 
 void set_playing(int val) {
@@ -224,6 +240,7 @@ int open_audio(int rate, int latency, int performance_mode, int channel_count, i
   }
 
   effective_format_flags = format_flags;
+  reset_render_callback();
 
   int assumed_channels = (channel_count == 1) ? 1 : 2;
 

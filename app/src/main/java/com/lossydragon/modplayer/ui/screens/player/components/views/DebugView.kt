@@ -26,6 +26,7 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.isActive
 import kotlinx.coroutines.withContext
+import org.helllabs.libxmp.OpenMpt
 import org.helllabs.libxmp.Xmp
 import org.helllabs.libxmp.model.ChannelInfo
 import org.helllabs.libxmp.model.FrameInfo
@@ -45,6 +46,7 @@ private fun noteStr(note: Int): String = when {
 fun DebugView(
     modifier: Modifier = Modifier,
     state: PlayerUiState,
+    supportsRawChannelSamples: Boolean,
     isPlaying: Boolean
 ) {
     Column {
@@ -60,7 +62,7 @@ fun DebugView(
             },
         )
         HorizontalDivider(Modifier.fillMaxWidth())
-        ChannelInfo(Modifier.weight(1f), state, isPlaying)
+        ChannelInfo(Modifier.weight(1f), state, supportsRawChannelSamples, isPlaying)
     }
 }
 
@@ -68,6 +70,7 @@ fun DebugView(
 private fun ChannelInfo(
     modifier: Modifier = Modifier,
     state: PlayerUiState,
+    supportsRawChannelSamples: Boolean,
     isPlaying: Boolean
 ) {
     val numChannels = state.modVars.chn
@@ -80,7 +83,13 @@ private fun ChannelInfo(
         if (numChannels == 0) return@LaunchedEffect
         while (isActive) {
             if (isPlayingState.value) {
-                withContext(Dispatchers.Default) { Xmp.getChannelData(channelInfoBuffer) }
+                withContext(Dispatchers.Default) {
+                    if (supportsRawChannelSamples) {
+                        Xmp.getChannelData(channelInfoBuffer)
+                    } else {
+                        OpenMpt.getChannelData(channelInfoBuffer)
+                    }
+                }
                 channelSnapshot = ChannelInfo(
                     volumes = channelInfoBuffer.volumes.copyOf(),
                     finalVols = channelInfoBuffer.finalVols.copyOf(),
@@ -277,6 +286,7 @@ private fun Preview() {
         DebugView(
             modifier = Modifier.fillMaxSize(),
             state = state,
+            supportsRawChannelSamples = true,
             isPlaying = true,
         )
     }

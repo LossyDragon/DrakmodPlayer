@@ -52,6 +52,8 @@
     <string name="interp_linear">Linear</string>
     <string name="interp_nearest">Nearest</string>
     <string name="interp_spline">Spline</string>
+    <string name="interp_openmpt_amiga_a500">Amiga A500</string>
+    <string name="interp_openmpt_amiga_a1200">Amiga A1200</string>
     <string name="loading">Loading…</string>
     <string name="message_no_artists">No artists found.</string>
     <string name="message_no_history">No items stored in history</string>
@@ -98,6 +100,10 @@
     <string name="pref_audio_perf_item_power_saving_desc">Prioritizes battery life over latency. May introduce audio buffering.</string>
     <string name="pref_auto_resume">Auto-resume on startup</string>
     <string name="pref_auto_resume_desc">Restore the last queue and continue playback when the app opens.</string>
+    <string name="pref_backend">Rendering Backend</string>
+    <string name="pref_backend_desc">Decoder used for newly loaded tracks.</string>
+    <string name="pref_backend_libopenmpt">libopenmpt</string>
+    <string name="pref_backend_libxmp">libxmp</string>
     <string name="pref_boost">Amplification</string>
     <string name="pref_boost_desc">Pre-mix gain factor (0=quiet, 1=normal, 2–3=boost). May clip at high values.</string>
     <string name="pref_buffer_ms">Buffer Milliseconds</string>
@@ -132,8 +138,12 @@
     <string name="pref_interp_item_nearest_desc">Nearest neighbor — sharp, low CPU</string>
     <string name="pref_interp_item_spline">Spline</string>
     <string name="pref_interp_item_spline_desc">Cubic spline — smoothest, highest CPU</string>
-    <string name="pref_interpolation_type">Interpolation</string>
-    <string name="pref_interpolation_type_desc">Sample interpolation. Nearest=sharp/8-bit feel, Linear=balanced, Spline=smoothest.</string>
+    <string name="pref_interp_item_amiga_a500">Amiga A500</string>
+    <string name="pref_interp_item_amiga_a500_desc">OpenMPT Paula resampler with A500 filter for Amiga modules.</string>
+    <string name="pref_interp_item_amiga_a1200">Amiga A1200</string>
+    <string name="pref_interp_item_amiga_a1200_desc">OpenMPT Paula resampler with A1200 filter for Amiga modules.</string>
+    <string name="pref_interpolation_type">Resampler</string>
+    <string name="pref_interpolation_type_desc">Sample resampling mode. Amiga modes apply to libopenmpt Amiga modules.</string>
     <string name="pref_output_format">Output Format</string>
     <string name="pref_output_format_desc">Sample format and channel layout. Default (16-bit stereo) is recommended. Applies on next track.</string>
     <string name="pref_pan">Pan Separation</string>

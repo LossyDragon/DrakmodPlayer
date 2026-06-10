@@ -14,7 +14,7 @@ import androidx.navigation3.ui.NavDisplay
 import com.lossydragon.modplayer.util.shareLink
 import kotlinx.collections.immutable.toPersistentList
 import kotlinx.serialization.Serializable
-import org.helllabs.libxmp.Xmp
+import org.helllabs.libxmp.OpenMpt
 
 private sealed interface NavKeyPreferences : NavKey {
     @Serializable data object Preferences : NavKeyPreferences
@@ -58,7 +58,7 @@ fun NavPreferences(
             }
             entry<NavKeyPreferences.Formats> {
                 val context = LocalContext.current
-                val formats = remember { Xmp.getFormats().toPersistentList() }
+                val formats = remember { OpenMpt.getFormats().toPersistentList() }
                 PreferencesFormats(
                     modifier = modifier,
                     snackbarHostState = snackbarHostState,

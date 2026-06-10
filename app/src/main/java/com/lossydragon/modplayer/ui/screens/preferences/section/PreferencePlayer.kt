@@ -8,13 +8,31 @@ import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.tooling.preview.*
 import androidx.compose.ui.unit.*
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
+import com.alorma.compose.settings.ui.expressive.SettingsMenuLink
 import com.alorma.compose.settings.ui.expressive.SettingsSwitch
 import com.lossydragon.modplayer.R
 import com.lossydragon.modplayer.db.AppPreferences
+import com.lossydragon.modplayer.player.RenderingBackend
+import com.lossydragon.modplayer.ui.screens.preferences.components.PreferenceItem
 import com.lossydragon.modplayer.ui.screens.preferences.components.PreferenceSection
+import com.lossydragon.modplayer.ui.screens.preferences.components.SingleChoiceAlertDialog
 import com.lossydragon.modplayer.ui.theme.AppTheme
+import kotlinx.collections.immutable.persistentListOf
 import kotlinx.coroutines.launch
 import org.koin.compose.koinInject
+
+private val backendOptions = persistentListOf(
+    PreferenceItem(
+        key = RenderingBackend.OPENMPT.id.toString(),
+        title = R.string.pref_backend_libopenmpt,
+        description = R.string.pref_backend_desc,
+    ),
+    PreferenceItem(
+        key = RenderingBackend.LIBXMP.id.toString(),
+        title = R.string.pref_backend_libxmp,
+        description = R.string.pref_backend_desc,
+    ),
+)
 
 @OptIn(ExperimentalMaterial3ExpressiveApi::class)
 @Composable
@@ -32,6 +50,22 @@ fun PreferencePlayer(
         .collectAsStateWithLifecycle(initialValue = false)
     val rowNumbers by prefs.getRowNumbersFlow()
         .collectAsStateWithLifecycle(initialValue = false)
+    val renderingBackend by prefs.getRenderingBackendFlow()
+        .collectAsStateWithLifecycle(initialValue = RenderingBackend.OPENMPT)
+
+    var isBackendShowing by remember { mutableStateOf(false) }
+    if (isBackendShowing) {
+        SingleChoiceAlertDialog(
+            selectedItemKey = renderingBackend.id.toString(),
+            items = backendOptions,
+            onItemSelected = { key ->
+                key?.toIntOrNull()
+                    ?.let(RenderingBackend::fromId)
+                    ?.let { scope.launch { prefs.setRenderingBackend(it) } }
+                isBackendShowing = false
+            },
+        )
+    }
 
     PreferenceSection(
         title = {
@@ -42,13 +76,30 @@ fun PreferencePlayer(
         },
         verticalArrangement = Arrangement.spacedBy(4.dp),
         content = {
+            SettingsMenuLink(
+                title = { Text(text = stringResource(R.string.pref_backend)) },
+                subtitle = { Text(text = stringResource(R.string.pref_backend_desc)) },
+                action = {
+                    Text(
+                        text = stringResource(
+                            when (renderingBackend) {
+                                RenderingBackend.OPENMPT -> R.string.pref_backend_libopenmpt
+                                RenderingBackend.LIBXMP -> R.string.pref_backend_libxmp
+                            }
+                        )
+                    )
+                },
+                colors = colors,
+                shapes = ListItemDefaults.segmentedShapes(0, 3),
+                onClick = { isBackendShowing = true }
+            )
             SettingsSwitch(
                 title = { Text(text = stringResource(R.string.pref_auto_resume)) },
                 subtitle = { Text(text = stringResource(R.string.pref_auto_resume_desc)) },
                 state = autoResume,
                 onCheckedChange = { scope.launch { prefs.setAutoResume(it) } },
                 colors = colors,
-                shapes = ListItemDefaults.segmentedShapes(0, 2),
+                shapes = ListItemDefaults.segmentedShapes(1, 3),
             )
             SettingsSwitch(
                 title = { Text(text = stringResource(R.string.pref_show_row_numbers)) },
@@ -56,7 +107,7 @@ fun PreferencePlayer(
                 state = rowNumbers,
                 onCheckedChange = { scope.launch { prefs.setRowNumbers(it) } },
                 colors = colors,
-                shapes = ListItemDefaults.segmentedShapes(1, 2),
+                shapes = ListItemDefaults.segmentedShapes(2, 3),
             )
         }
     )
