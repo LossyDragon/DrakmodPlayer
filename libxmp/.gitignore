@@ -36,3 +36,4 @@ google-services.json
 
 # LibXmp
 src/main/cpp/libxmp
+src/main/cpp/openmpt

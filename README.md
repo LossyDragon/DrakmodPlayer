@@ -13,7 +13,7 @@ A spiritual successor to [cmatsuoka/xmp-android](https://github.com/cmatsuoka/xm
 *UI and Features are still in a Work in Progress, but the app is in a usable state.*
 
 ### Playback
-- **Supports 90+ tracker formats** via [libxmp](https://github.com/libxmp/libxmp) (MOD, XM, IT, S3M, MTM, STM, OKT, FAR, and more)
+- **Supports 90+ tracker formats** via [libxmp](https://github.com/libxmp/libxmp) and [libopenmpt](https://github.com/OpenMPT/openmpt/) (MOD, XM, IT, S3M, MTM, STM, OKT, FAR, and more)
 - **Low-latency audio** via Google's [Oboe](https://github.com/google/oboe) library
 - **Gapless track transitions**
 - **Background playback** with Media3 foreground service
@@ -40,7 +40,7 @@ A spiritual successor to [cmatsuoka/xmp-android](https://github.com/cmatsuoka/xm
 - **DataStore** for preferences
 - **Room** for playlists
 - **Navigation 3** for screen routing
-- **Native C++ JNI bridge** to libxmp
+- **Native C++ JNI bridge** to libxmp and libopenmpt
 
 ---
 
@@ -51,11 +51,15 @@ A spiritual successor to [cmatsuoka/xmp-android](https://github.com/cmatsuoka/xm
 ---
 
 ## Featured Acknowledgements
-- [libxmp](https://github.com/libxmp/libxmp) — the heart of this player
+- [libxmp](https://github.com/libxmp/libxmp) & and [libopenmpt](https://github.com/OpenMPT/openmpt/) — the hearts of this player
 - [cmatsuoka/xmp-android](https://github.com/cmatsuoka/xmp-android) — the original inspiration
 - [Oboe](https://github.com/google/oboe) — Google's low-latency Android audio library
 - [Material 3](https://m3.material.io/) and [MaterialKolor](https://github.com/jordond/MaterialKolor) for theming
 
+---
+## Credits
+
+- [zeo](https://github.com/zeozeozeo) for libopenmpt support integration
 ---
 
 ## License
