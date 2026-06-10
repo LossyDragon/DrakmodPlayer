@@ -547,7 +547,7 @@ METHOD(jint, seek)(JNIEnv* env, jobject obj, jint time) {
 METHOD(jint, time)(JNIEnv* env, jobject obj) {
   XmpPlayerState& state = XmpPlayerState::instance();
   if (!state.playing) return -1;
-  xmp_frame_info fi;
+  xmp_frame_info fi = {};
   xmp_get_frame_info(state.ctx, &fi);
   return fi.time;
 }
@@ -570,7 +570,7 @@ METHOD(void, getFrameInfo)(JNIEnv* env, jobject obj, jobject frameInfo) {
   {
     std::unique_lock<std::mutex> lock = state.lock();
     if (!state.mod_is_loaded || !state.playing) return;
-    xmp_frame_info fi;
+    xmp_frame_info fi = {};
     xmp_get_frame_info(state.ctx, &fi);
     s = {fi.pos,
       fi.pattern,
@@ -758,7 +758,7 @@ METHOD(void, getChannelData)(JNIEnv* env, jobject obj, jobject channelInfo) {
 
     const xmp_module_info& mi = state.mi;
     chn = mi.mod->chn;
-    xmp_frame_info fi;
+    xmp_frame_info fi = {};
     xmp_get_frame_info(state.ctx, &fi);
 
     for (int i = 0; i < chn; i++) {

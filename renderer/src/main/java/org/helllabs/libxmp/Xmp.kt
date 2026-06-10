@@ -8,7 +8,6 @@ import org.helllabs.libxmp.model.ChannelInfo
 import org.helllabs.libxmp.model.FrameInfo
 import org.helllabs.libxmp.model.ModInfo
 import org.helllabs.libxmp.model.ModVars
-import kotlin.math.abs
 
 /**
  * https://github.com/libxmp/libxmp/blob/master/docs/libxmp.rst
