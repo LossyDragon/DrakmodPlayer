@@ -107,6 +107,13 @@ static struct sequence_info {
 } sequence_info;
 
 namespace {
+constexpr int MAX_CHANNELS = 64;
+constexpr int MAX_BUFFER_SIZE = 1024;
+constexpr int OPENMPT_SAMPLE_16BIT = 0x01;
+constexpr int OPENMPT_SAMPLE_LOOP = 0x02;
+constexpr int OPENMPT_SAMPLE_PINGPONG = 0x04;
+constexpr int OPENMPT_SAMPLE_STEREO = 0x40;
+
 struct OpenMptState {
   std::mutex mutex;
   bool initialized = false;
@@ -117,6 +124,7 @@ struct OpenMptState {
   int selected_subsong = 0;
   double duration = 0.0;
   openmpt_module* mod = nullptr;
+  std::array<int, MAX_CHANNELS> current_sample {};
 
   static OpenMptState& instance() {
     static OpenMptState s;
@@ -290,6 +298,40 @@ void destroyModule(OpenMptState& state) {
   state.playing = false;
   state.duration = 0.0;
   state.selected_subsong = 0;
+  state.current_sample.fill(0);
+}
+
+static jbyte readSampleByte(const openmpt_module_sample_state& sample, int frame) {
+  if (!sample.data || frame < 0 || frame >= sample.length) return 0;
+  int sampleChannels = std::max(1, sample.channels);
+  int index = frame * sampleChannels;
+  if ((sample.flags & OPENMPT_SAMPLE_STEREO) != 0 && sampleChannels >= 2) {
+    if (sample.bits_per_sample == 16) {
+      const auto* data = static_cast<const int16_t*>(sample.data);
+      return static_cast<jbyte>(((static_cast<int>(data[index]) + static_cast<int>(data[index + 1])) / 2) >> 8);
+    }
+    const auto* data = static_cast<const int8_t*>(sample.data);
+    return static_cast<jbyte>((static_cast<int>(data[index]) + static_cast<int>(data[index + 1])) / 2);
+  }
+  if (sample.bits_per_sample == 16) {
+    const auto* data = static_cast<const int16_t*>(sample.data);
+    return static_cast<jbyte>(data[index] >> 8);
+  }
+  const auto* data = static_cast<const int8_t*>(sample.data);
+  return static_cast<jbyte>(data[index]);
+}
+
+static int64_t wrapSamplePosition(int64_t pos, const openmpt_module_sample_state& sample) {
+  const int64_t loopStart = static_cast<int64_t>(sample.loop_start) << 32;
+  const int64_t loopEnd = static_cast<int64_t>(sample.loop_end) << 32;
+  const int64_t sampleEnd = static_cast<int64_t>(sample.length) << 32;
+  if ((sample.flags & OPENMPT_SAMPLE_LOOP) != 0 && loopEnd > loopStart) {
+    const int64_t loopLength = loopEnd - loopStart;
+    while (pos >= loopEnd) pos = loopStart + ((pos - loopEnd) % loopLength);
+    while (pos < loopStart) pos = loopEnd - ((loopStart - pos) % loopLength);
+    return pos;
+  }
+  return (pos >= 0 && pos < sampleEnd) ? pos : -1;
 }
 }
 
@@ -487,6 +529,9 @@ METHOD(void, getModVars)(JNIEnv* env, jobject, jobject modVars) {
   int channels = openmpt_module_get_num_channels(state.mod);
   int subsongs = std::max(1, openmpt_module_get_num_subsongs(state.mod));
   int durationMs = static_cast<int>(std::round(state.duration * 1000.0));
+  int instruments = openmpt_module_get_num_instruments(state.mod);
+  int samples = openmpt_module_get_num_samples(state.mod);
+  int displayInstruments = instruments > 0 ? instruments : samples;
 
   jstring titleStr = env->NewStringUTF(title.c_str());
   jstring typeStr = env->NewStringUTF(type.c_str());
@@ -497,8 +542,8 @@ METHOD(void, getModVars)(JNIEnv* env, jobject, jobject modVars) {
   env->SetIntField(modVars, mod_vars.pat, openmpt_module_get_num_patterns(state.mod));
   env->SetIntField(modVars, mod_vars.trk, openmpt_module_get_num_orders(state.mod));
   env->SetIntField(modVars, mod_vars.chn, channels);
-  env->SetIntField(modVars, mod_vars.ins, openmpt_module_get_num_instruments(state.mod));
-  env->SetIntField(modVars, mod_vars.smp, openmpt_module_get_num_samples(state.mod));
+  env->SetIntField(modVars, mod_vars.ins, instruments);
+  env->SetIntField(modVars, mod_vars.smp, samples);
   env->SetIntField(modVars, mod_vars.spd, openmpt_module_get_current_speed(state.mod));
   env->SetIntField(modVars, mod_vars.bpm, static_cast<int>(std::round(openmpt_module_get_current_tempo2(state.mod))));
   env->SetIntField(modVars, mod_vars.len, openmpt_module_get_num_orders(state.mod));
@@ -517,9 +562,12 @@ METHOD(void, getModVars)(JNIEnv* env, jobject, jobject modVars) {
   env->SetObjectField(modVars, mod_vars.seqData, seqArray);
 
   jclass stringCls = env->FindClass("java/lang/String");
-  jobjectArray insArray = env->NewObjectArray(channels, stringCls, nullptr);
-  for (int i = 0; i < channels; i++) {
-    std::string name = "Channel " + std::to_string(i + 1);
+  jobjectArray insArray = env->NewObjectArray(displayInstruments, stringCls, nullptr);
+  for (int i = 0; i < displayInstruments; i++) {
+    std::string raw = instruments > 0
+      ? openmptString(openmpt_module_get_instrument_name(state.mod, i))
+      : openmptString(openmpt_module_get_sample_name(state.mod, i));
+    std::string name = (i + 1 < 16 ? "0" : "") + std::to_string(i + 1) + " " + raw;
     jstring s = env->NewStringUTF(name.c_str());
     env->SetObjectArrayElement(insArray, i, s);
     env->DeleteLocalRef(s);
@@ -570,28 +618,101 @@ METHOD(void, getChannelData)(JNIEnv* env, jobject, jobject channelInfo) {
   OpenMptState& state = OpenMptState::instance();
   std::lock_guard<std::mutex> lock(state.mutex);
   if (!state.mod) return;
-  int channels = std::min<int>(64, openmpt_module_get_num_channels(state.mod));
-  std::array<int, 64> values {};
+  int channels = std::min<int>(MAX_CHANNELS, openmpt_module_get_num_channels(state.mod));
+  std::array<int, MAX_CHANNELS> volumes {};
+  std::array<int, MAX_CHANNELS> finalVols {};
+  std::array<int, MAX_CHANNELS> pans {};
+  std::array<int, MAX_CHANNELS> instruments {};
+  std::array<int, MAX_CHANNELS> keys {};
+  std::array<int, MAX_CHANNELS> periods {};
+  std::array<int, MAX_CHANNELS> positions {};
+  std::array<int, MAX_CHANNELS> pitchbends {};
+  std::array<int, MAX_CHANNELS> notes {};
+  std::array<int, MAX_CHANNELS> samples {};
+  instruments.fill(-1);
+  keys.fill(-1);
+
   for (int i = 0; i < channels; i++) {
-    values[i] = static_cast<int>(std::round(openmpt_module_get_current_channel_vu_mono(state.mod, i) * 64.0f));
+    openmpt_module_current_channel_state ch {};
+    if (openmpt_module_get_current_channel_state(state.mod, i, &ch) == 0) continue;
+    volumes[i] = ch.volume;
+    finalVols[i] = ch.final_volume;
+    pans[i] = ch.pan;
+    instruments[i] = ch.instrument;
+    keys[i] = ch.key;
+    periods[i] = ch.period;
+    positions[i] = ch.position;
+    pitchbends[i] = ch.pitchbend;
+    notes[i] = ch.note;
+    samples[i] = ch.sample;
+    state.current_sample[i] = ch.sample;
   }
-  auto set = [&](jfieldID fid) {
+  auto set = [&](jfieldID fid, const std::array<int, MAX_CHANNELS>& values) {
     auto arr = (jintArray)env->GetObjectField(channelInfo, fid);
     env->SetIntArrayRegion(arr, 0, channels, values.data());
     env->DeleteLocalRef(arr);
   };
-  set(channel_info.volumes);
-  set(channel_info.finalVols);
+  set(channel_info.volumes, volumes);
+  set(channel_info.finalVols, finalVols);
+  set(channel_info.pans, pans);
+  set(channel_info.instruments, instruments);
+  set(channel_info.keys, keys);
+  set(channel_info.periods, periods);
+  set(channel_info.positions, positions);
+  set(channel_info.pitchbends, pitchbends);
+  set(channel_info.notes, notes);
+  set(channel_info.samples, samples);
 }
 
-METHOD(void, getSampleData)(JNIEnv* env, jobject, jboolean, jint, jint, jint, jint, jint width, jbyteArray buffer) {
+METHOD(void, getSampleData)(JNIEnv* env, jobject, jboolean, jint, jint, jint, jint chn, jint width, jbyteArray buffer) {
   if (!buffer) return;
-  std::vector<jbyte> zeros(static_cast<size_t>(std::max(0, width)));
-  env->SetByteArrayRegion(buffer, 0, width, zeros.data());
+  width = std::min(width, MAX_BUFFER_SIZE);
+  if (width <= 0) return;
+  std::array<jbyte, MAX_BUFFER_SIZE> sampleBuffer {};
+
+  {
+    OpenMptState& state = OpenMptState::instance();
+    std::lock_guard<std::mutex> lock(state.mutex);
+    if (!state.mod || chn < 0 || chn >= MAX_CHANNELS) {
+      env->SetByteArrayRegion(buffer, 0, width, sampleBuffer.data());
+      return;
+    }
+
+    openmpt_module_current_channel_state channel {};
+    if (openmpt_module_get_current_channel_state(state.mod, chn, &channel) == 0 ||
+        channel.sample <= 0 ||
+        channel.increment == 0) {
+      env->SetByteArrayRegion(buffer, 0, width, sampleBuffer.data());
+      return;
+    }
+
+    openmpt_module_sample_state sample {};
+    if (openmpt_module_get_sample_state(state.mod, channel.sample, &sample) == 0 ||
+        sample.length <= 0 ||
+        !sample.data) {
+      env->SetByteArrayRegion(buffer, 0, width, sampleBuffer.data());
+      return;
+    }
+
+    int64_t pos = static_cast<int64_t>(channel.position) << 32;
+    int64_t step = channel.increment;
+    if (step < 0) step = -step;
+    for (int i = 0; i < width; i++) {
+      int64_t wrapped = wrapSamplePosition(pos, sample);
+      if (wrapped < 0) break;
+      sampleBuffer[i] = readSampleByte(sample, static_cast<int>(wrapped >> 32));
+      pos += step;
+    }
+  }
+
+  env->SetByteArrayRegion(buffer, 0, width, sampleBuffer.data());
 }
 
-METHOD(jint, mute)(JNIEnv*, jobject, jint, jint) {
-  return 0;
+METHOD(jint, mute)(JNIEnv*, jobject, jint chn, jint status) {
+  OpenMptState& state = OpenMptState::instance();
+  std::lock_guard<std::mutex> lock(state.mutex);
+  if (!state.mod) return -1;
+  return openmpt_module_channel_mute(state.mod, chn, status);
 }
 
 METHOD(jint, setPlayer)(JNIEnv*, jobject, jint parm, jint value) {

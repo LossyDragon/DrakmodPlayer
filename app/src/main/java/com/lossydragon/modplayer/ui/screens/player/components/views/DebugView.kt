@@ -16,6 +16,7 @@ import androidx.compose.ui.tooling.preview.*
 import androidx.compose.ui.unit.*
 import com.lossydragon.modplayer.player.PlaybackStatus
 import com.lossydragon.modplayer.player.PlayerUiState
+import com.lossydragon.modplayer.player.RenderingBackend
 import com.lossydragon.modplayer.player.model.NoteCell
 import com.lossydragon.modplayer.player.model.PatternData
 import com.lossydragon.modplayer.ui.theme.AppTheme
@@ -46,6 +47,7 @@ private fun noteStr(note: Int): String = when {
 fun DebugView(
     modifier: Modifier = Modifier,
     state: PlayerUiState,
+    renderingBackend: RenderingBackend,
     supportsRawChannelSamples: Boolean,
     isPlaying: Boolean
 ) {
@@ -62,7 +64,7 @@ fun DebugView(
             },
         )
         HorizontalDivider(Modifier.fillMaxWidth())
-        ChannelInfo(Modifier.weight(1f), state, supportsRawChannelSamples, isPlaying)
+        ChannelInfo(Modifier.weight(1f), state, renderingBackend, supportsRawChannelSamples, isPlaying)
     }
 }
 
@@ -70,6 +72,7 @@ fun DebugView(
 private fun ChannelInfo(
     modifier: Modifier = Modifier,
     state: PlayerUiState,
+    renderingBackend: RenderingBackend,
     supportsRawChannelSamples: Boolean,
     isPlaying: Boolean
 ) {
@@ -78,13 +81,14 @@ private fun ChannelInfo(
     val channelInfoBuffer = remember { ChannelInfo() }
     var channelSnapshot by remember { mutableStateOf(ChannelInfo()) }
     val isPlayingState = rememberUpdatedState(isPlaying)
+    val backendState = rememberUpdatedState(renderingBackend)
 
     LaunchedEffect(numChannels) {
         if (numChannels == 0) return@LaunchedEffect
         while (isActive) {
             if (isPlayingState.value) {
                 withContext(Dispatchers.Default) {
-                    if (supportsRawChannelSamples) {
+                    if (backendState.value == RenderingBackend.LIBXMP) {
                         Xmp.getChannelData(channelInfoBuffer)
                     } else {
                         OpenMpt.getChannelData(channelInfoBuffer)
@@ -286,6 +290,7 @@ private fun Preview() {
         DebugView(
             modifier = Modifier.fillMaxSize(),
             state = state,
+            renderingBackend = RenderingBackend.LIBXMP,
             supportsRawChannelSamples = true,
             isPlaying = true,
         )

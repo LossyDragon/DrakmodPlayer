@@ -58,15 +58,15 @@ class PlayerEngine(
     val modVarsFlow: StateFlow<ModVars>
         field = MutableStateFlow(ModVars())
 
-    private val mutableBackendFlow = MutableStateFlow(RenderingBackend.OPENMPT)
-    val backendFlow: StateFlow<RenderingBackend> = mutableBackendFlow
-
-    private val mutableSupportsRawChannelSamplesFlow = MutableStateFlow(false)
-    val supportsRawChannelSamplesFlow: StateFlow<Boolean> = mutableSupportsRawChannelSamplesFlow
-
     /** Lazily populated by [load] / [loadNext]; read by [renderLoop]. */
     private val patternCache = mutableMapOf<Int, PatternData>()
     private var native: NativeModuleBackend = RenderingBackend.OPENMPT.nativeBackend()
+
+    private val mutableBackendFlow = MutableStateFlow(native.renderingBackend)
+    val backendFlow: StateFlow<RenderingBackend> = mutableBackendFlow
+
+    private val mutableSupportsRawChannelSamplesFlow = MutableStateFlow(native.supportsRawChannelSamples)
+    val supportsRawChannelSamplesFlow: StateFlow<Boolean> = mutableSupportsRawChannelSamplesFlow
 
     @Volatile
     private var isRepeatOne: Boolean = false
@@ -371,7 +371,11 @@ class PlayerEngine(
     /** Selects the persisted backend for the next module load. */
     private fun selectBackendForNextLoad() {
         val selected = runBlocking { prefs.getRenderingBackendFlow().first() }.nativeBackend()
-        if (selected.renderingBackend == native.renderingBackend) return
+        if (selected.renderingBackend == native.renderingBackend) {
+            mutableBackendFlow.value = native.renderingBackend
+            mutableSupportsRawChannelSamplesFlow.value = native.supportsRawChannelSamples
+            return
+        }
         if (initialized) {
             stop()
             native.deinit()

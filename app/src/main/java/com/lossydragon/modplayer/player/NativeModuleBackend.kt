@@ -113,7 +113,7 @@ object XmpBackend : NativeModuleBackend {
 
 object OpenMptBackend : NativeModuleBackend {
     override val renderingBackend = RenderingBackend.OPENMPT
-    override val supportsRawChannelSamples = false
+    override val supportsRawChannelSamples = true
     override fun deinit() = OpenMpt.deinit()
     override fun endPlayer() = OpenMpt.endPlayer()
     override fun getAudioStats(stats: AudioStats) = OpenMpt.getAudioStats(stats)
