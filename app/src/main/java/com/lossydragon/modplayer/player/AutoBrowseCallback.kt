@@ -20,6 +20,7 @@ import com.lossydragon.modplayer.R
 import com.lossydragon.modplayer.db.AppPreferences
 import com.lossydragon.modplayer.db.dao.ModuleDao
 import com.lossydragon.modplayer.db.dao.PlaylistDao
+import com.lossydragon.modplayer.db.entity.ModuleEntity
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
@@ -40,8 +41,9 @@ class AutoBrowseCallback(
     private val scope: CoroutineScope
 ) : MediaLibrarySession.Callback {
 
-    private val artworkUri: Uri by lazy {
-        "android.resource://${context.packageName}/${R.mipmap.ic_launcher_round}".toUri()
+    private val contentStyleExtras = Bundle().apply {
+        putInt("android.media.browse.CONTENT_STYLE_BROWSABLE_HINT", 2)
+        putInt("android.media.browse.CONTENT_STYLE_PLAYABLE_HINT", 2)
     }
 
     private fun drawableUri(resId: Int): Uri =
@@ -61,15 +63,7 @@ class AutoBrowseCallback(
             title = context.getString(R.string.app_name),
             type = MediaMetadata.MEDIA_TYPE_FOLDER_MIXED,
         )
-        val rootParams = LibraryParams.Builder()
-            .setExtras(
-                Bundle().apply {
-                    putInt("android.media.browse.CONTENT_STYLE_BROWSABLE_HINT", 2)
-                    putInt("android.media.browse.CONTENT_STYLE_PLAYABLE_HINT", 2)
-                }
-            )
-            .build()
-        return Futures.immediateFuture(LibraryResult.ofItem(browseItem, rootParams))
+        return Futures.immediateFuture(LibraryResult.ofItem(browseItem, null))
     }
 
     override fun onGetChildren(
@@ -225,7 +219,7 @@ class AutoBrowseCallback(
             }
 
             val files = try {
-                Json.decodeFromString<List<com.lossydragon.modplayer.db.entity.ModuleEntity>>(
+                Json.decodeFromString<List<ModuleEntity>>(
                     state.json
                 )
             } catch (e: Exception) {
@@ -247,7 +241,7 @@ class AutoBrowseCallback(
                         MediaMetadata.Builder()
                             .setTitle(file.filename)
                             .setIsPlayable(true)
-                            .setArtworkUri(artworkUri)
+                            .setArtworkUri(drawableUri(R.drawable.aa_file))
                             .build()
                     )
                     .build()
@@ -263,17 +257,22 @@ class AutoBrowseCallback(
         buildBrowsableItem(
             id = AutoMediaId.HOME,
             title = "Home",
-            type = MediaMetadata.MEDIA_TYPE_FOLDER_MIXED
-        ),
-        buildBrowsableItem(
-            id = AutoMediaId.FILE_BROWSER,
-            title = "File Browser",
-            type = MediaMetadata.MEDIA_TYPE_FOLDER_MIXED
+            type = MediaMetadata.MEDIA_TYPE_FOLDER_MIXED,
+            extras = contentStyleExtras,
+            artworkUri = drawableUri(R.drawable.aa_home)
         ),
         buildBrowsableItem(
             id = AutoMediaId.PLAYLISTS,
             title = "Playlists",
-            type = MediaMetadata.MEDIA_TYPE_FOLDER_PLAYLISTS
+            type = MediaMetadata.MEDIA_TYPE_FOLDER_PLAYLISTS,
+            extras = contentStyleExtras,
+            artworkUri = drawableUri(R.drawable.aa_playlists)
+        ),
+        buildBrowsableItem(
+            id = AutoMediaId.FILE_BROWSER,
+            title = "File Browser",
+            type = MediaMetadata.MEDIA_TYPE_FOLDER_MIXED,
+            artworkUri = drawableUri(R.drawable.aa_browser)
         ),
     )
 
@@ -320,6 +319,7 @@ class AutoBrowseCallback(
                         id = AutoMediaId.dir(entity.filePath),
                         title = entity.filename,
                         type = MediaMetadata.MEDIA_TYPE_FOLDER_MIXED,
+                        artworkUri = drawableUri(R.drawable.aa_folder)
                     )
                 )
             } else if (entity.isValidModule) {
@@ -328,6 +328,7 @@ class AutoBrowseCallback(
                         id = AutoMediaId.file(entity.filePath),
                         title = entity.name,
                         uri = entity.uri,
+                        artworkUri = drawableUri(R.drawable.aa_file)
                     )
                 )
             }
@@ -360,52 +361,56 @@ class AutoBrowseCallback(
         id: String,
         title: String,
         type: Int,
-        artworkUri: Uri? = null
-    ): MediaItem =
-        MediaItem.Builder()
-            .setMediaId(id)
-            .setMediaMetadata(
-                MediaMetadata.Builder()
-                    .setTitle(title)
-                    .setIsBrowsable(true)
-                    .setIsPlayable(false)
-                    .setMediaType(type)
-                    .setArtworkUri(artworkUri)
-                    .build()
-            )
-            .build()
+        artworkUri: Uri? = null,
+        extras: Bundle? = null
+    ): MediaItem = MediaItem.Builder()
+        .setMediaId(id)
+        .setMediaMetadata(
+            MediaMetadata.Builder()
+                .setTitle(title)
+                .setIsBrowsable(true)
+                .setIsPlayable(false)
+                .setMediaType(type)
+                .setArtworkUri(artworkUri)
+                .setExtras(extras)
+                .build()
+        )
+        .build()
 
-    private fun buildPlayableItem(id: String, title: String, uri: Uri): MediaItem =
-        MediaItem.Builder()
-            .setMediaId(id)
-            .setUri(uri)
-            .setRequestMetadata(MediaItem.RequestMetadata.Builder().setMediaUri(uri).build())
-            .setMediaMetadata(
-                MediaMetadata.Builder()
-                    .setTitle(title)
-                    .setIsBrowsable(false)
-                    .setIsPlayable(true)
-                    .setMediaType(MediaMetadata.MEDIA_TYPE_MUSIC)
-                    .setArtworkUri(artworkUri)
-                    .build()
-            )
-            .build()
+    private fun buildPlayableItem(
+        id: String,
+        title: String,
+        uri: Uri,
+        artworkUri: Uri? = null
+    ): MediaItem = MediaItem.Builder()
+        .setMediaId(id)
+        .setUri(uri)
+        .setRequestMetadata(MediaItem.RequestMetadata.Builder().setMediaUri(uri).build())
+        .setMediaMetadata(
+            MediaMetadata.Builder()
+                .setTitle(title)
+                .setIsBrowsable(false)
+                .setIsPlayable(true)
+                .setMediaType(MediaMetadata.MEDIA_TYPE_MUSIC)
+                .setArtworkUri(artworkUri)
+                .build()
+        )
+        .build()
 
     private fun buildActionItem(
         id: String,
         title: String,
         artworkUri: Uri? = null
-    ): MediaItem =
-        MediaItem.Builder()
-            .setMediaId(id)
-            .setMediaMetadata(
-                MediaMetadata.Builder()
-                    .setTitle(title)
-                    .setIsBrowsable(false)
-                    .setIsPlayable(true)
-                    .setMediaType(MediaMetadata.MEDIA_TYPE_MUSIC)
-                    .setArtworkUri(artworkUri)
-                    .build()
-            )
-            .build()
+    ): MediaItem = MediaItem.Builder()
+        .setMediaId(id)
+        .setMediaMetadata(
+            MediaMetadata.Builder()
+                .setTitle(title)
+                .setIsBrowsable(false)
+                .setIsPlayable(true)
+                .setMediaType(MediaMetadata.MEDIA_TYPE_MUSIC)
+                .setArtworkUri(artworkUri)
+                .build()
+        )
+        .build()
 }

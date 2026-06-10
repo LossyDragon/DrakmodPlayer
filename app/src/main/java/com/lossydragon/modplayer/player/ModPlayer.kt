@@ -112,9 +112,8 @@ class ModPlayer(
     private var positionUpdateJob: Job? = null
 
     /** Placeholder Artwork */
-    private val artworkUri: Uri by lazy {
-        "android.resource://${context.packageName}/${R.mipmap.ic_launcher_round}".toUri()
-    }
+    private fun drawableUri(resId: Int): Uri =
+        "android.resource://${context.packageName}/$resId".toUri()
 
     init {
         scope.launch {
@@ -633,7 +632,8 @@ class ModPlayer(
             val saveIndex = if (shuffleMode) {
                 queue.getOrNull(currentIndex)
                     ?.let { originalQueue.indexOf(it) }
-                    ?.coerceAtLeast(0) ?: 0
+                    ?.coerceAtLeast(0)
+                    ?: 0
             } else {
                 currentIndex
             }
@@ -687,19 +687,18 @@ class ModPlayer(
      * Builds a [MediaItem] with placeholder metadata for initial queue population.
      * Real metadata (loaded from libxmp) is injected by [loadAndStartAt] later.
      */
-    private fun ModuleEntity.toMediaItem(): MediaItem =
-        MediaItem.Builder()
-            .setUri(uri)
-            .setMediaId(filePath)
-            .setMediaMetadata(
-                MediaMetadata.Builder()
-                    .setTitle(moduleName.ifBlank { filename })
-                    .setArtist(moduleType.ifBlank { fileExtension.uppercase() })
-                    .setArtworkUri(artworkUri)
-                    .setIsPlayable(true)
-                    .build()
-            )
-            .build()
+    private fun ModuleEntity.toMediaItem(): MediaItem = MediaItem.Builder()
+        .setUri(uri)
+        .setMediaId(filePath)
+        .setMediaMetadata(
+            MediaMetadata.Builder()
+                .setTitle(name)
+                .setArtist(type)
+                .setArtworkUri(drawableUri(R.drawable.aa_album_art))
+                .setIsPlayable(true)
+                .build()
+        )
+        .build()
 
     /** Builds [MediaMetadata] from libxmp after the module has been loaded successfully. */
     private fun ModuleEntity.toRealMetadata(duration: Long): MediaMetadata {
@@ -709,7 +708,7 @@ class ModPlayer(
             .setTitle(name)
             .setArtist(type)
             .setDurationMs(duration)
-            .setArtworkUri(artworkUri)
+            .setArtworkUri(drawableUri(R.drawable.aa_album_art))
             .setIsPlayable(true)
             .build()
     }
