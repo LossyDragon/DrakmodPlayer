@@ -267,12 +267,17 @@ fun PreferenceXmp(
                 action = {
                     val text = when (interp) {
                         ResamplerMode.NEAREST.id -> stringResource(R.string.interp_nearest)
+
                         ResamplerMode.LINEAR.id -> stringResource(R.string.interp_linear)
+
                         ResamplerMode.CUBIC.id -> stringResource(R.string.interp_spline)
+
                         ResamplerMode.OPENMPT_AMIGA_A500.id ->
                             stringResource(R.string.interp_openmpt_amiga_a500)
+
                         ResamplerMode.OPENMPT_AMIGA_A1200.id ->
                             stringResource(R.string.interp_openmpt_amiga_a1200)
+
                         else -> stringResource(R.string.unknown)
                     }
                     Text(text = text)

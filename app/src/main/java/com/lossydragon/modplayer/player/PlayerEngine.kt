@@ -65,7 +65,8 @@ class PlayerEngine(
     private val mutableBackendFlow = MutableStateFlow(native.renderingBackend)
     val backendFlow: StateFlow<RenderingBackend> = mutableBackendFlow
 
-    private val mutableSupportsRawChannelSamplesFlow = MutableStateFlow(native.supportsRawChannelSamples)
+    private val mutableSupportsRawChannelSamplesFlow =
+        MutableStateFlow(native.supportsRawChannelSamples)
     val supportsRawChannelSamplesFlow: StateFlow<Boolean> = mutableSupportsRawChannelSamplesFlow
 
     @Volatile

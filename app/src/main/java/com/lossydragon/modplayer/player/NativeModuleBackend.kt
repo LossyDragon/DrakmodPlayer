@@ -98,8 +98,11 @@ object XmpBackend : NativeModuleBackend {
     override fun setResampler(mode: ResamplerMode): Int {
         val interp = when (mode) {
             ResamplerMode.NEAREST -> Xmp.XMP_INTERP_NEAREST
+
             ResamplerMode.LINEAR -> Xmp.XMP_INTERP_LINEAR
+
             ResamplerMode.CUBIC -> Xmp.XMP_INTERP_SPLINE
+
             ResamplerMode.OPENMPT_AMIGA_A500,
             ResamplerMode.OPENMPT_AMIGA_A1200 -> Xmp.XMP_INTERP_LINEAR
         }

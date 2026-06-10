@@ -136,7 +136,9 @@ fun ChannelView(
                         val finalVol = liveData.finalVols[i]
                         val key = liveData.keys[i]
                         val ins = liveData.instruments[i]
-                        if (!supportsRawChannelSamples || period <= 0 || (volume == 0 && finalVol == 0)) {
+                        if (!supportsRawChannelSamples || period <= 0 ||
+                            (volume == 0 && finalVol == 0)
+                        ) {
                             liveWave[i].fill(0)
                             continue
                         }
@@ -502,7 +504,16 @@ private fun getSampleData(
 ) {
     when (backend) {
         RenderingBackend.LIBXMP -> Xmp.getSampleData(trigger, ins, key, period, chn, width, buffer)
-        RenderingBackend.OPENMPT -> OpenMpt.getSampleData(trigger, ins, key, period, chn, width, buffer)
+
+        RenderingBackend.OPENMPT -> OpenMpt.getSampleData(
+            trigger,
+            ins,
+            key,
+            period,
+            chn,
+            width,
+            buffer
+        )
     }
 }
 

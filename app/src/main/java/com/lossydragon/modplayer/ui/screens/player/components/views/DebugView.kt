@@ -64,7 +64,13 @@ fun DebugView(
             },
         )
         HorizontalDivider(Modifier.fillMaxWidth())
-        ChannelInfo(Modifier.weight(1f), state, renderingBackend, supportsRawChannelSamples, isPlaying)
+        ChannelInfo(
+            Modifier.weight(1f),
+            state,
+            renderingBackend,
+            supportsRawChannelSamples,
+            isPlaying
+        )
     }
 }
 
