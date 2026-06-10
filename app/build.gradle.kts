@@ -98,7 +98,7 @@ android {
 }
 
 dependencies {
-    implementation(project(":libxmp"))
+    implementation(project(":renderer"))
 
     implementation(platform(libs.compose.bom))
     implementation(platform(libs.koin.bom))

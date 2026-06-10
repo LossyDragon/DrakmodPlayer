@@ -1,6 +1,6 @@
-[submodule "libxmp/src/main/cpp/libxmp"]
-	path = libxmp/src/main/cpp/libxmp
+[submodule "renderer/src/main/cpp/libxmp"]
+	path = renderer/src/main/cpp/libxmp
 	url = https://github.com/libxmp/libxmp.git
-[submodule "libxmp/src/main/cpp/openmpt"]
-	path = libxmp/src/main/cpp/openmpt
+[submodule "renderer/src/main/cpp/openmpt"]
+	path = renderer/src/main/cpp/openmpt
 	url = https://github.com/OpenMPT/openmpt.git

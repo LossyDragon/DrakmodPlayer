@@ -23,4 +23,4 @@ dependencyResolutionManagement {
 }
 
 rootProject.name = "Drakmod Player"
-include(":app", ":libxmp")
+include(":app", ":renderer")
