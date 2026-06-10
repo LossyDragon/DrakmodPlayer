@@ -14,16 +14,29 @@ import nl.adaptivity.xmlutil.serialization.*
  * API reference: https://modarchive.org/index.php?xml-api
  */
 
+interface TypeResult {
+    val error: String?
+    val results: Int
+    val sponsor: Sponsor
+    val totalpages: Int
+}
+
+interface ResultItem {
+    val date: String
+    val id: Int
+    val timestamp: Long
+}
+
 @Immutable
 @Serializable
 @SerialName("modarchive")
 data class ModuleResult(
-    @XmlElement val error: String? = null,
-    @XmlElement val module: Module = Module(),
-    @XmlElement val results: Int = 0,
-    @XmlElement val sponsor: Sponsor = Sponsor(),
-    @XmlElement val totalpages: Int = 0
-) {
+    @XmlElement override val error: String? = null,
+    @XmlElement override val results: Int = 0,
+    @XmlElement override val sponsor: Sponsor = Sponsor(),
+    @XmlElement override val totalpages: Int = 0,
+    @XmlElement val module: Module = Module()
+) : TypeResult {
     @Transient
     val hasSponsor: Boolean = sponsor.details.text.isNotBlank()
 }
@@ -32,54 +45,39 @@ data class ModuleResult(
 @Serializable
 @SerialName("modarchive")
 data class SearchListResult(
-    @XmlElement val error: String? = null,
-    @XmlElement val results: Int = 0,
-    @XmlElement val sponsor: Sponsor = Sponsor(),
-    @XmlElement val totalpages: Int = 0,
+    @XmlElement override val error: String? = null,
+    @XmlElement override val results: Int = 0,
+    @XmlElement override val sponsor: Sponsor = Sponsor(),
+    @XmlElement override val totalpages: Int = 0,
     @XmlSerialName("module", "", "") val module: List<Module> = emptyList()
-)
+) : TypeResult
 
 @Suppress("PropertyName")
 @Immutable
 @Serializable
 @SerialName("modarchive")
 data class ArtistResult(
-    @XmlElement val error: String? = null,
+    @XmlElement override val error: String? = null,
+    @XmlElement override val results: Int = 0,
+    @XmlElement override val sponsor: Sponsor = Sponsor(),
+    @XmlElement override val totalpages: Int = 0,
     @XmlElement val items: Items = Items(),
-    @XmlElement val results: Int = 0,
-    @XmlElement val sponsor: Sponsor = Sponsor(),
-    @XmlElement val total_results: Int = 0,
-    @XmlElement val totalpages: Int = 0
-) {
+    @XmlElement val total_results: Int = 0
+) : TypeResult {
     val listItems: List<Item>
         get() = items.item
 }
 
 @Immutable
 @Serializable
-@SerialName("sponsor")
-data class Sponsor(
-    @XmlElement val details: SponsorDetails = SponsorDetails()
-)
-
-@Immutable
-@Serializable
-@SerialName("details")
-data class SponsorDetails(
-    @XmlElement val image: String = "",
-    @XmlElement val imagehtml: String = "",
-    @XmlElement val link: String = "",
-    @XmlElement val text: String = ""
-)
-
-@Immutable
-@Serializable
 @SerialName("module")
 data class Module(
+    @XmlElement override val date: String = "",
+    @XmlElement override val id: Int = 0,
+    @XmlElement override val timestamp: Long = 0L,
     @XmlElement val bytes: Int = 0,
     @XmlElement val channels: Int = 0,
     @XmlElement val comment: String = "",
-    @XmlElement val date: String = "",
     @XmlElement val favourites: Favourites = Favourites(),
     @XmlElement val featured: Featured = Featured(),
     @XmlElement val filename: String = "",
@@ -89,19 +87,17 @@ data class Module(
     @XmlElement val hash: String = "",
     @XmlElement val hidetext: Int = 0,
     @XmlElement val hits: Int = 0,
-    @XmlElement val id: Int = 0,
     @XmlElement val infopage: String = "",
     @XmlElement val instruments: String = "",
     @XmlElement val license: License = License(),
     @XmlElement val size: String = "",
     @XmlElement val songtitle: String = "",
-    @XmlElement val timestamp: Long = 0L,
     @XmlElement val url: String = "",
     @XmlSerialName("artist_info", "", "")
     @XmlElement val artistInfo: ArtistInfo = ArtistInfo(),
     @XmlSerialName("overall_ratings", "", "")
     @XmlElement val overallRatings: OverallRatings = OverallRatings()
-) {
+) : ResultItem {
     val isSupported: Boolean
         get() = format.lowercase() !in Constants.UNSUPPORTED_EXTENSIONS
     val downloadUrl: String
@@ -119,6 +115,40 @@ data class Module(
     val formattedInstruments: String
         get() = instruments.lineSequence().joinToString("\n") { it.fromHtml() }
 }
+
+@Suppress("PropertyName")
+@Immutable
+@Serializable
+@SerialName("item")
+data class Item(
+    @XmlElement override val date: String = "",
+    @XmlElement override val id: Int = 0,
+    @XmlElement override val timestamp: Long = 0,
+    @XmlElement val alias: String = "",
+    @XmlElement val imageurl: String = "",
+    @XmlElement val imageurl_icon: String = "",
+    @XmlElement val imageurl_thumb: String = "",
+    @XmlElement val isartist: String = "",
+    @XmlElement val lastseen: String = "",
+    @XmlElement val profile: String = ""
+) : ResultItem
+
+@Immutable
+@Serializable
+@SerialName("sponsor")
+data class Sponsor(
+    @XmlElement val details: SponsorDetails = SponsorDetails()
+)
+
+@Immutable
+@Serializable
+@SerialName("details")
+data class SponsorDetails(
+    @XmlElement val image: String = "",
+    @XmlElement val imagehtml: String = "",
+    @XmlElement val link: String = "",
+    @XmlElement val text: String = ""
+)
 
 @Immutable
 @Serializable
@@ -208,21 +238,4 @@ data class ModuleData(
 @SerialName("items")
 data class Items(
     @XmlSerialName("item", "", "") val item: List<Item> = emptyList()
-)
-
-@Suppress("PropertyName")
-@Immutable
-@Serializable
-@SerialName("item")
-data class Item(
-    @XmlElement val alias: String = "",
-    @XmlElement val date: String = "",
-    @XmlElement val id: Int = 0,
-    @XmlElement val imageurl: String = "",
-    @XmlElement val imageurl_icon: String = "",
-    @XmlElement val imageurl_thumb: String = "",
-    @XmlElement val isartist: String = "",
-    @XmlElement val lastseen: String = "",
-    @XmlElement val profile: String = "",
-    @XmlElement val timestamp: Int = 0
 )

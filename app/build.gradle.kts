@@ -116,6 +116,7 @@ dependencies {
     implementation(libs.bundles.serialization)
     implementation(libs.colorpicker.compose)
     implementation(libs.materialKolor)
+    implementation(libs.paging.compose)
     implementation(libs.reorderable)
     implementation(libs.timber)
 }

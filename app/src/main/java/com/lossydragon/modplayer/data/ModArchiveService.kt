@@ -8,7 +8,8 @@ import io.ktor.client.HttpClient
 import io.ktor.client.request.get
 import io.ktor.client.request.parameter
 import io.ktor.client.statement.bodyAsText
-import nl.adaptivity.xmlutil.serialization.XML
+import nl.adaptivity.xmlutil.serialization.*
+import timber.log.Timber
 
 class ModArchiveService(private val client: HttpClient) {
 
@@ -16,13 +17,17 @@ class ModArchiveService(private val client: HttpClient) {
         request: String,
         additionalParams: Map<String, Any?> = emptyMap()
     ): Result<T> = runCatching {
-        val response = client.get("/xml-tools.php") {
+        val httpResponse = client.get("/xml-tools.php") {
             parameter("key", BuildConfig.API_KEY)
             parameter("request", request)
             additionalParams.forEach { (key, value) ->
                 if (value != null) parameter(key, value)
             }
-        }.bodyAsText()
+        }
+        if (BuildConfig.DEBUG) {
+            Timber.d("URL: ${httpResponse.call.request.url}")
+        }
+        val response = httpResponse.bodyAsText()
 
         val data: T = XML.decodeFromString(response)
 
@@ -38,14 +43,20 @@ class ModArchiveService(private val client: HttpClient) {
         return@runCatching data
     }
 
-    suspend fun getArtistById(id: Int): Result<SearchListResult> = executeRequest(
+    suspend fun getArtistById(
+        id: Int,
+        page: Int? = null
+    ): Result<SearchListResult> = executeRequest(
         request = "view_modules_by_artistid",
-        additionalParams = mapOf("query" to id)
+        additionalParams = mapOf("query" to id, "page" to page)
     )
 
-    suspend fun getArtistSearch(query: String): Result<ArtistResult> = executeRequest(
+    suspend fun getArtistSearch(
+        query: String,
+        page: Int? = null
+    ): Result<ArtistResult> = executeRequest(
         request = "search_artist",
-        additionalParams = mapOf("query" to query)
+        additionalParams = mapOf("query" to query, "page" to page)
     )
 
     suspend fun getModuleById(id: Int): Result<ModuleResult> = executeRequest(
@@ -57,8 +68,15 @@ class ModArchiveService(private val client: HttpClient) {
         request = "random"
     )
 
-    suspend fun searchByFileNameOrTitle(query: String): Result<SearchListResult> = executeRequest(
+    suspend fun searchByFileNameOrTitle(
+        query: String,
+        page: Int? = null
+    ): Result<SearchListResult> = executeRequest(
         request = "search",
-        additionalParams = mapOf("type" to "filename_or_songtitle", "query" to query)
+        additionalParams = mapOf(
+            "type" to "filename_or_songtitle",
+            "query" to query,
+            "page" to page
+        )
     )
 }

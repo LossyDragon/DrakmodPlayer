@@ -18,6 +18,7 @@ materialKolor = "5.0.0-alpha07" # https://mvnrepository.com/artifact/com.materia
 media3 = "1.10.1" # https://mvnrepository.com/artifact/androidx.media3/media3-common/
 navigation3 = "1.1.2" # https://mvnrepository.com/artifact/androidx.navigation3/navigation3-runtime
 oboe = "1.10.0" # https://mvnrepository.com/artifact/com.google.oboe/oboe
+paging = "3.5.0" # https://mvnrepository.com/artifact/androidx.paging/paging-compose
 reorderable = "3.1.0" # https://mvnrepository.com/artifact/sh.calvin.reorderable/reorderable
 room = "2.8.4" # https://mvnrepository.com/artifact/androidx.room/room-runtime
 timber = "5.0.1" # https://mvnrepository.com/artifact/com.jakewharton.timber/timber
@@ -38,6 +39,8 @@ compose-ui-ui = { module = "androidx.compose.ui:ui" }
 
 androidx-lifecycle-viewmodel-navigation3 = { module = "androidx.lifecycle:lifecycle-viewmodel-navigation3", version.ref = "lifecycleViewmodel" }
 androidx-navigation3-ui = { module = "androidx.navigation3:navigation3-ui", version.ref = "navigation3" }
+compose-settings-ui = { module = "com.github.alorma.compose-settings:ui-tiles", version.ref = "composeSettings" }
+compose-settings-ui-expressive = { module = "com.github.alorma.compose-settings:ui-tiles-expressive", version.ref = "composeSettings" }
 datastore-preferences = { module = "androidx.datastore:datastore-preferences", version.ref = "dataStore" }
 koin-androidx-compose = { module = "io.insert-koin:koin-androidx-compose" }
 koin-bom = { module = "io.insert-koin:koin-bom", version.ref = "koin-bom" }
@@ -51,12 +54,11 @@ materialKolor = { module = "com.materialkolor:material-kolor", version.ref = "ma
 media3-common = { module = "androidx.media3:media3-common", version.ref = "media3" }
 media3-session = { module = "androidx.media3:media3-session", version.ref = "media3" }
 oboe = { module = "com.google.oboe:oboe", version.ref = "oboe" }
+paging-compose = { module = "androidx.paging:paging-compose", version.ref = "paging" }
 reorderable = { module = "sh.calvin.reorderable:reorderable", version.ref = "reorderable" }
 room-compiler = { module = "androidx.room:room-compiler", version.ref = "room" }
 room-runtime = { module = "androidx.room:room-runtime", version.ref = "room" }
 timber = { module = "com.jakewharton.timber:timber", version.ref = "timber" }
-compose-settings-ui-expressive = { module = "com.github.alorma.compose-settings:ui-tiles-expressive", version.ref = "composeSettings" }
-compose-settings-ui = { module = "com.github.alorma.compose-settings:ui-tiles", version.ref = "composeSettings" }
 
 [bundles]
 compose = [

@@ -7,13 +7,17 @@ import androidx.compose.runtime.*
 import androidx.core.net.toUri
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
+import androidx.paging.Pager
+import androidx.paging.PagingConfig
+import androidx.paging.PagingData
+import androidx.paging.cachedIn
 import com.lossydragon.modplayer.data.DownloadHistoryRepository
 import com.lossydragon.modplayer.data.ModArchiveService
+import com.lossydragon.modplayer.data.ResultPagingSource
 import com.lossydragon.modplayer.db.AppPreferences
-import com.lossydragon.modplayer.model.ArtistResult
 import com.lossydragon.modplayer.model.Module
 import com.lossydragon.modplayer.model.ModuleResult
-import com.lossydragon.modplayer.model.SearchListResult
+import com.lossydragon.modplayer.model.ResultItem
 import com.lossydragon.modplayer.util.findDownloadedModule
 import com.lossydragon.modplayer.util.getOrCreateOutputFile
 import io.ktor.client.HttpClient
@@ -25,12 +29,15 @@ import kotlinx.collections.immutable.ImmutableList
 import kotlinx.collections.immutable.persistentListOf
 import kotlinx.collections.immutable.toPersistentList
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.firstOrNull
+import kotlinx.coroutines.flow.flatMapLatest
+import kotlinx.coroutines.flow.flowOf
 import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.flow.update
@@ -39,17 +46,20 @@ import timber.log.Timber
 
 enum class SearchType { ARTIST, TITLE }
 
-sealed class SearchResult {
-    data class Artists(val data: ArtistResult) : SearchResult()
-    data class Modules(val data: SearchListResult) : SearchResult()
+enum class SearchResultType { NONE, MODULES, ARTISTS }
+
+private sealed interface SearchCommand {
+    data object Idle : SearchCommand
+    data class FileOrTitle(val query: String) : SearchCommand
+    data class Artist(val query: String) : SearchCommand
+    data class ArtistById(val id: Int) : SearchCommand
 }
 
 @Immutable
 data class DownloadSearchState(
-    val error: String? = null,
-    val isLoading: Boolean = false,
-    val result: SearchResult? = null,
-    val title: String = ""
+    val title: String = "",
+    val activeType: SearchResultType = SearchResultType.NONE,
+    val isLoading: Boolean = false
 )
 
 @Immutable
@@ -71,6 +81,7 @@ data class ModuleResultState(
     val softError: String? = null
 )
 
+@OptIn(ExperimentalCoroutinesApi::class)
 class DownloadsViewModel(
     private val appContext: Context,
     private val service: ModArchiveService,
@@ -81,6 +92,8 @@ class DownloadsViewModel(
 
     private var downloadJob: Job? = null
     private val lastDirectory: Flow<String?> = prefs.getLastDirectoryFlow()
+    private val searchCommand = MutableStateFlow<SearchCommand>(SearchCommand.Idle)
+    private val pagingConfig = PagingConfig(pageSize = 25, enablePlaceholders = false)
 
     val moduleResultState: StateFlow<ModuleResultState>
         field = MutableStateFlow(ModuleResultState())
@@ -91,6 +104,48 @@ class DownloadsViewModel(
 
     val searchState: StateFlow<DownloadSearchState>
         field = MutableStateFlow(DownloadSearchState())
+
+    val pagingData: Flow<PagingData<ResultItem>> = searchCommand
+        .flatMapLatest { command ->
+            searchState.update { it.copy(isLoading = true) }
+            when (command) {
+                is SearchCommand.FileOrTitle -> Pager(pagingConfig) {
+                    ResultPagingSource(
+                        fetch = { page -> service.searchByFileNameOrTitle(command.query, page) },
+                        extract = {
+                            searchState.update { state -> state.copy(isLoading = false) }
+                            it.module
+                        }
+                    )
+                }.flow
+
+                is SearchCommand.ArtistById -> Pager(pagingConfig) {
+                    ResultPagingSource(
+                        fetch = { page -> service.getArtistById(command.id, page) },
+                        extract = {
+                            searchState.update { state -> state.copy(isLoading = false) }
+                            it.module
+                        }
+                    )
+                }.flow
+
+                is SearchCommand.Artist -> Pager(pagingConfig) {
+                    ResultPagingSource(
+                        fetch = { page -> service.getArtistSearch(command.query, page) },
+                        extract = {
+                            searchState.update { state -> state.copy(isLoading = false) }
+                            it.listItems
+                        }
+                    )
+                }.flow
+
+                SearchCommand.Idle -> {
+                    searchState.update { state -> state.copy(isLoading = false) }
+                    flowOf(PagingData.empty())
+                }
+            }
+        }
+        .cachedIn(viewModelScope)
 
     fun getModuleById(id: Int) {
         if (id < 0) {
@@ -129,7 +184,6 @@ class DownloadsViewModel(
                             softError = null,
                         )
                     }
-
                     historyRepo.add(result.module)
                 },
                 onFailure = ::handleFailure
@@ -221,58 +275,23 @@ class DownloadsViewModel(
         }
     }
 
-    fun searchFileOrTitle(query: String) = viewModelScope.launch {
-        searchState.update { it.copy(title = "Results: $query", isLoading = true, error = null) }
-        service.searchByFileNameOrTitle(query).fold(
-            onSuccess = { data ->
-                searchState.update {
-                    it.copy(
-                        result = SearchResult.Modules(data),
-                        isLoading = false
-                    )
-                }
-            },
-            onFailure = {
-                Timber.e(it)
-                searchState.update { s -> s.copy(error = it.message, isLoading = false) }
-            }
-        )
+    fun searchFileOrTitle(query: String) {
+        searchState.update {
+            it.copy(title = "Results: $query", activeType = SearchResultType.MODULES)
+        }
+        searchCommand.value = SearchCommand.FileOrTitle(query)
     }
 
-    fun searchArtist(query: String) = viewModelScope.launch {
-        searchState.update { it.copy(title = "Artists: $query", isLoading = true, error = null) }
-        service.getArtistSearch(query).fold(
-            onSuccess = { data ->
-                searchState.update {
-                    it.copy(
-                        result = SearchResult.Artists(data),
-                        isLoading = false
-                    )
-                }
-            },
-            onFailure = {
-                Timber.e(it)
-                searchState.update { s -> s.copy(error = it.message, isLoading = false) }
-            }
-        )
+    fun searchArtist(query: String) {
+        searchState.update {
+            it.copy(title = "Artists: $query", activeType = SearchResultType.ARTISTS)
+        }
+        searchCommand.value = SearchCommand.Artist(query)
     }
 
-    fun getArtistById(id: Int) = viewModelScope.launch {
-        searchState.update { it.copy(isLoading = true, error = null) }
-        service.getArtistById(id).fold(
-            onSuccess = { data ->
-                searchState.update {
-                    it.copy(
-                        result = SearchResult.Modules(data),
-                        isLoading = false
-                    )
-                }
-            },
-            onFailure = {
-                Timber.e(it)
-                searchState.update { s -> s.copy(error = it.message, isLoading = false) }
-            }
-        )
+    fun getArtistById(id: Int) {
+        searchState.update { it.copy(activeType = SearchResultType.MODULES) }
+        searchCommand.value = SearchCommand.ArtistById(id)
     }
 
     private fun handleFailure(t: Throwable) {
