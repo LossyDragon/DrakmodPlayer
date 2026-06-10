@@ -7,6 +7,7 @@ object AutoMediaId {
 
     const val ROOT = "root"
     const val FILE_BROWSER = "browser"
+    const val HOME = "home"
     const val PLAYLISTS = "playlists"
     const val PLAY_ALL = "play_all"
     const val SHUFFLE_ALL = "shuffle_all"

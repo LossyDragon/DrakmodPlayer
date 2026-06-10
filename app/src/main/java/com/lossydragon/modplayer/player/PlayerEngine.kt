@@ -116,7 +116,7 @@ class PlayerEngine(
     }
 
     /**
-     * TODO kdoc
+     * Enables or disables single-track repeat mode.
      */
     fun isRepeatingOne(value: Boolean) {
         isRepeatOne = value
@@ -267,8 +267,8 @@ class PlayerEngine(
         renderThread = null
 
         if (initialized) {
-            Xmp.endPlayer()      // set_playing(0) → callback silences; xmp_end_player
-            Xmp.releaseModule()  // stream stays open, initialized stays true
+            Xmp.endPlayer() // set_playing(0) → callback silences; xmp_end_player
+            Xmp.releaseModule() // stream stays open, initialized stays true
         }
 
         isPlaying.value = false
@@ -339,33 +339,35 @@ class PlayerEngine(
      * Initializes the Oboe audio stream using the current audio preferences.
      */
     private fun initAudio(): Boolean {
-        val sampleRate = runBlocking { prefs.getSampleRateFlow().first() }
-        val bufferMs = runBlocking { prefs.getBufferMsFlow().first() }
-        val format = runBlocking { prefs.getPlayerFormatFlow().first() }
-        val perfMode = runBlocking { prefs.getOboePerfModeFlow().first() }
-        val audioApi = runBlocking { prefs.getOboeAudioApiFlow().first() }
-        val isMono = format and Xmp.XMP_FORMAT_MONO != 0
+        return runBlocking {
+            val sampleRate = prefs.getSampleRateFlow().first()
+            val bufferMs = prefs.getBufferMsFlow().first()
+            val format = prefs.getPlayerFormatFlow().first()
+            val perfMode = prefs.getOboePerfModeFlow().first()
+            val audioApi = prefs.getOboeAudioApiFlow().first()
+            val isMono = format and Xmp.XMP_FORMAT_MONO != 0
 
-        Timber.d(
-            "load: sampleRate=$sampleRate bufferMs=$bufferMs " +
-                "format=$format perfMode=$perfMode audioApi=$audioApi"
-        )
+            Timber.d(
+                "load: sampleRate=$sampleRate bufferMs=$bufferMs " +
+                    "format=$format perfMode=$perfMode audioApi=$audioApi"
+            )
 
-        val result = Xmp.init(
-            rate = sampleRate,
-            ms = bufferMs,
-            perfMode = perfMode,
-            channels = if (isMono) Xmp.OBOE_CHANNELS_MONO else Xmp.OBOE_CHANNELS_STEREO,
-            audioApi = audioApi,
-            flags = format,
-        )
+            val result = Xmp.init(
+                rate = sampleRate,
+                ms = bufferMs,
+                perfMode = perfMode,
+                channels = if (isMono) Xmp.OBOE_CHANNELS_MONO else Xmp.OBOE_CHANNELS_STEREO,
+                audioApi = audioApi,
+                flags = format,
+            )
 
-        return if (result) {
-            initialized = true
-            true
-        } else {
-            Timber.e("Xmp.init() failed")
-            false
+            if (result) {
+                initialized = true
+                return@runBlocking true
+            } else {
+                Timber.e("Xmp.init() failed")
+                return@runBlocking false
+            }
         }
     }
 
@@ -386,37 +388,39 @@ class PlayerEngine(
 
     /** Applies volume / DSP / interpolation settings to the running player. */
     private fun applyRuntimeSettings() {
-        val playerFlags = runBlocking { prefs.getPlayerFlagsFlow().first() }
-        val cflags = Xmp.getPlayer(Xmp.XMP_PLAYER_CFLAGS)
-        val newCflags = if ((playerFlags and Xmp.XMP_FLAGS_A500) != 0) {
-            cflags or Xmp.XMP_FLAGS_A500
-        } else {
-            cflags and Xmp.XMP_FLAGS_A500.inv()
+        runBlocking {
+            val playerFlags = prefs.getPlayerFlagsFlow().first()
+            val cflags = Xmp.getPlayer(Xmp.XMP_PLAYER_CFLAGS)
+            val newCflags = if ((playerFlags and Xmp.XMP_FLAGS_A500) != 0) {
+                cflags or Xmp.XMP_FLAGS_A500
+            } else {
+                cflags and Xmp.XMP_FLAGS_A500.inv()
+            }
+            Xmp.setPlayer(
+                parm = Xmp.XMP_PLAYER_AMP,
+                value = prefs.getVolumeBoostFlow().first()
+            )
+            Xmp.setPlayer(
+                parm = Xmp.XMP_PLAYER_CFLAGS,
+                value = newCflags
+            )
+            Xmp.setPlayer(
+                parm = Xmp.XMP_PLAYER_DSP,
+                value = prefs.getDspEffectFlow().first()
+            )
+            Xmp.setPlayer(
+                parm = Xmp.XMP_PLAYER_INTERP,
+                value = prefs.getInterpolationTypeFlow().first()
+            )
+            Xmp.setPlayer(
+                parm = Xmp.XMP_PLAYER_MIX,
+                value = prefs.getStereoMixFlow().first()
+            )
+            Xmp.setPlayer(
+                parm = Xmp.XMP_PLAYER_VOLUME,
+                value = prefs.getPlayerVolumeFlow().first()
+            )
         }
-        Xmp.setPlayer(
-            parm = Xmp.XMP_PLAYER_AMP,
-            value = runBlocking { prefs.getVolumeBoostFlow().first() }
-        )
-        Xmp.setPlayer(
-            parm = Xmp.XMP_PLAYER_CFLAGS,
-            value = newCflags
-        )
-        Xmp.setPlayer(
-            parm = Xmp.XMP_PLAYER_DSP,
-            value = runBlocking { prefs.getDspEffectFlow().first() }
-        )
-        Xmp.setPlayer(
-            parm = Xmp.XMP_PLAYER_INTERP,
-            value = runBlocking { prefs.getInterpolationTypeFlow().first() }
-        )
-        Xmp.setPlayer(
-            parm = Xmp.XMP_PLAYER_MIX,
-            value = runBlocking { prefs.getStereoMixFlow().first() }
-        )
-        Xmp.setPlayer(
-            parm = Xmp.XMP_PLAYER_VOLUME,
-            value = runBlocking { prefs.getPlayerVolumeFlow().first() }
-        )
     }
 
     /**
@@ -472,7 +476,6 @@ class PlayerEngine(
 
                 if (paused || stopRequest) continue
 
-                // TODO why do I need to init a new class every frame for flows?
                 val fi = FrameInfo()
                 Xmp.getFrameInfo(fi)
                 frameInfoFlow.value = fi

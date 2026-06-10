@@ -113,7 +113,7 @@ class ModPlayer(
 
     /** Placeholder Artwork */
     private val artworkUri: Uri by lazy {
-        "android.resource://${context.packageName}/${R.drawable.ic_launcher_foreground}".toUri()
+        "android.resource://${context.packageName}/${R.mipmap.ic_launcher_round}".toUri()
     }
 
     init {
@@ -213,6 +213,7 @@ class ModPlayer(
             "applyQueueOrder shuffleModeEnabled=$shuffleMode " +
                 "startAt=$startAt originalQueue.size=${originalQueue.size}"
         )
+
         queue.clear()
         playlist.clear()
 
@@ -287,9 +288,9 @@ class ModPlayer(
                     }
                 }
 
-                mainHandler.post { invalidateState() }
+                mainHandler.post(::invalidateState)
             } else {
-                mainHandler.post { skipUnplayable() }
+                mainHandler.post(::skipUnplayable)
             }
             isLoading = false
         }.start()
@@ -325,16 +326,10 @@ class ModPlayer(
         when {
             repeatMode == REPEAT_MODE_ONE -> navigate(currentIndex)
 
-            repeatMode == REPEAT_MODE_ALL ->
-                navigate(
-                    if (currentIndex + 1 <
-                        queue.size
-                    ) {
-                        currentIndex + 1
-                    } else {
-                        0
-                    }
-                )
+            repeatMode == REPEAT_MODE_ALL -> {
+                val idx = if (currentIndex + 1 < queue.size) currentIndex + 1 else 0
+                navigate(idx)
+            }
 
             currentIndex + 1 < queue.size -> navigate(currentIndex + 1)
 
@@ -349,11 +344,7 @@ class ModPlayer(
             repeatMode == REPEAT_MODE_ONE -> navigate(currentIndex)
 
             repeatMode == REPEAT_MODE_ALL -> {
-                val idx = if (currentIndex - 1 >= 0) {
-                    currentIndex - 1
-                } else {
-                    queue.lastIndex
-                }
+                val idx = if (currentIndex - 1 >= 0) currentIndex - 1 else queue.lastIndex
                 navigate(idx)
             }
 

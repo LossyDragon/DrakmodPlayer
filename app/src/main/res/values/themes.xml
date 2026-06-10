@@ -2,4 +2,10 @@
 <resources>
 
     <style name="Theme.DragonModPlayer" parent="android:Theme.Material.NoActionBar" />
+
+    <!-- All this work just to color the "animated" playing icon on AA's head unit-->
+    <style name="CarTheme" parent="android:Theme.Material.NoActionBar">
+        <item name="android:colorAccent">@color/aa_media_theme</item>
+    </style>
+
 </resources>

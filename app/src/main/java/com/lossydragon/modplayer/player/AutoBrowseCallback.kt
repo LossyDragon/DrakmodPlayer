@@ -2,6 +2,7 @@ package com.lossydragon.modplayer.player
 
 import android.content.Context
 import android.net.Uri
+import android.os.Bundle
 import androidx.annotation.OptIn
 import androidx.core.net.toUri
 import androidx.media3.common.MediaItem
@@ -40,8 +41,11 @@ class AutoBrowseCallback(
 ) : MediaLibrarySession.Callback {
 
     private val artworkUri: Uri by lazy {
-        "android.resource://${context.packageName}/${R.drawable.ic_launcher_foreground}".toUri()
+        "android.resource://${context.packageName}/${R.mipmap.ic_launcher_round}".toUri()
     }
+
+    private fun drawableUri(resId: Int): Uri =
+        "android.resource://${context.packageName}/$resId".toUri()
 
     private val searchResultsCache = mutableMapOf<String, List<MediaItem>>()
     private var activeSearchJob: Job? = null
@@ -57,7 +61,15 @@ class AutoBrowseCallback(
             title = context.getString(R.string.app_name),
             type = MediaMetadata.MEDIA_TYPE_FOLDER_MIXED,
         )
-        return Futures.immediateFuture(LibraryResult.ofItem(browseItem, params))
+        val rootParams = LibraryParams.Builder()
+            .setExtras(
+                Bundle().apply {
+                    putInt("android.media.browse.CONTENT_STYLE_BROWSABLE_HINT", 2)
+                    putInt("android.media.browse.CONTENT_STYLE_PLAYABLE_HINT", 2)
+                }
+            )
+            .build()
+        return Futures.immediateFuture(LibraryResult.ofItem(browseItem, rootParams))
     }
 
     override fun onGetChildren(
@@ -73,6 +85,7 @@ class AutoBrowseCallback(
         scope.launch(Dispatchers.IO) {
             val items = when {
                 parentId == AutoMediaId.ROOT -> getRootChildren()
+                parentId == AutoMediaId.HOME -> getHomeChildren()
                 parentId == AutoMediaId.FILE_BROWSER -> getFileBrowserRoot()
                 parentId == AutoMediaId.PLAYLISTS -> getPlaylists()
                 AutoMediaId.isDir(parentId) -> getDirectoryChildren(parentId)
@@ -248,6 +261,11 @@ class AutoBrowseCallback(
 
     private fun getRootChildren(): ImmutableList<MediaItem> = ImmutableList.of(
         buildBrowsableItem(
+            id = AutoMediaId.HOME,
+            title = "Home",
+            type = MediaMetadata.MEDIA_TYPE_FOLDER_MIXED
+        ),
+        buildBrowsableItem(
             id = AutoMediaId.FILE_BROWSER,
             title = "File Browser",
             type = MediaMetadata.MEDIA_TYPE_FOLDER_MIXED
@@ -257,8 +275,6 @@ class AutoBrowseCallback(
             title = "Playlists",
             type = MediaMetadata.MEDIA_TYPE_FOLDER_PLAYLISTS
         ),
-        buildActionItem(id = AutoMediaId.PLAY_ALL, title = "Play All"),
-        buildActionItem(id = AutoMediaId.SHUFFLE_ALL, title = "Shuffle All"),
     )
 
     private fun getPlaylists(): ImmutableList<MediaItem> = ImmutableList.of(
@@ -266,6 +282,19 @@ class AutoBrowseCallback(
             "playlists_coming_soon",
             "Coming Soon",
             MediaMetadata.MEDIA_TYPE_FOLDER_PLAYLISTS
+        )
+    )
+
+    private fun getHomeChildren(): ImmutableList<MediaItem> = ImmutableList.of(
+        buildActionItem(
+            id = AutoMediaId.SHUFFLE_ALL,
+            title = "Shuffle",
+            artworkUri = drawableUri(R.drawable.aa_shuffle)
+        ),
+        buildActionItem(
+            id = AutoMediaId.PLAY_ALL,
+            title = "Play all",
+            artworkUri = drawableUri(R.drawable.aa_play_all)
         )
     )
 
@@ -327,7 +356,12 @@ class AutoBrowseCallback(
         return future
     }
 
-    private fun buildBrowsableItem(id: String, title: String, type: Int): MediaItem =
+    private fun buildBrowsableItem(
+        id: String,
+        title: String,
+        type: Int,
+        artworkUri: Uri? = null
+    ): MediaItem =
         MediaItem.Builder()
             .setMediaId(id)
             .setMediaMetadata(
@@ -357,7 +391,11 @@ class AutoBrowseCallback(
             )
             .build()
 
-    private fun buildActionItem(id: String, title: String): MediaItem =
+    private fun buildActionItem(
+        id: String,
+        title: String,
+        artworkUri: Uri? = null
+    ): MediaItem =
         MediaItem.Builder()
             .setMediaId(id)
             .setMediaMetadata(
