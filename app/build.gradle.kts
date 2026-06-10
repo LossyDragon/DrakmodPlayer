@@ -52,12 +52,8 @@ android {
 
         ndk.abiFilters += listOf("armeabi-v7a", "arm64-v8a", "x86", "x86_64")
 
-        val apiKey = providers.gradleProperty("modArchiveApiKey").orNull.orEmpty()
-        val escapedApiKey = apiKey
-            .removeSurrounding("\"")
-            .replace("\\", "\\\\")
-            .replace("\"", "\\\"")
-        buildConfigField("String", "API_KEY", "\"$escapedApiKey\"")
+        val apiKey = project.property("modArchiveApiKey") as String
+        buildConfigField("String", "API_KEY", apiKey)
     }
     signingConfigs {
         create("release") {

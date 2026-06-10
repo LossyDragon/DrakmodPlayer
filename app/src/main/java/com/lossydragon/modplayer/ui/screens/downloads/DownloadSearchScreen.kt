@@ -51,6 +51,7 @@ fun DownloadSearchScreen(
 
     Scaffold(
         modifier = modifier,
+        snackbarHost = { SnackbarHost(snackbarHostState) },
         topBar = {
             CenterAlignedTopAppBar(
                 title = { Text(text = stringResource(R.string.title_download)) },
@@ -156,12 +157,14 @@ fun DownloadSearchScreen(
                     content = {
                         toggleableItem(
                             checked = type == SearchType.TITLE,
+                            enabled = hasApiKey,
                             label = resource.getString(R.string.search_selection_title),
                             onCheckedChange = { type = SearchType.TITLE },
                             weight = 1f,
                         )
                         toggleableItem(
                             checked = type == SearchType.ARTIST,
+                            enabled = hasApiKey,
                             label = resource.getString(R.string.search_selection_artist),
                             onCheckedChange = { type = SearchType.ARTIST },
                             weight = 1f,
