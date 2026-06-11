@@ -130,6 +130,7 @@ class PlayerEngine(
      * Enables or disables single-track repeat mode.
      */
     fun isRepeatingOne(value: Boolean) {
+        Timber.d("isRepeatingOne: $value")
         isRepeatOne = value
         if (initialized) Player.setLoopMode(value)
     }
@@ -142,6 +143,7 @@ class PlayerEngine(
      */
     fun setSequence(index: Int): Boolean {
         val result = Player.setSequence(index)
+        Timber.d("setSequence: index=$index result=$result")
         if (result) {
             val mv = ModVars()
             Player.getModVars(mv)
@@ -161,6 +163,9 @@ class PlayerEngine(
      * @return true on success; false if Oboe or libxmp init fails.
      */
     fun load(file: ModuleEntity): Boolean {
+        Timber.d(
+            "load: '${file.filename}' backend=${Player.renderingBackend} initialized=$initialized"
+        )
         selectBackendForNextLoad()
         if (initialized) {
             softStop()
@@ -186,8 +191,12 @@ class PlayerEngine(
      * @return true on success; false if libxmp cannot load the file.
      */
     fun loadNext(file: ModuleEntity): Boolean {
+        Timber.d(
+            "loadNext: '${file.filename}' backend=${Player.renderingBackend} initialized=$initialized"
+        )
         val selected = runBlocking { prefs.getRenderingBackendFlow().first() }
         if (initialized && selected != Player.renderingBackend) {
+            Timber.i("loadNext: backend switch ${Player.renderingBackend} -> $selected")
             stop()
             Player.deinit()
             initialized = false
@@ -210,9 +219,17 @@ class PlayerEngine(
      * Pre-fills the Oboe buffer to minimise start latency.
      */
     fun start() {
-        Timber.d("start() called")
-        if (!initialized) return
-        if (renderThread?.isAlive == true) return
+        Timber.d(
+            "start: backend=${Player.renderingBackend} repeatOne=$isRepeatOne playAllSeq=$playAllSequences"
+        )
+        if (!initialized) {
+            Timber.w("start: not initialized, aborting")
+            return
+        }
+        if (renderThread?.isAlive == true) {
+            Timber.w("start: render thread already alive")
+            return
+        }
 
         stopRequest = false
         paused = false
@@ -245,6 +262,7 @@ class PlayerEngine(
      * The stream stays open so [resume] can restart without re-loading.
      */
     fun pause() {
+        Timber.d("pause")
         endedNaturally = false
         paused = true
         Player.setPlaying(false)
@@ -255,7 +273,11 @@ class PlayerEngine(
      * Resumes paused playback without reloading or seeking.
      */
     fun resume() {
-        if (!paused) return
+        if (!paused) {
+            Timber.w("resume: not paused, ignoring")
+            return
+        }
+        Timber.d("resume")
         paused = false
         Player.setPlaying(true)
         isPlaying.value = true
@@ -279,6 +301,7 @@ class PlayerEngine(
      * Call [release] when the engine is truly being torn down (service destroyed).
      */
     fun stop() {
+        Timber.d("stop: initialized=$initialized")
         endedNaturally = false
         stopRequest = true
         renderThread?.interrupt()
@@ -302,6 +325,7 @@ class PlayerEngine(
      * Must be called off the main thread (joins the render thread and calls [Player.deinit]).
      */
     fun handleAudioDisconnect() {
+        Timber.w("handleAudioDisconnect: joining render thread, initialized=$initialized")
         renderThread?.join(1_000)
         renderThread = null
         if (initialized) {
@@ -309,6 +333,7 @@ class PlayerEngine(
             initialized = false
         }
         audioDisconnectedFlow.value = false
+        Timber.w("handleAudioDisconnect: done")
     }
 
     /**
@@ -317,6 +342,7 @@ class PlayerEngine(
      * stop/play transitions — use [stop] for those.
      */
     fun release() {
+        Timber.d("release")
         stop()
         if (initialized) {
             Player.deinit()
@@ -498,7 +524,9 @@ class PlayerEngine(
         val modInfo = ModInfo()
         val result = Player.loadFromFd(context, file.uri, modInfo)
         if (result != 0) {
-            Timber.e("${Player.renderingBackend}.loadFromFd() returned $result")
+            Timber.e(
+                "${Player.renderingBackend}.loadFromFd() returned $result for '${file.filename}'"
+            )
             if (!initialized) {
                 Player.deinit()
                 initialized = false
@@ -509,6 +537,9 @@ class PlayerEngine(
         Player.getModVars(mv)
         modVarsFlow.value = mv
         positionMs.value = 0L
+        Timber.i(
+            "loadModule: '${mv.modName}' type=${mv.modType} chn=${mv.chn} seq=${mv.miNumSequences}"
+        )
         return true
     }
 
@@ -517,6 +548,7 @@ class PlayerEngine(
      * the Oboe stream open. Used between queue tracks to avoid stream teardown overhead.
      */
     private fun softStop() {
+        Timber.d("softStop")
         stopRequest = true
         renderThread?.interrupt()
         renderThread?.join(2_000)
@@ -535,6 +567,7 @@ class PlayerEngine(
 
     /** The loop! */
     private fun renderLoop() {
+        Timber.d("renderLoop: start")
         while (!stopRequest) {
             try {
                 Thread.sleep(20)
@@ -555,14 +588,20 @@ class PlayerEngine(
                 }
 
                 if (Player.hasModuleEnded()) {
-                    Timber.i("renderLoop: module ended, playAllSequences=$playAllSequences")
+                    Timber.i(
+                        "renderLoop: module ended pos=${positionMs.value}ms playAllSequences=$playAllSequences"
+                    )
 
                     if (playAllSequences) {
-                        currentSequenceFlow.value++
-                        if (setSequence(currentSequenceFlow.value)) {
-                            Timber.i("renderLoop: advanced to seq ${currentSequenceFlow.value}")
+                        val nextSeq = currentSequenceFlow.value + 1
+                        Timber.i(
+                            "renderLoop: trying seq $nextSeq / ${modVarsFlow.value.miNumSequences}"
+                        )
+                        if (setSequence(nextSeq)) {
+                            currentSequenceFlow.value = nextSeq
                             continue
                         }
+                        Timber.i("renderLoop: no more sequences, ending naturally")
                     }
 
                     endedNaturally = true
@@ -571,9 +610,11 @@ class PlayerEngine(
                     break
                 }
             } catch (_: InterruptedException) {
+                Timber.d("renderLoop: interrupted")
                 Thread.currentThread().interrupt()
                 break
             }
         }
+        Timber.d("renderLoop: exit stopRequest=$stopRequest endedNaturally=$endedNaturally")
     }
 }

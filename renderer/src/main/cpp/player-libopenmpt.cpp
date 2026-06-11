@@ -69,6 +69,14 @@ int renderOpenMpt(void* audioData, int32_t numFrames, int32_t numChannels, int32
   std::lock_guard<std::mutex> lock(state.mutex);
   if (!state.mod || !state.playing) return 0;
 
+  static int render_count = 0;
+  if (++render_count % 5000 == 0) {
+    double pos = openmpt_module_get_position_seconds(state.mod);
+    LOG_DEBUG("renderOpenMpt: count=%d pos=%.2fs / %.2fs loop=%d repeat_count=%d",
+      render_count, pos, state.duration, state.loop ? 1 : 0,
+      openmpt_module_get_repeat_count(state.mod));
+  }
+
   size_t frames = 0;
   if (bytesPerSample == 2 && numChannels == 2) {
     frames = openmpt_module_read_interleaved_stereo(state.mod, state.actual_rate, numFrames, static_cast<int16_t*>(audioData));
@@ -94,9 +102,13 @@ int renderOpenMpt(void* audioData, int32_t numFrames, int32_t numChannels, int32
   }
 
   if (frames < static_cast<size_t>(numFrames)) {
+    LOG_INFO("renderOpenMpt: short read frames=%zu numFrames=%d loop=%d repeat_count=%d",
+      frames, numFrames, state.loop ? 1 : 0,
+      openmpt_module_get_repeat_count(state.mod));
     if (state.loop) {
       openmpt_module_set_position_seconds(state.mod, 0.0);
     } else {
+      LOG_INFO("renderOpenMpt: signalling module_ended");
       return -1;
     }
   }
@@ -261,6 +273,10 @@ jint openmpt_loadFd(JNIEnv* env, jint fd, jobject modInfo) {
     return error != 0 ? error : -2;
   }
 
+  // play once by default; setLoopMode overrides to -1 for repeat-one
+  int rc_result = openmpt_module_set_repeat_count(mod, 0);
+  LOG_INFO("loadFd: set repeat_count=0 result=%d actual=%d", rc_result, openmpt_module_get_repeat_count(mod));
+
   OpenMptState& state = OpenMptState::instance();
   {
     std::lock_guard<std::mutex> lock(state.mutex);
@@ -353,6 +369,11 @@ jint openmpt_startPlayer(JNIEnv* env, jint rate, jint format) {
   set_render_callback(renderOpenMpt);
   std::lock_guard<std::mutex> lock(state.mutex);
   state.playing = true;
+  if (state.mod) {
+    LOG_INFO("startPlayer: rate=%d loop=%d repeat_count=%d duration=%.2fs",
+      state.actual_rate, state.loop ? 1 : 0,
+      openmpt_module_get_repeat_count(state.mod), state.duration);
+  }
   set_playing(1);
   return 0;
 }
@@ -625,6 +646,13 @@ void openmpt_setLoopMode(JNIEnv* env, jboolean loop) {
   OpenMptState& state = OpenMptState::instance();
   std::lock_guard<std::mutex> lock(state.mutex);
   state.loop = loop == JNI_TRUE;
+  LOG_INFO("setLoopMode: loop=%d", state.loop ? 1 : 0);
+  if (state.mod) {
+    int32_t count = state.loop ? -1 : 0;
+    int rc_result = openmpt_module_set_repeat_count(state.mod, count);
+    LOG_INFO("setLoopMode: set repeat_count=%d result=%d actual=%d",
+      count, rc_result, openmpt_module_get_repeat_count(state.mod));
+  }
 }
 
 void openmpt_setPlaying(JNIEnv* env, jboolean value) {

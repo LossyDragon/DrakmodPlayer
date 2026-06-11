@@ -73,7 +73,8 @@ public:
     if (xmp_playing.load(std::memory_order_acquire) && callback != nullptr) {
       int ret = callback(audioData, numFrames, numChannels, bytesPerSample);
       if (ret < 0) {
-        module_ended.store(true, std::memory_order_release);
+        bool was_ended = module_ended.exchange(true, std::memory_order_release);
+        if (!was_ended) LOG_INFO("onAudioReady: module_ended set by render callback");
         memset(audioData, 0, numBytes);
       }
     } else {
