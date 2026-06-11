@@ -1,5 +1,23 @@
 #include "player-common.h"
 
+std::vector<unsigned char> readFd(int fd) {
+  std::vector<unsigned char> data;
+  struct stat st{};
+  if (fstat(fd, &st) == 0 && st.st_size > 0) data.reserve(static_cast<size_t>(st.st_size));
+  std::array<unsigned char, 64 * 1024> buf{};
+  while (true) {
+    ssize_t n = read(fd, buf.data(), buf.size());
+    if (n < 0) {
+      if (errno == EINTR) continue;
+      data.clear();
+      return data;
+    }
+    if (n == 0) break;
+    data.insert(data.end(), buf.begin(), buf.begin() + n);
+  }
+  return data;
+}
+
 AudioStatsFields g_audioStats{};
 ChannelInfoFields g_channelInfo{};
 FrameInfoFields g_frameInfo{};

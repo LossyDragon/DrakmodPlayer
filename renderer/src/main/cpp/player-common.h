@@ -1,8 +1,13 @@
 #pragma once
 #include <jni.h>
 
+#include <array>
+#include <cerrno>
 #include <string>
 #include <cstring>
+#include <sys/stat.h>
+#include <unistd.h>
+#include <vector>
 
 #define GET_CLASS(a, b) a.clazz = env->FindClass(b)
 #define GET_FIELD(a, b, c) a.b = env->GetFieldID(a.clazz, #b, c)
@@ -112,3 +117,5 @@ void initFrameInfoFields(JNIEnv* env);
 void initModInfoFields(JNIEnv* env);
 void initModVarsFields(JNIEnv* env);
 void initSequenceFields(JNIEnv* env);
+
+std::vector<unsigned char> readFd(int fd);

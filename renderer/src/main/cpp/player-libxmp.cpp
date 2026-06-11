@@ -160,14 +160,15 @@ jboolean xmp_testFd(JNIEnv* env, jint fd, jobject modInfo) {
   LOG_INFO("testModuleFd() called - fd: %d, tid: %d", fd, gettid());
   initModInfoFields(env);
 
-  std::unique_ptr<FILE, decltype(&fclose)> file(fdopen(fd, "rb"), fclose);
-  if (!file) {
-    LOG_ERROR("testModuleFd() - fdopen failed for fd %d: %s", fd, strerror(errno));
+  lseek(fd, 0, SEEK_SET);
+  std::vector<unsigned char> data = readFd(fd);
+  if (data.empty()) {
+    LOG_ERROR("testModuleFd() - failed to read fd %d", fd);
     return JNI_FALSE;
   }
 
   xmp_test_info ti{};
-  int res = xmp_test_module_from_file(file.get(), &ti);
+  int res = xmp_test_module_from_memory(data.data(), static_cast<long>(data.size()), &ti);
 
   LOG_DEBUG("testModuleFd() - test result: %d", res);
 
@@ -191,10 +192,7 @@ jboolean xmp_testFd(JNIEnv* env, jint fd, jobject modInfo) {
 
     LOG_DEBUG("testModuleFd() - successfully populated modInfo");
   } else {
-    char path[PATH_MAX];
-    ssize_t len = readlink(("/proc/self/fd/" + std::to_string(fd)).c_str(), path, sizeof(path) - 1);
-    if (len > 0) path[len] = '\0';
-    LOG_WARN("testModuleFd() - not a valid module, error: %d, file: %s", res, len > 0 ? path : "unknown");
+    LOG_WARN("testModuleFd() - not a valid module, error: %d, fd: %d", res, fd);
   }
 
   return res == 0 ? JNI_TRUE : JNI_FALSE;

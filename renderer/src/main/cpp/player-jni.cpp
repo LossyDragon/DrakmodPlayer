@@ -3,6 +3,7 @@
 //
 #include <android/log.h>
 #include <stdatomic.h>
+#include <unistd.h>
 #include <jni.h>
 #include "player.h"
 
@@ -80,11 +81,19 @@ METHOD(jint, loadModuleFd)(JNIEnv* env, jobject obj, jint fd, jobject modInfo) {
 }
 
 METHOD(jboolean, testModuleFd)(JNIEnv* env, jobject obj, jint fd, jobject modInfo) {
-  if (!checkBackend(env)) {
-    LOG_ERROR("testModuleFd() - invalid backend");
-    return JNI_FALSE;
+  auto result = xmp_testFd(env, fd, modInfo); // libxmp results in better mod info.
+
+  if (!result) {
+    LOG_WARN("libxmp couldn't test module, trying libopenmpt");
+    result = openmpt_testFd(env, fd, modInfo);
   }
-  return g_backend == BACKEND_OPENMPT ? openmpt_testFd(env, fd, modInfo) : xmp_testFd(env, fd, modInfo);
+
+  if (!result) {
+    LOG_WARN("Neither renderers could test file successfully. Probably not a valid module");
+  }
+
+  close(fd);
+  return result;
 }
 
 METHOD(jint, startPlayer)(JNIEnv* env, jobject obj, jint rate, jint format) {

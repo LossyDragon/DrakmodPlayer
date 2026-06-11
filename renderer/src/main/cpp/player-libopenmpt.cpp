@@ -53,25 +53,6 @@ struct OpenMptState {
   }
 };
 
-std::vector<unsigned char> readFd(int fd) {
-  std::vector<unsigned char> data;
-  struct stat st{};
-  if (fstat(fd, &st) == 0 && st.st_size > 0) data.reserve(static_cast<size_t>(st.st_size));
-
-  std::array<unsigned char, 64 * 1024> buffer{};
-  while (true) {
-    ssize_t n = read(fd, buffer.data(), buffer.size());
-    if (n < 0) {
-      if (errno == EINTR) continue;
-      data.clear();
-      return data;
-    }
-    if (n == 0) break;
-    data.insert(data.end(), buffer.begin(), buffer.begin() + n);
-  }
-  return data;
-}
-
 std::string openmptString(const char* value) {
   if (!value) return "";
   std::string result(value);
@@ -207,8 +188,8 @@ jboolean openmpt_stopAudio(JNIEnv* env) {
 
 jboolean openmpt_testFd(JNIEnv* env, jint fd, jobject modInfo) {
   initModInfoFields(env);
+  lseek(fd, 0, SEEK_SET);
   std::vector<unsigned char> data = readFd(fd);
-  close(fd);
   if (data.empty()) return JNI_FALSE;
 
   int error = OPENMPT_ERROR_OK;
