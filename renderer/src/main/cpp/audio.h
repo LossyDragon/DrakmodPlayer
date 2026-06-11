@@ -36,6 +36,10 @@ int stop_audio(void);
 
 void close_audio(void);
 
+int has_audio_disconnected(void); // returns 1 after ErrorDisconnected from Oboe
+
+void clear_audio_disconnected(void);
+
 int has_module_ended(void); // returns 1 when xmp_play_buffer signals XMP_END
 
 void reset_render_callback(void);

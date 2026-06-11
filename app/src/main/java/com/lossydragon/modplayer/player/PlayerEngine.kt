@@ -60,6 +60,10 @@ class PlayerEngine(
     val modVarsFlow: StateFlow<ModVars>
         field = MutableStateFlow(ModVars())
 
+    /** Emits true when Oboe reports ErrorDisconnected (e.g. headphones unplugged, BT disconnected). */
+    val audioDisconnectedFlow: StateFlow<Boolean>
+        field = MutableStateFlow(false)
+
     /** Lazily populated by [load] / [loadNext]; read by [renderLoop]. */
     private val patternCache = mutableMapOf<Int, PatternData>()
 
@@ -289,6 +293,22 @@ class PlayerEngine(
         isPlaying.value = false
         positionMs.value = 0L
         frameInfoFlow.value = FrameInfo()
+    }
+
+    /**
+     * Cleans up after an Oboe [ErrorDisconnected] event so the next [load] / [loadNext]
+     * call can open a fresh stream on the new audio device.
+     *
+     * Must be called off the main thread (joins the render thread and calls [Player.deinit]).
+     */
+    fun handleAudioDisconnect() {
+        renderThread?.join(1_000)
+        renderThread = null
+        if (initialized) {
+            Player.deinit()
+            initialized = false
+        }
+        audioDisconnectedFlow.value = false
     }
 
     /**
@@ -526,6 +546,13 @@ class PlayerEngine(
                 frameInfoFlow.value = fi
 
                 positionMs.value = fi.time.toLong().coerceAtLeast(0L)
+
+                if (Player.hasAudioDisconnected()) {
+                    Timber.w("renderLoop: audio device disconnected")
+                    isPlaying.value = false
+                    audioDisconnectedFlow.value = true
+                    break
+                }
 
                 if (Player.hasModuleEnded()) {
                     Timber.i("renderLoop: module ended, playAllSequences=$playAllSequences")

@@ -133,6 +133,24 @@ class ModPlayer(
                 }
             }
         }
+
+        scope.launch {
+            engine.audioDisconnectedFlow.collect { disconnected ->
+                if (!disconnected) return@collect
+                Timber.w("Audio device disconnected — reopening stream and reloading current track")
+                val resumePositionMs = engine.positionMs.value
+                stopPositionUpdates()
+                invalidateState()
+                Thread {
+                    engine.handleAudioDisconnect()
+                    if (queue.isNotEmpty()) {
+                        mainHandler.post {
+                            loadAndStartAt(currentIndex, seekToMs = resumePositionMs)
+                        }
+                    }
+                }.start()
+            }
+        }
     }
 
     /* TODO kDoc */

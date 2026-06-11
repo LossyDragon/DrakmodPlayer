@@ -5,6 +5,7 @@
 #include <stdatomic.h>
 #include <unistd.h>
 #include <jni.h>
+#include "audio.h"
 #include "player.h"
 
 constexpr const char* TAG = "Drakplayer JNI";
@@ -142,6 +143,10 @@ METHOD(jboolean, restartAudio)(JNIEnv* env, jobject obj) {
     return JNI_FALSE;
   }
   return g_backend == BACKEND_OPENMPT ? openmpt_restartAudio(env) : xmp_restartAudio(env);
+}
+
+METHOD(jboolean, hasAudioDisconnected)(JNIEnv* env, jobject obj) {
+  return has_audio_disconnected() ? JNI_TRUE : JNI_FALSE;
 }
 
 METHOD(jboolean, hasModuleEnded)(JNIEnv* env, jobject obj) {

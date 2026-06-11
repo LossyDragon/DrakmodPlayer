@@ -6,7 +6,7 @@
 #include <oboe/Oboe.h>
 #include <pthread.h>
 
-#define TAG "libxmp Oboe"
+#define TAG "DrakPlayer Oboe"
 #define LOG_INFO(...) __android_log_print(ANDROID_LOG_INFO, TAG, __VA_ARGS__)
 #define LOG_WARN(...) __android_log_print(ANDROID_LOG_WARN, TAG, __VA_ARGS__)
 #define LOG_ERROR(...) __android_log_print(ANDROID_LOG_ERROR, TAG, __VA_ARGS__)
@@ -22,8 +22,12 @@ static std::atomic<bool> xmp_playing(false);
 static std::atomic<bool> in_callback(false);
 // set by callback when xmp_play_buffer returns < 0 (module ended)
 static std::atomic<bool> module_ended(false);
+// set by onErrorAfterClose when Oboe reports ErrorDisconnected
+static std::atomic<bool> audio_disconnected(false);
 // passed as the loop arg to xmp_play_buffer: 0 = loop forever, 1 = play once
 static std::atomic<int> xmp_loop_flag(1);
+// swappable render function; reset_render_callback() points this at render_xmp,
+// set_render_callback() lets openmpt (or any future backend) plug in its own renderer
 static std::atomic<AudioRenderCallback> render_callback(nullptr);
 
 static std::atomic<int32_t> underrun_count(0);
@@ -84,6 +88,7 @@ public:
     LOG_ERROR("Stream closed due to error: %s", oboe::convertToText(error));
     if (error == oboe::Result::ErrorDisconnected) {
       LOG_ERROR("Audio device disconnected");
+      audio_disconnected.store(true, std::memory_order_release);
     }
   }
 };
@@ -120,6 +125,14 @@ int has_module_ended() {
   return module_ended.load(std::memory_order_relaxed) ? 1 : 0;
 }
 
+int has_audio_disconnected() {
+  return audio_disconnected.load(std::memory_order_acquire) ? 1 : 0;
+}
+
+void clear_audio_disconnected() {
+  audio_disconnected.store(false, std::memory_order_release);
+}
+
 // 0 = loop (repeat-one), 1 = play once
 void set_loop_mode(int loop_flag) {
   xmp_loop_flag.store(loop_flag, std::memory_order_relaxed);
@@ -128,6 +141,11 @@ void set_loop_mode(int loop_flag) {
 static int oboe_open(int sample_rate, int performance_mode, int channel_count, int audio_api, int format_flags) {
   oboe::AudioStreamBuilder builder;
 
+  // Guard against a stale callback from a prior disconnect
+  if (audio_callback) {
+    delete audio_callback;
+    audio_callback = nullptr;
+  }
   audio_callback = new XmpAudioCallback();
 
   const auto pMode = [&]() -> oboe::PerformanceMode {
@@ -173,6 +191,8 @@ static int oboe_open(int sample_rate, int performance_mode, int channel_count, i
     audio_callback = nullptr;
     return -1;
   }
+
+  audio_disconnected.store(false, std::memory_order_release);
 
   actual_channels = audio_stream->getChannelCount();
 

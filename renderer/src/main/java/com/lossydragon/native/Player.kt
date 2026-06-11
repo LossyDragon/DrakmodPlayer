@@ -102,6 +102,7 @@ object Player {
     external fun getPlayer(parm: Int): Int
     external fun getSampleData(trigger: Boolean, ins: Int, key: Int, period: Int, chn: Int, width: Int, buffer: ByteArray?)
     external fun getVersion(): String
+    external fun hasAudioDisconnected(): Boolean
     external fun hasModuleEnded(): Boolean
     external fun init(rate: Int, ms: Int, perfMode: Int, channels: Int, audioApi: Int, flags: Int): Boolean
     external fun loadModuleFd(fd: Int, modInfo: ModInfo): Int
