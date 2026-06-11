@@ -9,7 +9,7 @@ import androidx.compose.ui.unit.*
 import com.lossydragon.modplayer.player.PlayerUiState
 import com.lossydragon.modplayer.ui.theme.AppTheme
 import com.lossydragon.modplayer.util.formatMs
-import org.helllabs.libxmp.model.FrameInfo
+import com.lossydragon.native.model.FrameInfo
 
 @Composable
 internal fun PlaybackProgress(

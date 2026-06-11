@@ -67,7 +67,7 @@ target_compile_options(openmpt_static PRIVATE -fexceptions -frtti -Wno-deprecate
 find_package(oboe REQUIRED CONFIG)
 
 # All required libs
-add_library(${PROJECT_NAME} SHARED xmp-jni.cpp openmpt-jni.cpp oboe.cpp)
+add_library(${PROJECT_NAME} SHARED player-jni.cpp player-common.cpp player-libxmp.cpp player-libopenmpt.cpp oboe.cpp)
 
 # Link libraries
 target_link_libraries(${PROJECT_NAME} xmp_static openmpt_static oboe::oboe android log z)

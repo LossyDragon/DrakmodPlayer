@@ -1,20 +1,15 @@
-package org.helllabs.libxmp
+package com.lossydragon.native
 
 import android.content.Context
 import android.net.Uri
 import android.util.Log
-import org.helllabs.libxmp.model.AudioStats
-import org.helllabs.libxmp.model.ChannelInfo
-import org.helllabs.libxmp.model.FrameInfo
-import org.helllabs.libxmp.model.ModInfo
-import org.helllabs.libxmp.model.ModVars
+import com.lossydragon.native.model.AudioStats
+import com.lossydragon.native.model.ChannelInfo
+import com.lossydragon.native.model.FrameInfo
+import com.lossydragon.native.model.ModInfo
+import com.lossydragon.native.model.ModVars
 
-/**
- * https://github.com/libxmp/libxmp/blob/master/docs/libxmp.rst
- */
-object Xmp {
-
-    private const val TAG = "XMP Library"
+object Player {
 
     const val MIN_BUFFER_MS = 80
     const val MAX_BUFFER_MS = 1000
@@ -79,97 +74,57 @@ object Xmp {
     const val DEFAULT_VOLUME_BOOST = 1
     const val DEFAULT_INTERPOLATION = XMP_INTERP_LINEAR
 
+    private const val TAG: String = "Drakplayer Player Object"
+
+    var renderingBackend: RenderingBackend = RenderingBackend.INVALID
+        private set
+
     init {
         System.loadLibrary("xmp-jni")
     }
 
-    external fun loadModuleFd(fd: Int, modInfo: ModInfo): Int
+    fun switchBackend(backend: RenderingBackend) {
+        setBackend(backend.id)
+        renderingBackend = backend
+        deinitInactive()
+    }
 
     external fun deinit(): Int
-
+    external fun deinitInactive()
     external fun endPlayer(): Int
-
-    external fun getFrameInfo(values: FrameInfo)
-
-    external fun getPlayer(parm: Int): Int
-
-    external fun hasModuleEnded(): Boolean
-
-    external fun setXmpPlaying(value: Boolean)
-
-    external fun setLoopMode(loop: Boolean)
-
-    external fun init(
-        rate: Int,
-        ms: Int,
-        perfMode: Int = OBOE_PERFMODE_LOWLATENCY,
-        channels: Int = OBOE_CHANNELS_STEREO,
-        audioApi: Int = OBOE_AUDIO_API_UNSPECIFIED,
-        flags: Int = 0,
-    ): Boolean
-
-    external fun mute(chn: Int, status: Int): Int
-
-    external fun playAudio(): Int
-
-    external fun releaseModule(): Int
-
-    external fun restartAudio(): Boolean
-
-    external fun seek(time: Int): Int
-
-    external fun setPlayer(parm: Int, value: Int): Int
-
-    external fun startPlayer(rate: Int, format: Int = 0): Int
-
-    external fun stopAudio(): Boolean
-
-    external fun stopModule(): Int
-
-    external fun testModuleFd(fd: Int, modInfo: ModInfo): Boolean
-
-    external fun time(): Int
-
-    external fun getChannelData(ci: ChannelInfo)
-
-    external fun getFormats(): Array<String>
-
-    external fun getModVars(vars: ModVars)
-
-    external fun getPatternRow(
-        pat: Int,
-        row: Int,
-        rowNotes: ByteArray,
-        rowInstruments: ByteArray,
-        rowFxType: ByteArray,
-        rowFxParm: ByteArray
-    )
-
-    external fun getPatternRows(pat: Int): Int
-
-    external fun getSampleData(
-        trigger: Boolean,
-        ins: Int,
-        key: Int,
-        period: Int,
-        chn: Int,
-        width: Int,
-        buffer: ByteArray?
-    )
-
-    external fun getVersion(): String
-
-    external fun nextPosition(): Int
-
-    external fun prevPosition(): Int
-
-    external fun restartModule(): Int
-
-    external fun setPosition(num: Int): Int
-
-    external fun setSequence(seq: Int): Boolean
-
     external fun getAudioStats(stats: AudioStats)
+    external fun getChannelData(ci: ChannelInfo)
+    external fun getFormats(): Array<String>
+    external fun getFrameInfo(values: FrameInfo)
+    external fun getModVars(vars: ModVars)
+    external fun getPatternRow(pat: Int, row: Int, rowNotes: ByteArray, rowInstruments: ByteArray, rowFxType: ByteArray, rowFxParm: ByteArray)
+    external fun getPatternRows(pat: Int): Int
+    external fun getPlayer(parm: Int): Int
+    external fun getSampleData(trigger: Boolean, ins: Int, key: Int, period: Int, chn: Int, width: Int, buffer: ByteArray?)
+    external fun getVersion(): String
+    external fun hasModuleEnded(): Boolean
+    external fun init(rate: Int, ms: Int, perfMode: Int, channels: Int, audioApi: Int, flags: Int): Boolean
+    external fun loadModuleFd(fd: Int, modInfo: ModInfo): Int
+    external fun mute(chn: Int, status: Int): Int
+    external fun playAudio(): Int
+    external fun releaseModule(): Int
+    external fun seek(time: Int): Int
+    external fun setBackend(backend: Int)
+    external fun setLoopMode(loop: Boolean)
+    external fun setPlayer(parm: Int, value: Int): Int
+    external fun setPlaying(value: Boolean)
+    external fun setResampler(mode: Int): Int
+    external fun restartModule(): Int
+    external fun stopModule(): Int
+    external fun setPosition(pos: Int): Int
+    external fun prevPosition(): Int
+    external fun nextPosition(): Int
+    external fun restartAudio(): Boolean
+    external fun stopAudio(): Boolean
+    external fun setSequence(seq: Int): Boolean
+    external fun startPlayer(rate: Int, format: Int = 0): Int
+    external fun testModuleFd(fd: Int, modInfo: ModInfo): Boolean
+    external fun time(): Int
 
     fun testFromFd(context: Context, uri: Uri, modInfo: ModInfo = ModInfo()): Boolean {
         Log.d(TAG, "Testing: $uri")

@@ -12,11 +12,11 @@ import com.alorma.compose.settings.ui.expressive.SettingsMenuLink
 import com.alorma.compose.settings.ui.expressive.SettingsSwitch
 import com.lossydragon.modplayer.R
 import com.lossydragon.modplayer.db.AppPreferences
-import com.lossydragon.modplayer.player.RenderingBackend
 import com.lossydragon.modplayer.ui.screens.preferences.components.PreferenceItem
 import com.lossydragon.modplayer.ui.screens.preferences.components.PreferenceSection
 import com.lossydragon.modplayer.ui.screens.preferences.components.SingleChoiceAlertDialog
 import com.lossydragon.modplayer.ui.theme.AppTheme
+import com.lossydragon.native.RenderingBackend
 import kotlinx.collections.immutable.persistentListOf
 import kotlinx.coroutines.launch
 import org.koin.compose.koinInject
@@ -80,13 +80,13 @@ fun PreferencePlayer(
                 title = { Text(text = stringResource(R.string.pref_backend)) },
                 subtitle = { Text(text = stringResource(R.string.pref_backend_desc)) },
                 action = {
+                    val id = when (renderingBackend) {
+                        RenderingBackend.OPENMPT -> R.string.pref_backend_libopenmpt
+                        RenderingBackend.LIBXMP -> R.string.pref_backend_libxmp
+                        else -> R.string.pref_backend_invalid
+                    }
                     Text(
-                        text = stringResource(
-                            when (renderingBackend) {
-                                RenderingBackend.OPENMPT -> R.string.pref_backend_libopenmpt
-                                RenderingBackend.LIBXMP -> R.string.pref_backend_libxmp
-                            }
-                        )
+                        text = stringResource(id)
                     )
                 },
                 colors = colors,

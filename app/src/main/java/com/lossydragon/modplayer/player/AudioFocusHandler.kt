@@ -5,8 +5,7 @@ import android.media.AudioAttributes
 import android.media.AudioFocusRequest
 import android.media.AudioManager
 import android.media.AudioManager.AUDIOFOCUS_LOSS_TRANSIENT_CAN_DUCK
-import org.helllabs.libxmp.OpenMpt
-import org.helllabs.libxmp.Xmp
+import com.lossydragon.native.Player
 import timber.log.Timber
 
 /**
@@ -41,15 +40,13 @@ class AudioFocusHandler(context: Context) {
                 Timber.i("Audio Focus Changed: $change")
                 when (change) {
                     AudioManager.AUDIOFOCUS_GAIN -> {
-                        Xmp.setPlayer(Xmp.XMP_PLAYER_VOLUME, Xmp.DEFAULT_PLAYER_VOLUME)
-                        OpenMpt.setPlayer(Xmp.XMP_PLAYER_VOLUME, Xmp.DEFAULT_PLAYER_VOLUME)
+                        Player.setPlayer(Player.XMP_PLAYER_VOLUME, Player.DEFAULT_PLAYER_VOLUME)
                         hasFocus = true
                         onGain()
                     }
 
                     AUDIOFOCUS_LOSS_TRANSIENT_CAN_DUCK -> {
-                        Xmp.setPlayer(Xmp.XMP_PLAYER_VOLUME, 70) // Yes?
-                        OpenMpt.setPlayer(Xmp.XMP_PLAYER_VOLUME, 70)
+                        Player.setPlayer(Player.XMP_PLAYER_VOLUME, 70) // Yes?
                     }
 
                     AudioManager.AUDIOFOCUS_LOSS,

@@ -15,7 +15,8 @@ import com.lossydragon.modplayer.ui.theme.AppTheme
 @Composable
 fun PreferenceInfo(
     colors: ListItemColors,
-    onFormats: () -> Unit,
+    onMptFormats: () -> Unit,
+    onXmpFormats: () -> Unit,
     onAbout: () -> Unit
 ) {
     PreferenceSection(
@@ -28,17 +29,24 @@ fun PreferenceInfo(
         verticalArrangement = Arrangement.spacedBy(4.dp),
         content = {
             SettingsMenuLink(
-                title = { Text(text = stringResource(R.string.pref_formats)) },
-                subtitle = { Text(text = stringResource(R.string.pref_formats_desc)) },
+                title = { Text(text = stringResource(R.string.pref_formats_mpt)) },
+                subtitle = { Text(text = stringResource(R.string.pref_formats_mpt_desc)) },
                 colors = colors,
-                shapes = ListItemDefaults.segmentedShapes(0, 2),
-                onClick = onFormats
+                shapes = ListItemDefaults.segmentedShapes(0, 3),
+                onClick = onMptFormats
+            )
+            SettingsMenuLink(
+                title = { Text(text = stringResource(R.string.pref_formats_xmp)) },
+                subtitle = { Text(text = stringResource(R.string.pref_formats_xmp_desc)) },
+                colors = colors,
+                shapes = ListItemDefaults.segmentedShapes(1, 3),
+                onClick = onXmpFormats
             )
             SettingsMenuLink(
                 title = { Text(text = stringResource(R.string.pref_about)) },
                 subtitle = { Text(text = stringResource(R.string.pref_about_desc)) },
                 colors = colors,
-                shapes = ListItemDefaults.segmentedShapes(1, 2),
+                shapes = ListItemDefaults.segmentedShapes(2, 3),
                 onClick = onAbout
             )
         }
@@ -54,7 +62,7 @@ private fun Preview() {
             val colors = ListItemDefaults.segmentedColors(
                 containerColor = MaterialTheme.colorScheme.surfaceContainer,
             )
-            PreferenceInfo(colors = colors, onFormats = {}, onAbout = {})
+            PreferenceInfo(colors = colors, onMptFormats = {}, onXmpFormats = {}, onAbout = {})
         }
     }
 }

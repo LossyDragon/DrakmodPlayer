@@ -12,13 +12,13 @@ import androidx.datastore.preferences.core.intPreferencesKey
 import androidx.datastore.preferences.core.longPreferencesKey
 import androidx.datastore.preferences.core.stringPreferencesKey
 import androidx.datastore.preferences.preferencesDataStore
-import com.lossydragon.modplayer.player.RenderingBackend
 import com.lossydragon.modplayer.ui.theme.seed
+import com.lossydragon.native.Player
+import com.lossydragon.native.RenderingBackend
 import com.materialkolor.PaletteStyle
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.firstOrNull
 import kotlinx.coroutines.flow.map
-import org.helllabs.libxmp.Xmp
 import timber.log.Timber
 
 data class QueueState(
@@ -84,12 +84,13 @@ class AppPreferences(context: Context) {
 
     /* Player */
     private val renderingBackend = intPreferencesKey("rendering_backend")
-    fun getRenderingBackendFlow() =
-        flow(renderingBackend, RenderingBackend.OPENMPT.id).map(RenderingBackend::fromId)
+    fun getRenderingBackendFlow() = flow(renderingBackend, RenderingBackend.INVALID.id)
+        .map(RenderingBackend::fromId)
+
     suspend fun setRenderingBackend(v: RenderingBackend) = set(renderingBackend, v.id)
 
     private val sampleRate = intPreferencesKey("sample_rate")
-    fun getSampleRateFlow() = flow(sampleRate, Xmp.DEFAULT_SAMPLE_RATE)
+    fun getSampleRateFlow() = flow(sampleRate, Player.DEFAULT_SAMPLE_RATE)
     suspend fun setSampleRate(v: Int) = set(sampleRate, v)
 
     private val playerFlags = intPreferencesKey("player_flags")
@@ -97,31 +98,31 @@ class AppPreferences(context: Context) {
     suspend fun setPlayerFlags(v: Int) = set(playerFlags, v)
 
     private val bufferMs = intPreferencesKey("buffer_ms")
-    fun getBufferMsFlow() = flow(bufferMs, Xmp.DEFAULT_BUFFER_MS)
+    fun getBufferMsFlow() = flow(bufferMs, Player.DEFAULT_BUFFER_MS)
     suspend fun setBufferMs(v: Int) = set(bufferMs, v)
 
     private val defaultPan = intPreferencesKey("default_pan")
-    fun getDefaultPanFlow() = flow(defaultPan, Xmp.DEFAULT_PAN_SEPARATION)
+    fun getDefaultPanFlow() = flow(defaultPan, Player.DEFAULT_PAN_SEPARATION)
     suspend fun setDefaultPan(v: Int) = set(defaultPan, v)
 
     private val stereoMix = intPreferencesKey("stereo_mix")
-    fun getStereoMixFlow() = flow(stereoMix, Xmp.DEFAULT_STEREO_MIX)
+    fun getStereoMixFlow() = flow(stereoMix, Player.DEFAULT_STEREO_MIX)
     suspend fun setStereoMix(v: Int) = set(stereoMix, v)
 
     private val dspEffects = intPreferencesKey("dsp_effects")
-    fun getDspEffectFlow() = flow(dspEffects, Xmp.XMP_DSP_LOWPASS)
+    fun getDspEffectFlow() = flow(dspEffects, Player.XMP_DSP_LOWPASS)
     suspend fun setDspEffect(v: Int) = set(dspEffects, v)
 
     private val interpolationType = intPreferencesKey("interpolation_type")
-    fun getInterpolationTypeFlow() = flow(interpolationType, Xmp.DEFAULT_INTERPOLATION)
+    fun getInterpolationTypeFlow() = flow(interpolationType, Player.DEFAULT_INTERPOLATION)
     suspend fun setInterpolationType(v: Int) = set(interpolationType, v)
 
     private val playerVolume = intPreferencesKey("player_volume")
-    fun getPlayerVolumeFlow() = flow(playerVolume, Xmp.DEFAULT_PLAYER_VOLUME)
+    fun getPlayerVolumeFlow() = flow(playerVolume, Player.DEFAULT_PLAYER_VOLUME)
     suspend fun setPlayerVolume(v: Int) = set(playerVolume, v)
 
     private val volumeBoost = intPreferencesKey("volume_boost")
-    fun getVolumeBoostFlow() = flow(volumeBoost, Xmp.DEFAULT_VOLUME_BOOST)
+    fun getVolumeBoostFlow() = flow(volumeBoost, Player.DEFAULT_VOLUME_BOOST)
     suspend fun setVolumeBoost(v: Int) = set(volumeBoost, v)
 
     private val playerFormat = intPreferencesKey("player_format")
@@ -134,11 +135,11 @@ class AppPreferences(context: Context) {
 
     /* Oboe */
     private val oboePerfMode = intPreferencesKey("oboe_perf_mode")
-    fun getOboePerfModeFlow() = flow(oboePerfMode, Xmp.OBOE_PERFMODE_LOWLATENCY)
+    fun getOboePerfModeFlow() = flow(oboePerfMode, Player.OBOE_PERFMODE_LOWLATENCY)
     suspend fun setOboePerfMode(v: Int) = set(oboePerfMode, v)
 
     private val oboeAudioApi = intPreferencesKey("oboe_audio_api")
-    fun getOboeAudioApiFlow() = flow(oboeAudioApi, Xmp.OBOE_AUDIO_API_UNSPECIFIED)
+    fun getOboeAudioApiFlow() = flow(oboeAudioApi, Player.OBOE_AUDIO_API_UNSPECIFIED)
     suspend fun setOboeAudioApi(v: Int) = set(oboeAudioApi, v)
 
     /* Playback */

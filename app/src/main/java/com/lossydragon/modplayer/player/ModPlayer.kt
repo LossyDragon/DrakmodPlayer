@@ -18,6 +18,7 @@ import com.google.common.util.concurrent.ListenableFuture
 import com.lossydragon.modplayer.R
 import com.lossydragon.modplayer.db.AppPreferences
 import com.lossydragon.modplayer.db.entity.ModuleEntity
+import com.lossydragon.native.model.AudioStats
 import kotlin.math.abs
 import kotlin.time.Duration.Companion.milliseconds
 import kotlinx.coroutines.CoroutineScope
@@ -31,7 +32,6 @@ import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.runBlocking
 import kotlinx.serialization.json.Json
-import org.helllabs.libxmp.model.AudioStats
 import timber.log.Timber
 
 /**
@@ -94,10 +94,6 @@ class ModPlayer(
 
     /** Module metadata, emitted once after each successful load. */
     val modVarsFlow by engine::modVarsFlow
-
-    val backendFlow by engine::backendFlow
-
-    val supportsRawChannelSamplesFlow by engine::supportsRawChannelSamplesFlow
 
     /** Index of the currently playing item in [queue]; emitted on navigation. */
     val currentIndexFlow: StateFlow<Int>

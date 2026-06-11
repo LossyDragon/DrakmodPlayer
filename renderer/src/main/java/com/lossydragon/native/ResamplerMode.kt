@@ -1,11 +1,9 @@
-package com.lossydragon.modplayer.player
-
-import org.helllabs.libxmp.Xmp
+package com.lossydragon.native
 
 enum class ResamplerMode(val id: Int) {
-    NEAREST(Xmp.XMP_INTERP_NEAREST),
-    LINEAR(Xmp.XMP_INTERP_LINEAR),
-    CUBIC(Xmp.XMP_INTERP_SPLINE),
+    NEAREST(Player.XMP_INTERP_NEAREST),
+    LINEAR(Player.XMP_INTERP_LINEAR),
+    CUBIC(Player.XMP_INTERP_SPLINE),
     OPENMPT_AMIGA_A500(100),
     OPENMPT_AMIGA_A1200(101);
 

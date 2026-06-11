@@ -1,4 +1,4 @@
-package org.helllabs.libxmp.model
+package com.lossydragon.native.model
 
 import androidx.compose.runtime.Immutable
 

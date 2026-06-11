@@ -39,14 +39,14 @@ import com.lossydragon.modplayer.ui.screens.player.components.views.ChannelView
 import com.lossydragon.modplayer.ui.screens.player.components.views.DebugView
 import com.lossydragon.modplayer.ui.screens.player.components.views.PatternView
 import com.lossydragon.modplayer.ui.theme.AppTheme
+import com.lossydragon.native.model.FrameInfo
+import com.lossydragon.native.model.ModVars
+import com.lossydragon.native.model.Sequence
 import kotlin.time.Duration.Companion.seconds
 import kotlinx.collections.immutable.toPersistentList
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.isActive
 import kotlinx.coroutines.launch
-import org.helllabs.libxmp.model.FrameInfo
-import org.helllabs.libxmp.model.ModVars
-import org.helllabs.libxmp.model.Sequence
 import org.koin.compose.viewmodel.koinViewModel
 
 private sealed class PlayerAction {
@@ -409,8 +409,6 @@ private fun PlayerScreenContent(
                         modifier = Modifier.fillMaxSize(),
                         numChannels = state.modVars.chn,
                         instrumentNames = state.modVars.instruments.toPersistentList(),
-                        renderingBackend = state.renderingBackend,
-                        supportsRawChannelSamples = state.supportsRawChannelSamples,
                         isPlaying = (state.status == PlaybackStatus.PLAYING) &&
                             !queueSheetState.isVisible && !durationsSheetState.isVisible
                     )
@@ -418,8 +416,6 @@ private fun PlayerScreenContent(
                     2 -> DebugView(
                         modifier = Modifier.fillMaxSize(),
                         state = state,
-                        renderingBackend = state.renderingBackend,
-                        supportsRawChannelSamples = state.supportsRawChannelSamples,
                         isPlaying = (state.status == PlaybackStatus.PLAYING) &&
                             !queueSheetState.isVisible && !durationsSheetState.isVisible
                     )

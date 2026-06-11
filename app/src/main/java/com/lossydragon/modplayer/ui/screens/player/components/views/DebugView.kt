@@ -2,13 +2,10 @@ package com.lossydragon.modplayer.ui.screens.player.components.views
 
 import androidx.compose.foundation.*
 import androidx.compose.foundation.layout.*
-import androidx.compose.foundation.lazy.LazyColumn
-import androidx.compose.foundation.lazy.staggeredgrid.LazyVerticalStaggeredGrid
-import androidx.compose.foundation.lazy.staggeredgrid.StaggeredGridCells
+import androidx.compose.foundation.lazy.staggeredgrid.*
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.*
-import androidx.compose.ui.Modifier
 import androidx.compose.ui.text.*
 import androidx.compose.ui.text.font.*
 import androidx.compose.ui.text.style.*
@@ -16,22 +13,16 @@ import androidx.compose.ui.tooling.preview.*
 import androidx.compose.ui.unit.*
 import com.lossydragon.modplayer.player.PlaybackStatus
 import com.lossydragon.modplayer.player.PlayerUiState
-import com.lossydragon.modplayer.player.RenderingBackend
-import com.lossydragon.modplayer.player.model.NoteCell
-import com.lossydragon.modplayer.player.model.PatternData
 import com.lossydragon.modplayer.ui.theme.AppTheme
-import io.ktor.http.headers
+import com.lossydragon.native.Player
+import com.lossydragon.native.model.ChannelInfo
+import com.lossydragon.native.model.FrameInfo
+import com.lossydragon.native.model.ModVars
 import kotlin.time.Duration.Companion.milliseconds
-import kotlinx.collections.immutable.toImmutableList
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.isActive
 import kotlinx.coroutines.withContext
-import org.helllabs.libxmp.OpenMpt
-import org.helllabs.libxmp.Xmp
-import org.helllabs.libxmp.model.ChannelInfo
-import org.helllabs.libxmp.model.FrameInfo
-import org.helllabs.libxmp.model.ModVars
 
 private val NOTE_NAMES = arrayOf(
     "C-", "C#", "D-", "D#", "E-", "F-",
@@ -47,8 +38,6 @@ private fun noteStr(note: Int): String = when {
 fun DebugView(
     modifier: Modifier = Modifier,
     state: PlayerUiState,
-    renderingBackend: RenderingBackend,
-    supportsRawChannelSamples: Boolean,
     isPlaying: Boolean
 ) {
     Column {
@@ -67,8 +56,6 @@ fun DebugView(
         ChannelInfo(
             Modifier.weight(1f),
             state,
-            renderingBackend,
-            supportsRawChannelSamples,
             isPlaying
         )
     }
@@ -78,8 +65,6 @@ fun DebugView(
 private fun ChannelInfo(
     modifier: Modifier = Modifier,
     state: PlayerUiState,
-    renderingBackend: RenderingBackend,
-    supportsRawChannelSamples: Boolean,
     isPlaying: Boolean
 ) {
     val numChannels = state.modVars.chn
@@ -87,18 +72,13 @@ private fun ChannelInfo(
     val channelInfoBuffer = remember { ChannelInfo() }
     var channelSnapshot by remember { mutableStateOf(ChannelInfo()) }
     val isPlayingState = rememberUpdatedState(isPlaying)
-    val backendState = rememberUpdatedState(renderingBackend)
 
     LaunchedEffect(numChannels) {
         if (numChannels == 0) return@LaunchedEffect
         while (isActive) {
             if (isPlayingState.value) {
                 withContext(Dispatchers.Default) {
-                    if (backendState.value == RenderingBackend.LIBXMP) {
-                        Xmp.getChannelData(channelInfoBuffer)
-                    } else {
-                        OpenMpt.getChannelData(channelInfoBuffer)
-                    }
+                    Player.getChannelData(channelInfoBuffer)
                 }
                 channelSnapshot = ChannelInfo(
                     volumes = channelInfoBuffer.volumes.copyOf(),
@@ -296,8 +276,6 @@ private fun Preview() {
         DebugView(
             modifier = Modifier.fillMaxSize(),
             state = state,
-            renderingBackend = RenderingBackend.LIBXMP,
-            supportsRawChannelSamples = true,
             isPlaying = true,
         )
     }

@@ -37,11 +37,11 @@ import com.lossydragon.modplayer.ui.screens.browser.components.ModuleList
 import com.lossydragon.modplayer.ui.screens.player.components.MiniPlayerBar
 import com.lossydragon.modplayer.ui.theme.AppTheme
 import com.lossydragon.modplayer.util.takeReadWritePermission
+import com.lossydragon.native.model.FrameInfo
+import com.lossydragon.native.model.ModVars
 import kotlinx.collections.immutable.persistentListOf
 import kotlinx.collections.immutable.toImmutableList
 import kotlinx.coroutines.launch
-import org.helllabs.libxmp.model.FrameInfo
-import org.helllabs.libxmp.model.ModVars
 import org.koin.androidx.compose.koinViewModel
 
 @Composable

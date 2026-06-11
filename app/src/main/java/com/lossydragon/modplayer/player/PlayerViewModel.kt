@@ -10,11 +10,14 @@ import androidx.media3.common.Player
 import androidx.media3.common.util.UnstableApi
 import com.lossydragon.modplayer.db.AppPreferences
 import com.lossydragon.modplayer.db.entity.ModuleEntity
-import java.nio.charset.StandardCharsets
+import com.lossydragon.native.Player as NativePlayer
+import com.lossydragon.native.RenderingBackend
+import com.lossydragon.native.model.AudioStats
+import com.lossydragon.native.model.FrameInfo
+import com.lossydragon.native.model.ModVars
 import kotlinx.collections.immutable.ImmutableList
 import kotlinx.collections.immutable.persistentListOf
 import kotlinx.collections.immutable.toImmutableList
-import kotlinx.collections.immutable.toPersistentList
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.combine
@@ -24,9 +27,6 @@ import kotlinx.coroutines.flow.onEach
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.runBlocking
-import org.helllabs.libxmp.model.AudioStats
-import org.helllabs.libxmp.model.FrameInfo
-import org.helllabs.libxmp.model.ModVars
 import timber.log.Timber
 
 /** UI state and domain models for the module player. */
@@ -49,9 +49,7 @@ data class PlayerUiState(
     val currentSequence: Int = 0,
     val repeatMode: Int = Player.REPEAT_MODE_OFF,
     val currentQueueIndex: Int = 0,
-    val isShuffle: Boolean = false,
-    val renderingBackend: RenderingBackend = RenderingBackend.OPENMPT,
-    val supportsRawChannelSamples: Boolean = false
+    val isShuffle: Boolean = false
 )
 
 /** Bridges [Player] state to the UI via [PlayerUiState]. */
@@ -65,17 +63,15 @@ class PlayerViewModel(
     val state: StateFlow<PlayerUiState>
         field = MutableStateFlow(PlayerUiState())
 
+    val needsBackendSetup: StateFlow<Boolean>
+        field = MutableStateFlow(false)
+
     init {
+        prefs.getRenderingBackendFlow().onEach { backend ->
+            needsBackendSetup.value = (backend == RenderingBackend.INVALID)
+        }.launchIn(viewModelScope)
         prefs.getRowNumbersFlow().onEach { show ->
             state.update { it.copy(showRowNumbers = show) }
-        }.launchIn(viewModelScope)
-
-        player.backendFlow.onEach { backend ->
-            state.update { it.copy(renderingBackend = backend) }
-        }.launchIn(viewModelScope)
-
-        player.supportsRawChannelSamplesFlow.onEach { supported ->
-            state.update { it.copy(supportsRawChannelSamples = supported) }
         }.launchIn(viewModelScope)
 
         combine(player.modVarsFlow, player.frameInfoFlow) { mv, fi -> mv to fi }
@@ -252,6 +248,13 @@ class PlayerViewModel(
 
     private fun ensureServiceRunning() =
         Intent(appContext, PlayerService::class.java).also(appContext::startService)
+
+    fun selectBackend(backend: RenderingBackend) {
+        viewModelScope.launch {
+            prefs.setRenderingBackend(backend)
+            NativePlayer.switchBackend(backend)
+        }
+    }
 
     private fun syncModuleInfo() {
         state.update { it.copy(currentSequence = 0) }

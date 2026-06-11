@@ -9,6 +9,9 @@ import androidx.activity.ComponentActivity
 import androidx.activity.compose.LocalActivity
 import androidx.activity.compose.setContent
 import androidx.activity.result.contract.ActivityResultContracts
+import androidx.compose.material3.AlertDialog
+import androidx.compose.material3.Text
+import androidx.compose.material3.TextButton
 import androidx.compose.runtime.*
 import androidx.lifecycle.viewmodel.navigation3.rememberViewModelStoreNavEntryDecorator
 import androidx.media3.session.MediaController
@@ -29,6 +32,7 @@ import com.lossydragon.modplayer.util.requestNotificationPermission
 import com.lossydragon.modplayer.util.requestWriteStoragePermission
 import com.lossydragon.modplayer.util.setEdgeToEdgeConfig
 import com.lossydragon.modplayer.util.toModuleEntity
+import com.lossydragon.native.RenderingBackend
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.serialization.Serializable
 import org.koin.compose.viewmodel.koinViewModel
@@ -111,6 +115,36 @@ class MainActivity : ComponentActivity() {
                 val playerViewModel = koinViewModel<PlayerViewModel>(
                     viewModelStoreOwner = LocalActivity.current as ComponentActivity
                 )
+
+                val needsBackendSetup by playerViewModel.needsBackendSetup.collectAsState()
+                if (needsBackendSetup) {
+                    AlertDialog(
+                        onDismissRequest = {},
+                        title = { Text(text = "Choose Rendering Engine") },
+                        text = {
+                            Text(
+                                text = "Select the engine to use for mod tracker playback. " +
+                                    "You can change this later in Settings."
+                            )
+                        },
+                        confirmButton = {
+                            TextButton(
+                                onClick = {
+                                    playerViewModel.selectBackend(RenderingBackend.LIBXMP)
+                                },
+                                content = { Text(text = "libxmp") }
+                            )
+                        },
+                        dismissButton = {
+                            TextButton(
+                                onClick = {
+                                    playerViewModel.selectBackend(RenderingBackend.OPENMPT)
+                                },
+                                content = { Text(text = "libopenmpt") }
+                            )
+                        }
+                    )
+                }
 
                 LaunchedEffect(Unit) {
                     pendingPlayerModule.collect { module ->

@@ -15,9 +15,9 @@ import androidx.compose.ui.tooling.preview.*
 import androidx.compose.ui.unit.*
 import com.lossydragon.modplayer.R.string.title_subsong_sheet
 import com.lossydragon.modplayer.ui.theme.AppTheme
+import com.lossydragon.native.model.Sequence
 import kotlinx.collections.immutable.ImmutableList
 import kotlinx.collections.immutable.toPersistentList
-import org.helllabs.libxmp.model.Sequence
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable

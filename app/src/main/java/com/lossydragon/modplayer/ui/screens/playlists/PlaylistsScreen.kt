@@ -42,11 +42,11 @@ import com.lossydragon.modplayer.ui.screens.playlists.components.PlaylistEntryIt
 import com.lossydragon.modplayer.ui.screens.playlists.components.PlaylistListItem
 import com.lossydragon.modplayer.ui.screens.playlists.components.PlaylistsFabMenu
 import com.lossydragon.modplayer.ui.theme.AppTheme
+import com.lossydragon.native.model.FrameInfo
+import com.lossydragon.native.model.ModVars
 import kotlinx.collections.immutable.persistentListOf
 import kotlinx.coroutines.launch
 import kotlinx.serialization.Serializable
-import org.helllabs.libxmp.model.FrameInfo
-import org.helllabs.libxmp.model.ModVars
 import org.koin.compose.viewmodel.koinViewModel
 import sh.calvin.reorderable.ReorderableItem
 import sh.calvin.reorderable.rememberReorderableLazyListState

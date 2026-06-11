@@ -30,7 +30,8 @@ import org.koin.compose.koinInject
 internal fun PreferencesScreen(
     snackbarHostState: SnackbarHostState,
     onBack: () -> Unit,
-    onFormats: () -> Unit,
+    onMptFormats: () -> Unit,
+    onXmpFormats: () -> Unit,
     modifier: Modifier = Modifier,
     onAbout: () -> Unit
 ) {
@@ -113,7 +114,8 @@ internal fun PreferencesScreen(
                     PreferencePlayer(colors)
                     PreferenceInfo(
                         colors = colors,
-                        onFormats = onFormats,
+                        onMptFormats = onMptFormats,
+                        onXmpFormats = onXmpFormats,
                         onAbout = onAbout
                     )
                     Text(
@@ -140,7 +142,8 @@ private fun Preview() {
             snackbarHostState = SnackbarHostState(),
             onBack = {},
             onAbout = {},
-            onFormats = {},
+            onMptFormats = {},
+            onXmpFormats = {},
         )
     }
 }

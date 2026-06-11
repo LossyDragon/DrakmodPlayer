@@ -12,16 +12,19 @@ import androidx.navigation3.runtime.rememberNavBackStack
 import androidx.navigation3.runtime.rememberSaveableStateHolderNavEntryDecorator
 import androidx.navigation3.ui.NavDisplay
 import com.lossydragon.modplayer.util.shareLink
+import com.lossydragon.native.Player
 import kotlinx.collections.immutable.toPersistentList
 import kotlinx.serialization.Serializable
-import org.helllabs.libxmp.OpenMpt
 
 private sealed interface NavKeyPreferences : NavKey {
-    @Serializable data object Preferences : NavKeyPreferences
+    @Serializable
+    data object Preferences : NavKeyPreferences
 
-    @Serializable data object About : NavKeyPreferences
+    @Serializable
+    data object About : NavKeyPreferences
 
-    @Serializable data object Formats : NavKeyPreferences
+    @Serializable
+    data class Formats(val format: String) : NavKeyPreferences
 }
 
 @Composable
@@ -49,21 +52,22 @@ fun NavPreferences(
                     modifier = modifier,
                     snackbarHostState = snackbarHostState,
                     onBack = onBack,
-                    onFormats = { backStack.add(NavKeyPreferences.Formats) },
+                    onMptFormats = { backStack.add(NavKeyPreferences.Formats("mpt")) },
+                    onXmpFormats = { backStack.add(NavKeyPreferences.Formats("xmp")) },
                     onAbout = { backStack.add(NavKeyPreferences.About) }
                 )
             }
             entry<NavKeyPreferences.About> {
-                //   onBack = backStack::removeLastOrNull,
+                TextButton(onClick = { backStack.removeLastOrNull() }) { Text("Back") }
             }
             entry<NavKeyPreferences.Formats> {
                 val context = LocalContext.current
-                val formats = remember { OpenMpt.getFormats().toPersistentList() }
+                val formats = remember(it.format) { Player.getFormats().sorted() }
                 PreferencesFormats(
                     modifier = modifier,
                     snackbarHostState = snackbarHostState,
                     onBack = backStack::removeLastOrNull,
-                    formatList = formats,
+                    formatList = formats.toPersistentList(),
                     onClick = context::shareLink
                 )
             }

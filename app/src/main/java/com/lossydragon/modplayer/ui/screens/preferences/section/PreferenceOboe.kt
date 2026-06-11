@@ -4,7 +4,7 @@ import androidx.compose.foundation.layout.*
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.platform.*
-import androidx.compose.ui.res.stringResource
+import androidx.compose.ui.res.*
 import androidx.compose.ui.tooling.preview.*
 import androidx.compose.ui.unit.*
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
@@ -15,20 +15,20 @@ import com.lossydragon.modplayer.ui.screens.preferences.components.PreferenceIte
 import com.lossydragon.modplayer.ui.screens.preferences.components.PreferenceSection
 import com.lossydragon.modplayer.ui.screens.preferences.components.SingleChoiceAlertDialog
 import com.lossydragon.modplayer.ui.theme.AppTheme
+import com.lossydragon.native.Player
 import kotlinx.collections.immutable.persistentListOf
 import kotlinx.coroutines.launch
-import org.helllabs.libxmp.Xmp
 import org.koin.compose.koinInject
 
 private fun Int.toPerfModeKey() = when (this) {
-    Xmp.OBOE_PERFMODE_NONE -> "none"
-    Xmp.OBOE_PERFMODE_POWERSAVING -> "powersaving"
+    Player.OBOE_PERFMODE_NONE -> "none"
+    Player.OBOE_PERFMODE_POWERSAVING -> "powersaving"
     else -> "lowlatency"
 }
 
 private fun Int.toAudioApiKey() = when (this) {
-    Xmp.OBOE_AUDIO_API_AAUDIO -> "aaudio"
-    Xmp.OBOE_AUDIO_API_OPENSLES -> "opensles"
+    Player.OBOE_AUDIO_API_AAUDIO -> "aaudio"
+    Player.OBOE_AUDIO_API_OPENSLES -> "opensles"
     else -> "unspecified"
 }
 
@@ -81,9 +81,9 @@ fun PreferenceOboe(
     }
 
     val perfMode by prefs.getOboePerfModeFlow()
-        .collectAsStateWithLifecycle(initialValue = Xmp.OBOE_PERFMODE_LOWLATENCY)
+        .collectAsStateWithLifecycle(initialValue = Player.OBOE_PERFMODE_LOWLATENCY)
     val audioApi by prefs.getOboeAudioApiFlow()
-        .collectAsStateWithLifecycle(initialValue = Xmp.OBOE_AUDIO_API_UNSPECIFIED)
+        .collectAsStateWithLifecycle(initialValue = Player.OBOE_AUDIO_API_UNSPECIFIED)
 
     var isPerfModeShowing by remember { mutableStateOf(false) }
     if (isPerfModeShowing) {
@@ -92,9 +92,9 @@ fun PreferenceOboe(
             items = perfModeOptions,
             onItemSelected = { key ->
                 fun String.toPerfModeInt() = when (this) {
-                    "none" -> Xmp.OBOE_PERFMODE_NONE
-                    "powersaving" -> Xmp.OBOE_PERFMODE_POWERSAVING
-                    else -> Xmp.OBOE_PERFMODE_LOWLATENCY
+                    "none" -> Player.OBOE_PERFMODE_NONE
+                    "powersaving" -> Player.OBOE_PERFMODE_POWERSAVING
+                    else -> Player.OBOE_PERFMODE_LOWLATENCY
                 }
                 isPerfModeShowing = false
                 key?.let { scope.launch { prefs.setOboePerfMode(it.toPerfModeInt()) } }
@@ -109,9 +109,9 @@ fun PreferenceOboe(
             items = apiOptions,
             onItemSelected = { key ->
                 fun String.toAudioApiInt() = when (this) {
-                    "aaudio" -> Xmp.OBOE_AUDIO_API_AAUDIO
-                    "opensles" -> Xmp.OBOE_AUDIO_API_OPENSLES
-                    else -> Xmp.OBOE_AUDIO_API_UNSPECIFIED
+                    "aaudio" -> Player.OBOE_AUDIO_API_AAUDIO
+                    "opensles" -> Player.OBOE_AUDIO_API_OPENSLES
+                    else -> Player.OBOE_AUDIO_API_UNSPECIFIED
                 }
                 isAudioApiShowing = false
                 key?.let { scope.launch { prefs.setOboeAudioApi(it.toAudioApiInt()) } }

@@ -23,11 +23,11 @@ import com.lossydragon.modplayer.db.entity.ModuleEntity
 import com.lossydragon.modplayer.player.PlaybackStatus
 import com.lossydragon.modplayer.player.PlayerUiState
 import com.lossydragon.modplayer.ui.theme.AppTheme
+import com.lossydragon.native.model.FrameInfo
+import com.lossydragon.native.model.ModVars
 import kotlin.math.abs
 import kotlinx.collections.immutable.persistentListOf
 import kotlinx.coroutines.launch
-import org.helllabs.libxmp.model.FrameInfo
-import org.helllabs.libxmp.model.ModVars
 
 @OptIn(ExperimentalMaterial3ExpressiveApi::class)
 @Composable
