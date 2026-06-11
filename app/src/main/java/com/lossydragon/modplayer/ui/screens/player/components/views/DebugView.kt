@@ -197,6 +197,7 @@ private fun ModVarsInfo(state: PlayerUiState) {
         DebugRow("Smp/Spd/BPM", "${mv.smp} / ${mv.spd} / ${mv.bpm}")
         DebugRow("Len/Rst/Gvl", "${mv.len} / ${mv.rst} / ${mv.gvl}")
         DebugRow("Sequences", mv.miNumSequences.toString())
+        DebugRow("Renderer", mv.renderingEngine)
         if (mv.miComment.isNotBlank()) DebugRow("Comment", mv.miComment.take(32))
     }
 }

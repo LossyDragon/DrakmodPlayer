@@ -23,6 +23,7 @@ data class ModVars(
     val miComment: String = "",     /* Comment text, if any */
     val seqData: Array<Sequence> = emptyArray(),
     val instruments: Array<String> = emptyArray(),
+    val renderingEngine: String = "",
 ) {
     val modName: String get() = name.trim()
     val modType: String get() = type.trim()

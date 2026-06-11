@@ -86,6 +86,7 @@ void initModVarsFields(JNIEnv* env) {
   GET_FIELD(g_modVars, miComment, "Ljava/lang/String;");
   GET_FIELD(g_modVars, seqData, "[Lcom/lossydragon/native/model/Sequence;");
   GET_FIELD(g_modVars, instruments, "[Ljava/lang/String;");
+  GET_FIELD(g_modVars, renderingEngine, "Ljava/lang/String;");
 }
 
 void initSequenceFields(JNIEnv* env) {

@@ -563,6 +563,9 @@ void openmpt_getModVars(JNIEnv* env, jobject modVars) {
   }
   env->SetObjectField(modVars, g_modVars.instruments, insArray);
 
+  jstring renderingStr = env->NewStringUTF("libopenmpt");
+  env->SetObjectField(modVars, g_modVars.renderingEngine, renderingStr);
+
   env->DeleteLocalRef(titleStr);
   env->DeleteLocalRef(typeStr);
   env->DeleteLocalRef(messageStr);
@@ -570,6 +573,7 @@ void openmpt_getModVars(JNIEnv* env, jobject modVars) {
   env->DeleteLocalRef(seqArray);
   env->DeleteLocalRef(stringCls);
   env->DeleteLocalRef(insArray);
+  env->DeleteLocalRef(renderingStr);
 }
 
 void openmpt_getPatternRow(JNIEnv* env, jint pat, jint row, jbyteArray rowNotes, jbyteArray rowInstruments, jbyteArray rowFxType, jbyteArray rowFxParm) {

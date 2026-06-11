@@ -659,6 +659,9 @@ void xmp_getModVars(JNIEnv* env, jobject modVars) {
   }
   env->SetObjectField(modVars, g_modVars.instruments, insArray);
 
+  jstring renderingStr = env->NewStringUTF("libxmp");
+  env->SetObjectField(modVars, g_modVars.renderingEngine, renderingStr);
+
   env->DeleteLocalRef(nameStr);
   env->DeleteLocalRef(typeStr);
   env->DeleteLocalRef(commentStr);
@@ -666,6 +669,7 @@ void xmp_getModVars(JNIEnv* env, jobject modVars) {
   env->DeleteLocalRef(seqCls);
   env->DeleteLocalRef(insArray);
   env->DeleteLocalRef(stringClass);
+  env->DeleteLocalRef(renderingStr);
 }
 
 void xmp_getPatternRow(JNIEnv* env, jint pat, jint row, jbyteArray rowNotes, jbyteArray rowInstruments, jbyteArray rowFxType, jbyteArray rowFxParm) {

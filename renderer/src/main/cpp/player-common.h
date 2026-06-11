@@ -90,6 +90,7 @@ struct ModVarsFields {
   jfieldID miComment = nullptr;
   jfieldID seqData = nullptr;
   jfieldID instruments = nullptr;
+  jfieldID renderingEngine = nullptr;
 };
 
 struct SequenceFields {
