@@ -179,6 +179,7 @@ jboolean openmpt_setSequence(JNIEnv* env, jint seq) {
   if (openmpt_module_select_subsong(state.mod, seq) == 0) return JNI_FALSE;
   state.selected_subsong = seq;
   state.duration = openmpt_module_get_duration_seconds(state.mod);
+  set_playing(1); // reset module_ended
   return JNI_TRUE;
 }
 
