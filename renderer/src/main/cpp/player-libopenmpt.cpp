@@ -46,6 +46,9 @@ struct OpenMptState {
   double duration = 0.0;
   openmpt_module* mod = nullptr;
   std::array<int, MAX_CHANNELS> current_sample{};
+  // used to derive pitch bend: period when the note last triggered
+  std::array<int, MAX_CHANNELS> base_periods{};
+  std::array<int, MAX_CHANNELS> prev_keys{};
 
   static OpenMptState& instance() {
     static OpenMptState s;
@@ -125,6 +128,8 @@ void destroyModule(OpenMptState& state) {
   state.duration = 0.0;
   state.selected_subsong = 0;
   state.current_sample.fill(0);
+  state.base_periods.fill(0);
+  state.prev_keys.fill(-1);
 }
 
 static jbyte readSampleByte(const openmpt_module_sample_state& sample, int frame) {
@@ -468,7 +473,16 @@ void openmpt_getChannelData(JNIEnv* env, jobject channelInfo) {
     keys[i] = ch.key;
     periods[i] = ch.period;
     positions[i] = ch.position;
-    pitchbends[i] = ch.pitchbend;
+    // ch.pitchbend is MIDI-only (GetMIDIPitchBend / microTuning), always 8192 for MOD/XM/S3M/IT.
+    // Derive pitch bend from period deviation since the note triggered instead.
+    if (ch.key != state.prev_keys[i]) {
+      state.base_periods[i] = ch.period;
+      state.prev_keys[i] = ch.key;
+    }
+    // period is inverse to pitch: lower period = higher frequency, so negate the diff
+    pitchbends[i] = (state.base_periods[i] > 0 && ch.period > 0)
+      ? state.base_periods[i] - ch.period
+      : 0;
     notes[i] = ch.note;
     samples[i] = ch.sample;
     state.current_sample[i] = ch.sample;
