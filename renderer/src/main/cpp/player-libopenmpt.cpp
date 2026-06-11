@@ -364,8 +364,14 @@ jint openmpt_setResampler(JNIEnv* env, jint mode) {
   if (mode == 100 || mode == 101) {
     openmpt_module_ctl_set_boolean(state.mod, "render.resampler.emulate_amiga", 1);
     openmpt_module_ctl_set_text(state.mod, "render.resampler.emulate_amiga_type", mode == 100 ? "a500" : "a1200");
-    return 0;
+  } else {
+    // XMP_INTERP_NEAREST=0, LINEAR=1, SPLINE=2 → mpt filter lengths 1, 2, 4
+    static const int kFilterLen[] = {1, 2, 4};
+    int filter_len = (mode >= 0 && mode <= 2) ? kFilterLen[mode] : 2;
+    openmpt_module_ctl_set_boolean(state.mod, "render.resampler.emulate_amiga", 0);
+    openmpt_module_ctl_set_integer(state.mod, "render.interpolationfilterlength", filter_len);
   }
+  return 0;
 }
 
 jint openmpt_startPlayer(JNIEnv* env, jint rate, jint format) {
