@@ -220,9 +220,9 @@ jboolean openmpt_testFd(JNIEnv* env, jint fd, jobject modInfo) {
   }
 
   std::string title = metadata(mod, "title");
-  std::string type = metadata(mod, "type");
+  std::string type_long = metadata(mod, "type_long");
   jstring name = env->NewStringUTF(title.c_str());
-  jstring typeStr = env->NewStringUTF(type.c_str());
+  jstring typeStr = env->NewStringUTF(type_long.c_str());
   env->SetObjectField(modInfo, g_modInfo.name, name);
   env->SetObjectField(modInfo, g_modInfo.type, typeStr);
   env->DeleteLocalRef(name);

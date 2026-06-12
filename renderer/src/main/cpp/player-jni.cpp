@@ -82,19 +82,8 @@ METHOD(jint, loadModuleFd)(JNIEnv* env, jobject obj, jint fd, jobject modInfo) {
 }
 
 METHOD(jboolean, testModuleFd)(JNIEnv* env, jobject obj, jint fd, jobject modInfo) {
-  auto result = xmp_testFd(env, fd, modInfo); // libxmp results in better mod info.
-
-  if (!result) {
-    LOG_WARN("libxmp couldn't test module, trying libopenmpt");
-    result = openmpt_testFd(env, fd, modInfo);
-  }
-
-  if (!result) {
-    LOG_WARN("Neither renderers could test file successfully. Probably not a valid module");
-  }
-
-  close(fd);
-  return result;
+  // Either is safe to call regardless of chosen backend.
+  return g_backend == BACKEND_OPENMPT ? openmpt_testFd(env, fd, modInfo) : xmp_testFd(env, fd, modInfo);
 }
 
 METHOD(jint, startPlayer)(JNIEnv* env, jobject obj, jint rate, jint format) {
