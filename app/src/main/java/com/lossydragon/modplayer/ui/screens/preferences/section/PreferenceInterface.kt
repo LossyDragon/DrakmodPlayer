@@ -240,7 +240,7 @@ fun PreferenceInterface(
             )
             SettingsSwitch(
                 title = { Text(text = stringResource(R.string.pref_amoled)) },
-                subtitle = { Text(text = amoled.toString()) },
+                subtitle = { Text(text = stringResource(R.string.pref_amoled_desc)) },
                 colors = colors,
                 shapes = ListItemDefaults.segmentedShapes(2, 3),
                 state = amoled,

@@ -26,10 +26,22 @@ private fun Int.toPerfModeKey() = when (this) {
     else -> "lowlatency"
 }
 
+private fun String.toPerfModeInt() = when (this) {
+    "none" -> Player.OBOE_PERFMODE_NONE
+    "powersaving" -> Player.OBOE_PERFMODE_POWERSAVING
+    else -> Player.OBOE_PERFMODE_LOWLATENCY
+}
+
 private fun Int.toAudioApiKey() = when (this) {
     Player.OBOE_AUDIO_API_AAUDIO -> "aaudio"
     Player.OBOE_AUDIO_API_OPENSLES -> "opensles"
     else -> "unspecified"
+}
+
+private fun String.toAudioApiInt() = when (this) {
+    "aaudio" -> Player.OBOE_AUDIO_API_AAUDIO
+    "opensles" -> Player.OBOE_AUDIO_API_OPENSLES
+    else -> Player.OBOE_AUDIO_API_UNSPECIFIED
 }
 
 private val perfModeOptions = persistentListOf(
@@ -91,11 +103,6 @@ fun PreferenceOboe(
             selectedItemKey = perfMode.toPerfModeKey(),
             items = perfModeOptions,
             onItemSelected = { key ->
-                fun String.toPerfModeInt() = when (this) {
-                    "none" -> Player.OBOE_PERFMODE_NONE
-                    "powersaving" -> Player.OBOE_PERFMODE_POWERSAVING
-                    else -> Player.OBOE_PERFMODE_LOWLATENCY
-                }
                 isPerfModeShowing = false
                 key?.let { scope.launch { prefs.setOboePerfMode(it.toPerfModeInt()) } }
             },
@@ -108,11 +115,6 @@ fun PreferenceOboe(
             selectedItemKey = audioApi.toAudioApiKey(),
             items = apiOptions,
             onItemSelected = { key ->
-                fun String.toAudioApiInt() = when (this) {
-                    "aaudio" -> Player.OBOE_AUDIO_API_AAUDIO
-                    "opensles" -> Player.OBOE_AUDIO_API_OPENSLES
-                    else -> Player.OBOE_AUDIO_API_UNSPECIFIED
-                }
                 isAudioApiShowing = false
                 key?.let { scope.launch { prefs.setOboeAudioApi(it.toAudioApiInt()) } }
             },
@@ -137,7 +139,7 @@ fun PreferenceOboe(
                     Text(text = stringResource(text))
                 },
                 colors = colors,
-                shapes = ListItemDefaults.segmentedShapes(0, 3),
+                shapes = ListItemDefaults.segmentedShapes(0, 1),
             )
             SettingsMenuLink(
                 onClick = { isAudioApiShowing = true },
@@ -148,7 +150,7 @@ fun PreferenceOboe(
                     Text(text = stringResource(text))
                 },
                 colors = colors,
-                shapes = ListItemDefaults.segmentedShapes(2, 3),
+                shapes = ListItemDefaults.segmentedShapes(1, 1),
             )
         }
     )

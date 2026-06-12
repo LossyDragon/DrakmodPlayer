@@ -46,7 +46,7 @@ internal fun PreferencesScreen(
     var isShowingResetDialog by remember { mutableStateOf(false) }
     if (isShowingResetDialog) {
         AlertDialog(
-            onDismissRequest = {},
+            onDismissRequest = { isShowingResetDialog = false },
             icon = {
                 Icon(
                     imageVector = Icons.Default.RestartAlt,
