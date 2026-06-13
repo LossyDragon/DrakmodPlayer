@@ -4,7 +4,6 @@ import android.content.Context
 import android.media.AudioAttributes
 import android.media.AudioFocusRequest
 import android.media.AudioManager
-import android.media.AudioManager.AUDIOFOCUS_LOSS_TRANSIENT_CAN_DUCK
 import com.lossydragon.native.Player
 import timber.log.Timber
 
@@ -17,7 +16,7 @@ class AudioFocusHandler(context: Context) {
     private var focusRequest: AudioFocusRequest? = null
 
     /** True while the app holds [AudioManager.AUDIOFOCUS_GAIN]. */
-    var hasFocus: Boolean = false
+    var hasFocus = false
         private set
 
     /**
@@ -45,9 +44,8 @@ class AudioFocusHandler(context: Context) {
                         onGain()
                     }
 
-                    AUDIOFOCUS_LOSS_TRANSIENT_CAN_DUCK -> {
-                        Player.setPlayer(Player.XMP_PLAYER_VOLUME, 70) // Yes?
-                    }
+                    AudioManager.AUDIOFOCUS_LOSS_TRANSIENT_CAN_DUCK ->
+                        Player.setPlayer(Player.XMP_PLAYER_VOLUME, 70)
 
                     AudioManager.AUDIOFOCUS_LOSS,
                     AudioManager.AUDIOFOCUS_LOSS_TRANSIENT -> {
@@ -61,14 +59,13 @@ class AudioFocusHandler(context: Context) {
         focusRequest = request
 
         val result = audioManager.requestAudioFocus(request)
-        if (result == AudioManager.AUDIOFOCUS_REQUEST_GRANTED) hasFocus = true
-
+        hasFocus = result == AudioManager.AUDIOFOCUS_REQUEST_GRANTED
         Timber.d("Audio focus result=$result")
     }
 
     /** Releases audio focus. Call from the service's onDestroy. */
     fun abandon() {
-        focusRequest?.let { audioManager.abandonAudioFocusRequest(it) }
+        focusRequest?.let(audioManager::abandonAudioFocusRequest)
         focusRequest = null
         hasFocus = false
     }

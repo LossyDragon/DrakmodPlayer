@@ -30,9 +30,11 @@ data class NoteCell(
     val fxParam: Int,
     val fxType: Int,
     val instrument: Int,
-    val note: Int
+    val note: Int,
+    val fx2Param: Int = -1, // secondary effect: f2t/f2p (libxmp), volume column (openmpt)
+    val fx2Type: Int = -1
 ) {
-    val isEmpty: Boolean get() = note == 0 && instrument == 0 && fxType < 0
+    val isEmpty: Boolean get() = note == 0 && instrument == 0 && fxType < 0 && fx2Type < 0
 
     val noteStr: String = when (note) {
         0 -> "---"
@@ -44,9 +46,11 @@ data class NoteCell(
 
     val instrumentStr: String = if (instrument > 0) HEX2[instrument and 0xFF] else ".."
 
-    val effectTypeChar: Char = if (fxType >= 0) effectChar(fxType) else '.'
-
-    val effectTypeStr: String = effectTypeChar.toString()
+    val effectTypeStr: String = if (fxType >= 0) effectChar(fxType).toString() else "."
 
     val effectParamStr: String = if (fxType >= 0) HEX2[fxParam and 0xFF] else ".."
+
+    val effect2TypeStr: String = if (fx2Type >= 0) effectChar(fx2Type).toString() else "."
+
+    val effect2ParamStr: String = if (fx2Type >= 0) HEX2[fx2Param and 0xFF] else ".."
 }

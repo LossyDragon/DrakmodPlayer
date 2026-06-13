@@ -9,7 +9,6 @@ import com.lossydragon.native.Player
 import com.lossydragon.native.RenderingBackend
 import com.lossydragon.native.ResamplerMode
 import com.lossydragon.native.model.AudioStats
-import com.lossydragon.native.model.ChannelInfo
 import com.lossydragon.native.model.FrameInfo
 import com.lossydragon.native.model.ModInfo
 import com.lossydragon.native.model.ModVars
@@ -18,6 +17,7 @@ import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.cancel
+import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.distinctUntilChanged
@@ -40,9 +40,9 @@ class PlayerEngine(
     /** The dedicated thread running [renderLoop]. Null when stopped. */
     private var renderThread: Thread? = null
 
-    /** Per-frame playback snapshot emitted by the render loop; null when idle. */
+    /** Per-frame playback snapshot emitted by the render loop; reset when idle. */
     val frameInfoFlow: StateFlow<FrameInfo>
-        field = MutableStateFlow<FrameInfo>(FrameInfo())
+        field = MutableStateFlow(FrameInfo())
 
     /** True while the Oboe stream is actively rendering audio. */
     val isPlaying: StateFlow<Boolean>
@@ -64,11 +64,15 @@ class PlayerEngine(
     val audioDisconnectedFlow: StateFlow<Boolean>
         field = MutableStateFlow(false)
 
-    /** Lazily populated by [load] / [loadNext]; read by [renderLoop]. */
+    /** Lazily populated by [getPatternData]; cleared on each module load. */
     private val patternCache = mutableMapOf<Int, PatternData>()
 
     @Volatile
-    private var isRepeatOne: Boolean = false
+    private var isRepeatOne = false
+
+    /** Set to true to signal the render thread to exit cleanly. */
+    @Volatile
+    private var stopRequest = false
 
     /** When true, the render loop advances through all module sequences automatically. */
     @Volatile
@@ -86,49 +90,24 @@ class PlayerEngine(
 
     /** True after the render loop exits because the module reached its end. */
     @Volatile
-    var endedNaturally: Boolean = false
-        private set
-
-    /** Set to true to signal the render thread to exit cleanly. */
-    @Volatile
-    var stopRequest = false
+    var endedNaturally = false
         private set
 
     init {
-        val initialBackend = runBlocking { prefs.getRenderingBackendFlow().first() }
+        val initialBackend = prefs.getRenderingBackendFlow().blockingFirst()
         if (initialBackend != RenderingBackend.INVALID) Player.switchBackend(initialBackend)
 
-        prefs.getVolumeBoostFlow().distinctUntilChanged().onEach {
-            if (initialized) Player.setPlayer(Player.XMP_PLAYER_AMP, it)
-        }.launchIn(scope)
-        prefs.getStereoMixFlow().distinctUntilChanged().onEach {
-            if (initialized) Player.setPlayer(Player.XMP_PLAYER_MIX, it)
-        }.launchIn(scope)
-        prefs.getDspEffectFlow().distinctUntilChanged().onEach {
-            if (initialized) Player.setPlayer(Player.XMP_PLAYER_DSP, it)
-        }.launchIn(scope)
-        prefs.getPlayerVolumeFlow().distinctUntilChanged().onEach {
-            if (initialized) Player.setPlayer(Player.XMP_PLAYER_VOLUME, it)
-        }.launchIn(scope)
-        prefs.getInterpolationTypeFlow().distinctUntilChanged().onEach {
-            if (initialized) Player.setResampler(ResamplerMode.fromId(it).id)
-        }.launchIn(scope)
-        prefs.getPlayerFlagsFlow().distinctUntilChanged().onEach {
-            if (initialized && Player.renderingBackend == RenderingBackend.LIBXMP) {
-                val cflags = Player.getPlayer(Player.XMP_PLAYER_CFLAGS)
-                val newCflags = if ((it and Player.XMP_FLAGS_A500) != 0) {
-                    cflags or Player.XMP_FLAGS_A500
-                } else {
-                    cflags and Player.XMP_FLAGS_A500.inv()
-                }
-                Player.setPlayer(Player.XMP_PLAYER_CFLAGS, newCflags)
-            }
-        }.launchIn(scope)
+        observePref(prefs.getVolumeBoostFlow()) { Player.setPlayer(Player.XMP_PLAYER_AMP, it) }
+        observePref(prefs.getStereoMixFlow()) { Player.setPlayer(Player.XMP_PLAYER_MIX, it) }
+        observePref(prefs.getDspEffectFlow()) { Player.setPlayer(Player.XMP_PLAYER_DSP, it) }
+        observePref(prefs.getPlayerVolumeFlow()) { Player.setPlayer(Player.XMP_PLAYER_VOLUME, it) }
+        observePref(prefs.getInterpolationTypeFlow()) {
+            Player.setResampler(ResamplerMode.fromId(it).id)
+        }
+        observePref(prefs.getPlayerFlagsFlow(), ::applyA500Flag)
     }
 
-    /**
-     * Enables or disables single-track repeat mode.
-     */
+    /** Enables or disables single-track repeat mode. */
     fun isRepeatingOne(value: Boolean) {
         Timber.d("isRepeatingOne: $value")
         isRepeatOne = value
@@ -145,9 +124,7 @@ class PlayerEngine(
         val result = Player.setSequence(index)
         Timber.d("setSequence: index=$index result=$result")
         if (result) {
-            val mv = ModVars()
-            Player.getModVars(mv)
-            modVarsFlow.value = mv
+            modVarsFlow.value = readModVars()
             positionMs.value = 0L
             currentSequenceFlow.value = index
         }
@@ -155,53 +132,17 @@ class PlayerEngine(
     }
 
     /**
-     * Full initialisation path: reads audio settings from prefs, inits the Oboe stream,
-     * then loads [file].
-     *
-     * Use [loadNext] for queue transitions so the stream stays open between tracks.
+     * Fast-path for queue transitions: keeps the Oboe stream open, stops the
+     * render loop, releases the current module, then loads [file].
+     * Falls back to [load] if the engine is uninitialised or the backend changed.
      *
      * @return true on success; false if Oboe or libxmp init fails.
-     */
-    fun load(file: ModuleEntity): Boolean {
-        Timber.d(
-            "load: '${file.filename}' backend=${Player.renderingBackend} initialized=$initialized"
-        )
-        selectBackendForNextLoad()
-        if (initialized) {
-            softStop()
-            clearPatternCache()
-            Player.releaseModule()
-        } else {
-            clearPatternCache()
-            if (!initAudio()) return false
-        }
-        resetSequenceState()
-
-        applyPreLoadSettings()
-
-        return loadModule(file)
-    }
-
-    /**
-     * Fast-path for queue transitions: skips Oboe re-init (stream stays open),
-     * stops the render loop, releases the current module, then loads [file].
-     *
-     * Falls back to [load] if the engine has not been initialised yet.
-     *
-     * @return true on success; false if libxmp cannot load the file.
      */
     fun loadNext(file: ModuleEntity): Boolean {
         Timber.d(
             "loadNext: '${file.filename}' backend=${Player.renderingBackend} initialized=$initialized"
         )
-        val selected = runBlocking { prefs.getRenderingBackendFlow().first() }
-        if (initialized && selected != Player.renderingBackend) {
-            Timber.i("loadNext: backend switch ${Player.renderingBackend} -> $selected")
-            stop()
-            Player.deinit()
-            initialized = false
-            Player.switchBackend(selected)
-        }
+        selectBackendForNextLoad()
         if (!initialized) return load(file)
 
         softStop()
@@ -209,14 +150,12 @@ class PlayerEngine(
         resetSequenceState()
         Player.releaseModule()
         applyPreLoadSettings()
-
         return loadModule(file)
     }
 
     /**
      * Starts the render loop and audio output.
      * Applies all current preference values to libxmp before playback begins.
-     * Pre-fills the Oboe buffer to minimise start latency.
      */
     fun start() {
         Timber.d(
@@ -233,11 +172,10 @@ class PlayerEngine(
 
         stopRequest = false
         paused = false
-
         Player.setLoopMode(isRepeatOne)
 
-        val sampleRate = runBlocking { prefs.getSampleRateFlow().first() }
-        val format = runBlocking { prefs.getPlayerFormatFlow().first() }
+        val sampleRate = prefs.getSampleRateFlow().blockingFirst()
+        val format = prefs.getPlayerFormatFlow().blockingFirst()
         if (Player.startPlayer(sampleRate, format) != 0) {
             Timber.e("${Player.renderingBackend}.startPlayer() failed")
             return
@@ -245,7 +183,6 @@ class PlayerEngine(
 
         // Unmute all channels on every start.
         for (i in 0 until 64) Player.mute(i, 0)
-
         applyRuntimeSettings()
 
         Player.playAudio()
@@ -269,9 +206,7 @@ class PlayerEngine(
         isPlaying.value = false
     }
 
-    /**
-     * Resumes paused playback without reloading or seeking.
-     */
+    /** Resumes paused playback without reloading or seeking. */
     fun resume() {
         if (!paused) {
             Timber.w("resume: not paused, ignoring")
@@ -303,35 +238,26 @@ class PlayerEngine(
     fun stop() {
         Timber.d("stop: initialized=$initialized")
         endedNaturally = false
-        stopRequest = true
-        renderThread?.interrupt()
-        renderThread?.join(2_000)
-        renderThread = null
-
+        joinRenderThread(2_000)
         if (initialized) {
             Player.endPlayer()
             Player.releaseModule()
         }
-
         isPlaying.value = false
         positionMs.value = 0L
         frameInfoFlow.value = FrameInfo()
     }
 
     /**
-     * Cleans up after an Oboe [ErrorDisconnected] event so the next [load] / [loadNext]
+     * Cleans up after an Oboe ErrorDisconnected event so the next [load] / [loadNext]
      * call can open a fresh stream on the new audio device.
      *
      * Must be called off the main thread (joins the render thread and calls [Player.deinit]).
      */
     fun handleAudioDisconnect() {
         Timber.w("handleAudioDisconnect: joining render thread, initialized=$initialized")
-        renderThread?.join(1_000)
-        renderThread = null
-        if (initialized) {
-            Player.deinit()
-            initialized = false
-        }
+        joinRenderThread(1_000)
+        deinit()
         audioDisconnectedFlow.value = false
         Timber.w("handleAudioDisconnect: done")
     }
@@ -344,10 +270,7 @@ class PlayerEngine(
     fun release() {
         Timber.d("release")
         stop()
-        if (initialized) {
-            Player.deinit()
-            initialized = false
-        }
+        deinit()
         scope.cancel()
     }
 
@@ -368,15 +291,19 @@ class PlayerEngine(
             val ins = ByteArray(64)
             val fxt = ByteArray(64)
             val fxp = ByteArray(64)
+            val fx2t = ByteArray(64)
+            val fx2p = ByteArray(64)
 
             val cells = Array(numRows) { row ->
-                Player.getPatternRow(patternIndex, row, notes, ins, fxt, fxp)
+                Player.getPatternRow(patternIndex, row, notes, ins, fxt, fxp, fx2t, fx2p)
                 Array(numCh) { ch ->
                     NoteCell(
                         note = notes[ch].toInt() and 0xFF,
                         instrument = ins[ch].toInt() and 0xFF,
-                        fxType = fxt[ch].toInt(), // signed; -1 = empty cell
+                        fxType = fxt[ch].toInt(), // signed; -1 = empty slot
                         fxParam = fxp[ch].toInt() and 0xFF,
+                        fx2Type = fx2t[ch].toInt(),
+                        fx2Param = fx2p[ch].toInt() and 0xFF,
                     )
                 }.toList().toImmutableList()
             }.toList().toImmutableList()
@@ -391,19 +318,27 @@ class PlayerEngine(
 
     fun getAudioStats(stats: AudioStats) = Player.getAudioStats(stats)
 
-    fun getChannelData(info: ChannelInfo) = Player.getChannelData(info)
-
-    fun getSampleData(
-        trigger: Boolean,
-        ins: Int,
-        key: Int,
-        period: Int,
-        chn: Int,
-        width: Int,
-        buffer: ByteArray?
-    ) = Player.getSampleData(trigger, ins, key, period, chn, width, buffer)
-
-    fun mute(chn: Int, status: Int): Int = Player.mute(chn, status)
+    /**
+     * Full initialisation path: selects the persisted backend, inits the Oboe
+     * stream, then loads [file]. Use [loadNext] for queue transitions so the
+     * stream stays open between tracks.
+     */
+    private fun load(file: ModuleEntity): Boolean {
+        Timber.d(
+            "load: '${file.filename}' backend=${Player.renderingBackend} initialized=$initialized"
+        )
+        selectBackendForNextLoad()
+        if (initialized) {
+            softStop()
+            Player.releaseModule()
+        } else if (!initAudio()) {
+            return false
+        }
+        clearPatternCache()
+        resetSequenceState()
+        applyPreLoadSettings()
+        return loadModule(file)
+    }
 
     /** Resets sequence-tracking fields before loading a new module. */
     private fun resetSequenceState() {
@@ -412,129 +347,94 @@ class PlayerEngine(
         currentSequenceFlow.value = 0
     }
 
-    /** Selects the persisted backend for the next module load. */
+    /** Switches to the persisted backend if it differs, tearing down the old one first. */
     private fun selectBackendForNextLoad() {
-        val selected = runBlocking { prefs.getRenderingBackendFlow().first() }
+        val selected = prefs.getRenderingBackendFlow().blockingFirst()
         if (selected == Player.renderingBackend) return
+        Timber.i("backend switch ${Player.renderingBackend} -> $selected")
         if (initialized) {
             stop()
-            Player.deinit()
-            initialized = false
+            deinit()
         }
         Player.switchBackend(selected)
     }
 
-    /**
-     * Initializes the Oboe audio stream using the current audio preferences.
-     */
-    private fun initAudio(): Boolean {
-        return runBlocking {
-            val sampleRate = prefs.getSampleRateFlow().first()
-            val bufferMs = prefs.getBufferMsFlow().first()
-            val format = prefs.getPlayerFormatFlow().first()
-            val perfMode = prefs.getOboePerfModeFlow().first()
-            val audioApi = prefs.getOboeAudioApiFlow().first()
-            val isMono = format and Player.XMP_FORMAT_MONO != 0
+    /** Initializes the Oboe audio stream using the current audio preferences. */
+    private fun initAudio(): Boolean = runBlocking {
+        val sampleRate = prefs.getSampleRateFlow().first()
+        val bufferMs = prefs.getBufferMsFlow().first()
+        val format = prefs.getPlayerFormatFlow().first()
+        val perfMode = prefs.getOboePerfModeFlow().first()
+        val audioApi = prefs.getOboeAudioApiFlow().first()
+        val isMono = format and Player.XMP_FORMAT_MONO != 0
 
-            Timber.d(
-                "load: sampleRate=$sampleRate bufferMs=$bufferMs " +
-                    "format=$format perfMode=$perfMode audioApi=$audioApi"
-            )
+        Timber.d(
+            "initAudio: sampleRate=$sampleRate bufferMs=$bufferMs " +
+                "format=$format perfMode=$perfMode audioApi=$audioApi"
+        )
 
-            selectBackendForNextLoad()
-            val result = Player.init(
-                rate = sampleRate,
-                ms = bufferMs,
-                perfMode = perfMode,
-                channels = if (isMono) Player.OBOE_CHANNELS_MONO else Player.OBOE_CHANNELS_STEREO,
-                audioApi = audioApi,
-                flags = format,
-            )
-
-            if (result) {
-                initialized = true
-                return@runBlocking true
-            } else {
-                Timber.e("${Player.renderingBackend}.init() failed")
-                return@runBlocking false
-            }
-        }
+        selectBackendForNextLoad()
+        initialized = Player.init(
+            rate = sampleRate,
+            ms = bufferMs,
+            perfMode = perfMode,
+            channels = if (isMono) Player.OBOE_CHANNELS_MONO else Player.OBOE_CHANNELS_STEREO,
+            audioApi = audioApi,
+            flags = format,
+        )
+        if (!initialized) Timber.e("${Player.renderingBackend}.init() failed")
+        initialized
     }
 
     /** Applies player flags and default pan from prefs before loading a module. */
     private fun applyPreLoadSettings() {
-        val playerFlags = runBlocking { prefs.getPlayerFlagsFlow().first() }
-        val defaultPan = runBlocking { prefs.getDefaultPanFlow().first() }
         val preLoadMask =
             Player.XMP_FLAGS_VBLANK or Player.XMP_FLAGS_FX9BUG or Player.XMP_FLAGS_FIXLOOP
         Player.setPlayer(
-            parm = Player.XMP_PLAYER_FLAGS,
-            value = playerFlags and preLoadMask
+            Player.XMP_PLAYER_FLAGS,
+            prefs.getPlayerFlagsFlow().blockingFirst() and preLoadMask
         )
-        Player.setPlayer(
-            parm = Player.XMP_PLAYER_DEFPAN,
-            value = defaultPan
-        )
+        Player.setPlayer(Player.XMP_PLAYER_DEFPAN, prefs.getDefaultPanFlow().blockingFirst())
     }
 
     /** Applies volume / DSP / interpolation settings to the running player. */
-    private fun applyRuntimeSettings() {
-        runBlocking {
-            val playerFlags = prefs.getPlayerFlagsFlow().first()
-            Player.setPlayer(
-                parm = Player.XMP_PLAYER_AMP,
-                value = prefs.getVolumeBoostFlow().first()
-            )
-            if (Player.renderingBackend == RenderingBackend.LIBXMP) {
-                val cflags = Player.getPlayer(Player.XMP_PLAYER_CFLAGS)
-                val newCflags = if ((playerFlags and Player.XMP_FLAGS_A500) != 0) {
-                    cflags or Player.XMP_FLAGS_A500
-                } else {
-                    cflags and Player.XMP_FLAGS_A500.inv()
-                }
-                Player.setPlayer(
-                    parm = Player.XMP_PLAYER_CFLAGS,
-                    value = newCflags
-                )
-            }
-            Player.setPlayer(
-                parm = Player.XMP_PLAYER_DSP,
-                value = prefs.getDspEffectFlow().first()
-            )
-            val resampler = ResamplerMode.fromId(prefs.getInterpolationTypeFlow().first())
-            Player.setResampler(resampler.id)
-            Player.setPlayer(
-                parm = Player.XMP_PLAYER_MIX,
-                value = prefs.getStereoMixFlow().first()
-            )
-            Player.setPlayer(
-                parm = Player.XMP_PLAYER_VOLUME,
-                value = prefs.getPlayerVolumeFlow().first()
-            )
+    private fun applyRuntimeSettings() = runBlocking {
+        Player.setPlayer(Player.XMP_PLAYER_AMP, prefs.getVolumeBoostFlow().first())
+        applyA500Flag(prefs.getPlayerFlagsFlow().first())
+        Player.setPlayer(Player.XMP_PLAYER_DSP, prefs.getDspEffectFlow().first())
+        Player.setResampler(ResamplerMode.fromId(prefs.getInterpolationTypeFlow().first()).id)
+        Player.setPlayer(Player.XMP_PLAYER_MIX, prefs.getStereoMixFlow().first())
+        Player.setPlayer(Player.XMP_PLAYER_VOLUME, prefs.getPlayerVolumeFlow().first())
+    }
+
+    /** Mirrors the A500 filter bit of [playerFlags] into CFLAGS (libxmp backend only). */
+    private fun applyA500Flag(playerFlags: Int) {
+        if (Player.renderingBackend != RenderingBackend.LIBXMP) return
+        val cflags = Player.getPlayer(Player.XMP_PLAYER_CFLAGS)
+        val newCflags = if (playerFlags and Player.XMP_FLAGS_A500 != 0) {
+            cflags or Player.XMP_FLAGS_A500
+        } else {
+            cflags and Player.XMP_FLAGS_A500.inv()
         }
+        Player.setPlayer(Player.XMP_PLAYER_CFLAGS, newCflags)
     }
 
     /**
      * Loads [file] into libxmp and populates [modVarsFlow].
      *
-     * @return true on success; on failure, de-inits and resets [initialized] only
-     *   if this is a first-time load (i.e., [softStop] wasn't called).
+     * @return true on success; on failure, de-inits only if this is a
+     *   first-time load (i.e., [softStop] wasn't called).
      */
     private fun loadModule(file: ModuleEntity): Boolean {
-        val modInfo = ModInfo()
-        val result = Player.loadFromFd(context, file.uri, modInfo)
+        val result = Player.loadFromFd(context, file.uri, ModInfo())
         if (result != 0) {
             Timber.e(
                 "${Player.renderingBackend}.loadFromFd() returned $result for '${file.filename}'"
             )
-            if (!initialized) {
-                Player.deinit()
-                initialized = false
-            }
+            if (!initialized) Player.deinit()
             return false
         }
-        val mv = ModVars()
-        Player.getModVars(mv)
+        val mv = readModVars()
         modVarsFlow.value = mv
         positionMs.value = 0L
         Timber.i(
@@ -545,24 +445,45 @@ class PlayerEngine(
 
     /**
      * Stops the render thread and ends the libxmp player session, but leaves
-     * the Oboe stream open. Used between queue tracks to avoid stream teardown overhead.
+     * the Oboe stream open. Used between queue tracks to avoid teardown overhead.
      */
     private fun softStop() {
         Timber.d("softStop")
-        stopRequest = true
-        renderThread?.interrupt()
-        renderThread?.join(2_000)
-        renderThread = null
+        joinRenderThread(2_000)
         Player.endPlayer()
         isPlaying.value = false
         positionMs.value = 0L
     }
 
-    /** Clears the [patternCache] before loading a new module. */
+    /** Signals the render thread to exit, interrupts it, and waits up to [timeoutMs]. */
+    private fun joinRenderThread(timeoutMs: Long) {
+        stopRequest = true
+        renderThread?.interrupt()
+        renderThread?.join(timeoutMs)
+        renderThread = null
+    }
+
+    /** Closes the native player if it is currently initialised. */
+    private fun deinit() {
+        if (!initialized) return
+        Player.deinit()
+        initialized = false
+    }
+
+    /** Clears cached pattern data and module/frame state before loading a new module. */
     private fun clearPatternCache() {
         patternCache.clear()
         modVarsFlow.value = ModVars()
         frameInfoFlow.value = FrameInfo()
+    }
+
+    private fun readModVars() = ModVars().also { Player.getModVars(it) }
+
+    private fun <T> Flow<T>.blockingFirst(): T = runBlocking { first() }
+
+    /** Re-applies [apply] whenever a preference changes while the engine is initialised. */
+    private fun <T> observePref(flow: Flow<T>, apply: (T) -> Unit) {
+        flow.distinctUntilChanged().onEach { if (initialized) apply(it) }.launchIn(scope)
     }
 
     /** The loop! */
@@ -577,7 +498,6 @@ class PlayerEngine(
                 val fi = FrameInfo()
                 Player.getFrameInfo(fi)
                 frameInfoFlow.value = fi
-
                 positionMs.value = fi.time.toLong().coerceAtLeast(0L)
 
                 if (Player.hasAudioDisconnected()) {
@@ -597,10 +517,7 @@ class PlayerEngine(
                         Timber.i(
                             "renderLoop: trying seq $nextSeq / ${modVarsFlow.value.miNumSequences}"
                         )
-                        if (setSequence(nextSeq)) {
-                            currentSequenceFlow.value = nextSeq
-                            continue
-                        }
+                        if (setSequence(nextSeq)) continue
                         Timber.i("renderLoop: no more sequences, ending naturally")
                     }
 

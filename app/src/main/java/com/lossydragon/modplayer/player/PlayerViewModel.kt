@@ -27,7 +27,6 @@ import kotlinx.coroutines.flow.onEach
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.runBlocking
-import timber.log.Timber
 
 /** UI state and domain models for the module player. */
 
@@ -68,24 +67,26 @@ class PlayerViewModel(
 
     init {
         prefs.getRenderingBackendFlow().onEach { backend ->
-            needsBackendSetup.value = (backend == RenderingBackend.INVALID)
+            needsBackendSetup.value = backend == RenderingBackend.INVALID
         }.launchIn(viewModelScope)
+
         prefs.getRowNumbersFlow().onEach { show ->
             state.update { it.copy(showRowNumbers = show) }
         }.launchIn(viewModelScope)
 
-        combine(player.modVarsFlow, player.frameInfoFlow) { mv, fi -> mv to fi }
-            .onEach { (mv, fi) ->
-                state.update { it.copy(modVars = mv, frameInfo = fi) }
-            }.launchIn(viewModelScope)
+        prefs.getPlayerViewFlow().onEach { view ->
+            state.update { it.copy(playerView = view) }
+        }.launchIn(viewModelScope)
+
+        combine(player.modVarsFlow, player.frameInfoFlow) { mv, fi ->
+            state.update { it.copy(modVars = mv, frameInfo = fi) }
+        }.launchIn(viewModelScope)
 
         player.currentSequenceFlow.onEach { seq ->
-            Timber.d("currentSequenceFlow fired, seq=$seq")
             state.update { it.copy(currentSequence = seq) }
         }.launchIn(viewModelScope)
 
         player.isPlaying.onEach { playing ->
-            Timber.d("isPlaying fired, isPlaying=$playing")
             state.update {
                 it.copy(
                     status = when {
@@ -98,7 +99,6 @@ class PlayerViewModel(
         }.launchIn(viewModelScope)
 
         player.queueFlow.onEach { queue ->
-            Timber.d("queueFlow fired, size=${queue.size}")
             val empty = queue.isEmpty()
             state.update {
                 it.copy(
@@ -121,16 +121,10 @@ class PlayerViewModel(
         }.launchIn(viewModelScope)
 
         player.moduleLoadedFlow.onEach {
-            Timber.d("moduleLoadedFlow fired")
-            syncModuleInfo()
-        }.launchIn(viewModelScope)
-
-        prefs.getPlayerViewFlow().onEach { view ->
-            state.update { it.copy(playerView = view) }
+            state.update { it.copy(currentSequence = 0) }
         }.launchIn(viewModelScope)
 
         runBlocking {
-            // Meh...
             val view = prefs.getPlayerViewFlow().first()
             val subsongs = prefs.getGlobalShuffleFlow().first()
             player.setPlayAllSequences(subsongs)
@@ -143,25 +137,20 @@ class PlayerViewModel(
         val stats = AudioStats()
         player.getAudioStats(stats)
         return """
-                Audio API: ${stats.audioApi}
-                Audio Format: ${stats.audioFormat}
-                Audio Glitches: ${stats.xrunCount} (system), ${stats.underrunCount} (app)
-                Buffer: ${stats.bufferSize} / ${stats.bufferCapacity} frames
-                Frames Per Burst: ${stats.framesPerBurst}
-                Performance Mode: ${stats.perfMode}
-                Sample Rate: ${stats.sampleRate} Hz
-                Sharing Mode: ${stats.sharingMode}
+            Audio API: ${stats.audioApi}
+            Audio Format: ${stats.audioFormat}
+            Audio Glitches: ${stats.xrunCount} (system), ${stats.underrunCount} (app)
+            Buffer: ${stats.bufferSize} / ${stats.bufferCapacity} frames
+            Frames Per Burst: ${stats.framesPerBurst}
+            Performance Mode: ${stats.perfMode}
+            Sample Rate: ${stats.sampleRate} Hz
+            Sharing Mode: ${stats.sharingMode}
         """.trimIndent()
     }
 
     /** Loads [file] as a single-item queue and starts playback. */
     fun play(file: ModuleEntity) {
-        state.update {
-            it.copy(
-                status = PlaybackStatus.LOADING,
-                currentModule = file,
-            )
-        }
+        state.update { it.copy(status = PlaybackStatus.LOADING, currentModule = file) }
         ensureServiceRunning()
         player.loadQueue(listOf(file), startAt = 0)
     }
@@ -174,7 +163,6 @@ class PlayerViewModel(
         repeatMode: Int = state.value.repeatMode
     ) {
         if (files.isEmpty()) return
-
         val startIndex = startAt.coerceIn(0, files.lastIndex)
 
         state.update {
@@ -185,22 +173,12 @@ class PlayerViewModel(
                 repeatMode = repeatMode,
             )
         }
-
         ensureServiceRunning()
-
-        player.loadQueue(
-            files = files.toList(),
-            startAt = startIndex,
-            shuffleMode = isShuffle,
-            repeatMode = repeatMode
-        )
+        player.loadQueue(files.toList(), startIndex, isShuffle, repeatMode)
     }
 
-    fun togglePlayPause() = if (state.value.status == PlaybackStatus.PLAYING) {
-        player.pause()
-    } else {
-        player.play()
-    }
+    fun togglePlayPause() =
+        if (state.value.status == PlaybackStatus.PLAYING) player.pause() else player.play()
 
     fun seek(posMs: Long) = player.seekTo(player.currentMediaItemIndex, posMs)
 
@@ -246,9 +224,6 @@ class PlayerViewModel(
 
     suspend fun getLastDirectoryUri(): String? = prefs.getLastDirectoryUri()
 
-    private fun ensureServiceRunning() =
-        Intent(appContext, PlayerService::class.java).also(appContext::startService)
-
     fun selectBackend(backend: RenderingBackend) {
         viewModelScope.launch {
             prefs.setRenderingBackend(backend)
@@ -256,7 +231,7 @@ class PlayerViewModel(
         }
     }
 
-    private fun syncModuleInfo() {
-        state.update { it.copy(currentSequence = 0) }
+    private fun ensureServiceRunning() {
+        appContext.startService(Intent(appContext, PlayerService::class.java))
     }
 }

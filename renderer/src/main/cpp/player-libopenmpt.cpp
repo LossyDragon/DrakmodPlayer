@@ -599,7 +599,7 @@ void openmpt_getModVars(JNIEnv* env, jobject modVars) {
   env->DeleteLocalRef(renderingStr);
 }
 
-void openmpt_getPatternRow(JNIEnv* env, jint pat, jint row, jbyteArray rowNotes, jbyteArray rowInstruments, jbyteArray rowFxType, jbyteArray rowFxParm) {
+void openmpt_getPatternRow(JNIEnv* env, jint pat, jint row, jbyteArray rowNotes, jbyteArray rowInstruments, jbyteArray rowFxType, jbyteArray rowFxParm, jbyteArray rowFx2Type, jbyteArray rowFx2Parm) {
   OpenMptState& state = OpenMptState::instance();
   std::lock_guard<std::mutex> lock(state.mutex);
   if (!state.mod) return;
@@ -608,18 +608,25 @@ void openmpt_getPatternRow(JNIEnv* env, jint pat, jint row, jbyteArray rowNotes,
   std::array<jbyte, 64> instruments{};
   std::array<jbyte, 64> fxType{};
   std::array<jbyte, 64> fxParam{};
-  fxType.fill(-1);
-  fxParam.fill(-1);
+  std::array<jbyte, 64> fx2Type{};
+  std::array<jbyte, 64> fx2Param{};
   for (int ch = 0; ch < channels; ch++) {
     notes[ch] = static_cast<jbyte>(openmpt_module_get_pattern_row_channel_command(state.mod, pat, row, ch, OPENMPT_MODULE_COMMAND_NOTE));
     instruments[ch] = static_cast<jbyte>(openmpt_module_get_pattern_row_channel_command(state.mod, pat, row, ch, OPENMPT_MODULE_COMMAND_INSTRUMENT));
-    fxType[ch] = static_cast<jbyte>(openmpt_module_get_pattern_row_channel_command(state.mod, pat, row, ch, OPENMPT_MODULE_COMMAND_EFFECT));
-    fxParam[ch] = static_cast<jbyte>(openmpt_module_get_pattern_row_channel_command(state.mod, pat, row, ch, OPENMPT_MODULE_COMMAND_PARAMETER));
+    // Internal command 0 is CMD_NONE / VOLCMD_NONE, so type 0 means an empty slot.
+    int effect = openmpt_module_get_pattern_row_channel_command(state.mod, pat, row, ch, OPENMPT_MODULE_COMMAND_EFFECT);
+    fxType[ch] = static_cast<jbyte>(effect > 0 ? effect : -1);
+    fxParam[ch] = effect > 0 ? static_cast<jbyte>(openmpt_module_get_pattern_row_channel_command(state.mod, pat, row, ch, OPENMPT_MODULE_COMMAND_PARAMETER)) : -1;
+    int volEffect = openmpt_module_get_pattern_row_channel_command(state.mod, pat, row, ch, OPENMPT_MODULE_COMMAND_VOLUMEEFFECT);
+    fx2Type[ch] = static_cast<jbyte>(volEffect > 0 ? volEffect : -1);
+    fx2Param[ch] = volEffect > 0 ? static_cast<jbyte>(openmpt_module_get_pattern_row_channel_command(state.mod, pat, row, ch, OPENMPT_MODULE_COMMAND_VOLUME)) : -1;
   }
   env->SetByteArrayRegion(rowNotes, 0, channels, notes.data());
   env->SetByteArrayRegion(rowInstruments, 0, channels, instruments.data());
   env->SetByteArrayRegion(rowFxType, 0, channels, fxType.data());
   env->SetByteArrayRegion(rowFxParm, 0, channels, fxParam.data());
+  env->SetByteArrayRegion(rowFx2Type, 0, channels, fx2Type.data());
+  env->SetByteArrayRegion(rowFx2Parm, 0, channels, fx2Param.data());
 }
 
 void openmpt_getSampleData(JNIEnv* env, jboolean trigger, jint ins, jint key, jint period, jint chn, jint width, jbyteArray buffer) {

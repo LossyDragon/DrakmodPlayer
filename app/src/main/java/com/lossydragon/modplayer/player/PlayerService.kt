@@ -40,42 +40,37 @@ class PlayerService : MediaLibraryService() {
 
     private lateinit var mediaLibrarySession: MediaLibrarySession
 
-    private val browseCallback: AutoBrowseCallback by lazy {
-        AutoBrowseCallback(
-            context = this,
-            prefs = prefs,
-            playlistDao = playlistDao,
-            modulesDao = metadataDao,
-            scope = scope,
-        )
-    }
-
     override fun onCreate() {
         super.onCreate()
 
-        val intent = Intent(this, MainActivity::class.java)
-            .apply { flags = Intent.FLAG_ACTIVITY_SINGLE_TOP }
-        val flags = PendingIntent.FLAG_IMMUTABLE or PendingIntent.FLAG_UPDATE_CURRENT
-        val sessionActivity = PendingIntent.getActivity(this, 0, intent, flags)
+        val sessionActivity = PendingIntent.getActivity(
+            this,
+            0,
+            Intent(this, MainActivity::class.java).apply {
+                flags = Intent.FLAG_ACTIVITY_SINGLE_TOP
+            },
+            PendingIntent.FLAG_IMMUTABLE or PendingIntent.FLAG_UPDATE_CURRENT,
+        )
 
         mediaLibrarySession = MediaLibrarySession
-            .Builder(this, player, browseCallback)
+            .Builder(this, player, AutoBrowseCallback(this, prefs, playlistDao, metadataDao, scope))
             .setId(getString(R.string.app_name) + "_session")
             .setSessionActivity(sessionActivity)
             .build()
 
-        DefaultMediaNotificationProvider.Builder(this)
-            .setNotificationId(NOTIFICATION_ID)
-            .setChannelId(CHANNEL_ID)
-            .setChannelName(R.string.app_name)
-            .build()
-            .also(::setMediaNotificationProvider)
+        setMediaNotificationProvider(
+            DefaultMediaNotificationProvider.Builder(this)
+                .setNotificationId(NOTIFICATION_ID)
+                .setChannelId(CHANNEL_ID)
+                .setChannelName(R.string.app_name)
+                .build()
+        )
 
-        object : Listener {
+        setListener(object : Listener {
             override fun onForegroundServiceStartNotAllowedException() {
                 Timber.e("Foreground service start not allowed")
             }
-        }.also(::setListener)
+        })
 
         scope.launch(Dispatchers.Main) { player.restoreQueue() }
     }

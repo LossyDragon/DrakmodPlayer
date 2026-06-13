@@ -294,23 +294,27 @@ private fun DrawScope.drawCell(
         topLeft = Offset(insX, y)
     )
 
-    // effect
+    // TODO apply secondary affect to view
+    // effect — fall back to the secondary slot (volume column) when the primary is empty
     val fxX = insX + insLayout.size.width + gap
-    if (cell.fxType < 0) {
+    val showSecondary = cell.fxType < 0 && cell.fx2Type >= 0
+    if (cell.fxType < 0 && !showSecondary) {
         drawText(
             textLayoutResult = cached(measurer, cache, "...", style),
             color = colors.empty,
             topLeft = Offset(fxX, y)
         )
     } else {
-        val typeLayout = cached(measurer, cache, cell.effectTypeStr, style)
+        val typeStr = if (showSecondary) cell.effect2TypeStr else cell.effectTypeStr
+        val paramStr = if (showSecondary) cell.effect2ParamStr else cell.effectParamStr
+        val typeLayout = cached(measurer, cache, typeStr, style)
         drawText(
             textLayoutResult = typeLayout,
             color = colors.effectType,
             topLeft = Offset(fxX, y)
         )
         drawText(
-            textLayoutResult = cached(measurer, cache, cell.effectParamStr, style),
+            textLayoutResult = cached(measurer, cache, paramStr, style),
             color = colors.effectParam,
             topLeft = Offset(fxX + typeLayout.size.width, y)
         )

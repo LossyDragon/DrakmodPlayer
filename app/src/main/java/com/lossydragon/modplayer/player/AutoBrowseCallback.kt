@@ -46,9 +46,6 @@ class AutoBrowseCallback(
         putInt("android.media.browse.CONTENT_STYLE_PLAYABLE_HINT", 2)
     }
 
-    private fun drawableUri(resId: Int): Uri =
-        "android.resource://${context.packageName}/$resId".toUri()
-
     private val searchResultsCache = mutableMapOf<String, List<MediaItem>>()
     private var activeSearchJob: Job? = null
 
@@ -58,12 +55,12 @@ class AutoBrowseCallback(
         params: LibraryParams?
     ): ListenableFuture<LibraryResult<MediaItem>> {
         Timber.d("onGetLibraryRoot: browser=${browser.packageName}")
-        val browseItem = buildBrowsableItem(
+        val root = buildBrowsableItem(
             id = AutoMediaId.ROOT,
             title = context.getString(R.string.app_name),
             type = MediaMetadata.MEDIA_TYPE_FOLDER_MIXED,
         )
-        return Futures.immediateFuture(LibraryResult.ofItem(browseItem, null))
+        return Futures.immediateFuture(LibraryResult.ofItem(root, null))
     }
 
     override fun onGetChildren(
@@ -75,8 +72,7 @@ class AutoBrowseCallback(
         params: LibraryParams?
     ): ListenableFuture<LibraryResult<ImmutableList<MediaItem>>> {
         Timber.d("onGetChildren: parentId=$parentId page=$page")
-        val future = SettableFuture.create<LibraryResult<ImmutableList<MediaItem>>>()
-        scope.launch(Dispatchers.IO) {
+        return ioFuture {
             val items = when {
                 parentId == AutoMediaId.ROOT -> getRootChildren()
                 parentId == AutoMediaId.HOME -> getHomeChildren()
@@ -85,9 +81,8 @@ class AutoBrowseCallback(
                 AutoMediaId.isDir(parentId) -> getDirectoryChildren(parentId)
                 else -> ImmutableList.of()
             }
-            LibraryResult.ofItemList(items, params).also(future::set)
+            LibraryResult.ofItemList(items, params)
         }
-        return future
     }
 
     /**
@@ -106,7 +101,7 @@ class AutoBrowseCallback(
             return buildPlayAllFuture(shuffle = singleId == AutoMediaId.SHUFFLE_ALL)
         }
 
-        if (mediaItems.size != 1 || !AutoMediaId.isFile(mediaItems[0].mediaId)) {
+        if (singleId == null || !AutoMediaId.isFile(singleId)) {
             return super.onSetMediaItems(
                 mediaSession,
                 controller,
@@ -116,33 +111,19 @@ class AutoBrowseCallback(
             )
         }
 
-        val selectedFilePath = AutoMediaId.uriFromFile(mediaItems[0].mediaId)
-        val future = SettableFuture.create<MediaSession.MediaItemsWithStartPosition>()
-        scope.launch(Dispatchers.IO) {
-            try {
-                val parentPath = modulesDao.getByFilePaths(listOf(selectedFilePath))
-                    .firstOrNull()?.parentPath
-                    ?: run {
-                        future.setException(IllegalStateException("File not found in DB"))
-                        return@launch
-                    }
+        return ioFuture {
+            val selectedFilePath = AutoMediaId.uriFromFile(singleId)
+            val parentPath =
+                modulesDao.getByFilePaths(listOf(selectedFilePath)).firstOrNull()?.parentPath
+                    ?: throw IllegalStateException("File not found in DB")
 
-                val siblings = modulesDao.getChildrenOnce(parentPath)
-                    .filter { !it.isDirectory && it.isValidModule }
-                    .map { buildPlayableItem(AutoMediaId.file(it.filePath), it.name, it.uri) }
+            val siblings = modulesDao.getChildrenOnce(parentPath)
+                .filter { !it.isDirectory && it.isValidModule }
+                .map { buildPlayableItem(AutoMediaId.file(it.filePath), it.name, it.uri) }
 
-                val startIdx = siblings
-                    .indexOfFirst { it.mediaId == mediaItems[0].mediaId }
-                    .takeIf { it >= 0 } ?: 0
-
-                MediaSession.MediaItemsWithStartPosition(siblings, startIdx, 0L)
-                    .also(future::set)
-            } catch (e: Exception) {
-                Timber.e(e, "Failed to resolve siblings for Auto file tap")
-                future.setException(e)
-            }
+            val startIdx = siblings.indexOfFirst { it.mediaId == singleId }.coerceAtLeast(0)
+            MediaSession.MediaItemsWithStartPosition(siblings, startIdx, 0L)
         }
-        return future
     }
 
     override fun onAddMediaItems(
@@ -153,8 +134,7 @@ class AutoBrowseCallback(
         val resolved = mediaItems.map { item ->
             val uri = when {
                 AutoMediaId.isFile(item.mediaId) -> AutoMediaId.uriFromFile(item.mediaId).toUri()
-                item.localConfiguration?.uri != null -> item.localConfiguration!!.uri
-                else -> null
+                else -> item.localConfiguration?.uri
             }
             if (uri != null) item.buildUpon().setUri(uri).build() else item
         }
@@ -184,7 +164,7 @@ class AutoBrowseCallback(
 
             Timber.d("onSearch: found ${items.size} results for '$query'")
             session.notifySearchResultChanged(browser, query, items.size, params)
-            LibraryResult.ofVoid().also(future::set)
+            future.set(LibraryResult.ofVoid())
         }
         return future
     }
@@ -198,8 +178,7 @@ class AutoBrowseCallback(
         params: LibraryParams?
     ): ListenableFuture<LibraryResult<ImmutableList<MediaItem>>> {
         Timber.d("onGetSearchResult: query='$query' page=$page pageSize=$pageSize")
-        val all = searchResultsCache[query] ?: emptyList()
-        val paged = all.drop(page * pageSize).take(pageSize)
+        val paged = (searchResultsCache[query] ?: emptyList()).drop(page * pageSize).take(pageSize)
         return Futures.immediateFuture(
             LibraryResult.ofItemList(ImmutableList.copyOf(paged), params)
         )
@@ -211,46 +190,22 @@ class AutoBrowseCallback(
         isForPlayback: Boolean
     ): ListenableFuture<MediaSession.MediaItemsWithStartPosition> {
         Timber.d("onPlaybackResumption: isForPlayback=$isForPlayback")
-        val future = SettableFuture.create<MediaSession.MediaItemsWithStartPosition>()
-        scope.launch(Dispatchers.IO) {
-            val state = prefs.getQueueState() ?: run {
-                future.setException(UnsupportedOperationException("No saved queue"))
-                return@launch
-            }
-
-            val files = try {
-                Json.decodeFromString<List<ModuleEntity>>(
-                    state.json
-                )
-            } catch (e: Exception) {
-                Timber.e(e, "Failed to decode queue for resumption")
-                future.setException(e)
-                return@launch
-            }
-
-            if (files.isEmpty()) {
-                future.setException(UnsupportedOperationException("Queue is empty"))
-                return@launch
-            }
+        return ioFuture {
+            val state = prefs.getQueueState()
+                ?: throw UnsupportedOperationException("No saved queue")
+            val files = Json.decodeFromString<List<ModuleEntity>>(state.json)
+            if (files.isEmpty()) throw UnsupportedOperationException("Queue is empty")
 
             val mediaItems = files.map { file ->
-                MediaItem.Builder()
-                    .setUri(file.uri)
-                    .setMediaId(file.filePath)
-                    .setMediaMetadata(
-                        MediaMetadata.Builder()
-                            .setTitle(file.filename)
-                            .setIsPlayable(true)
-                            .setArtworkUri(drawableUri(R.drawable.aa_file))
-                            .build()
-                    )
-                    .build()
+                buildPlayableItem(
+                    id = file.filePath,
+                    title = file.filename,
+                    uri = file.uri,
+                    artworkUri = drawableUri(R.drawable.aa_file),
+                )
             }
-
             MediaSession.MediaItemsWithStartPosition(mediaItems, state.index, state.positionMs)
-                .also(future::set)
         }
-        return future
     }
 
     private fun getRootChildren(): ImmutableList<MediaItem> = ImmutableList.of(
@@ -278,19 +233,19 @@ class AutoBrowseCallback(
 
     private fun getPlaylists(): ImmutableList<MediaItem> = ImmutableList.of(
         buildBrowsableItem(
-            "playlists_coming_soon",
-            "Coming Soon",
-            MediaMetadata.MEDIA_TYPE_FOLDER_PLAYLISTS
+            id = "playlists_coming_soon",
+            title = "Coming Soon",
+            type = MediaMetadata.MEDIA_TYPE_FOLDER_PLAYLISTS
         )
     )
 
     private fun getHomeChildren(): ImmutableList<MediaItem> = ImmutableList.of(
-        buildActionItem(
+        buildPlayableItem(
             id = AutoMediaId.SHUFFLE_ALL,
             title = "Shuffle",
             artworkUri = drawableUri(R.drawable.aa_shuffle)
         ),
-        buildActionItem(
+        buildPlayableItem(
             id = AutoMediaId.PLAY_ALL,
             title = "Play all",
             artworkUri = drawableUri(R.drawable.aa_play_all)
@@ -309,53 +264,55 @@ class AutoBrowseCallback(
      * Queries the DB for all direct children of [parentPath].
      * Directories become browsable items; valid module files become playable items.
      */
-    private suspend fun buildChildItems(parentPath: String): ImmutableList<MediaItem> {
-        val entries = modulesDao.getChildrenOnce(parentPath)
-        val items = mutableListOf<MediaItem>()
-        entries.forEach { entity ->
-            if (entity.isDirectory) {
-                items.add(
-                    buildBrowsableItem(
+    private suspend fun buildChildItems(parentPath: String): ImmutableList<MediaItem> =
+        ImmutableList.copyOf(
+            modulesDao.getChildrenOnce(parentPath).mapNotNull { entity ->
+                when {
+                    entity.isDirectory -> buildBrowsableItem(
                         id = AutoMediaId.dir(entity.filePath),
                         title = entity.filename,
                         type = MediaMetadata.MEDIA_TYPE_FOLDER_MIXED,
                         artworkUri = drawableUri(R.drawable.aa_folder)
                     )
-                )
-            } else if (entity.isValidModule) {
-                items.add(
-                    buildPlayableItem(
+
+                    entity.isValidModule -> buildPlayableItem(
                         id = AutoMediaId.file(entity.filePath),
                         title = entity.name,
                         uri = entity.uri,
                         artworkUri = drawableUri(R.drawable.aa_file)
                     )
-                )
+
+                    else -> null
+                }
             }
-        }
-        return ImmutableList.copyOf(items)
-    }
+        )
 
     private fun buildPlayAllFuture(
         shuffle: Boolean
-    ): ListenableFuture<MediaSession.MediaItemsWithStartPosition> {
-        val future = SettableFuture.create<MediaSession.MediaItemsWithStartPosition>()
+    ): ListenableFuture<MediaSession.MediaItemsWithStartPosition> = ioFuture {
+        val items = modulesDao.getAllValidModules()
+            .map { buildPlayableItem(AutoMediaId.file(it.filePath), it.name, it.uri) }
+            .toMutableList()
+        if (shuffle) items.shuffle()
+        MediaSession.MediaItemsWithStartPosition(items, 0, 0L)
+    }
+
+    /** Runs [block] on the IO dispatcher, completing the returned future with its result. */
+    private fun <T> ioFuture(block: suspend () -> T): ListenableFuture<T> {
+        val future = SettableFuture.create<T>()
         scope.launch(Dispatchers.IO) {
             try {
-                val items = modulesDao.getAllValidModules()
-                    .map { buildPlayableItem(AutoMediaId.file(it.filePath), it.name, it.uri) }
-                    .toMutableList()
-
-                if (shuffle) items.shuffle()
-
-                MediaSession.MediaItemsWithStartPosition(items, 0, 0L).also(future::set)
+                future.set(block())
             } catch (e: Exception) {
-                Timber.e(e, "buildPlayAllFuture failed")
+                Timber.e(e, "Auto browse future failed")
                 future.setException(e)
             }
         }
         return future
     }
+
+    private fun drawableUri(resId: Int): Uri =
+        "android.resource://${context.packageName}/$resId".toUri()
 
     private fun buildBrowsableItem(
         id: String,
@@ -380,29 +337,16 @@ class AutoBrowseCallback(
     private fun buildPlayableItem(
         id: String,
         title: String,
-        uri: Uri,
+        uri: Uri? = null,
         artworkUri: Uri? = null
     ): MediaItem = MediaItem.Builder()
         .setMediaId(id)
-        .setUri(uri)
-        .setRequestMetadata(MediaItem.RequestMetadata.Builder().setMediaUri(uri).build())
-        .setMediaMetadata(
-            MediaMetadata.Builder()
-                .setTitle(title)
-                .setIsBrowsable(false)
-                .setIsPlayable(true)
-                .setMediaType(MediaMetadata.MEDIA_TYPE_MUSIC)
-                .setArtworkUri(artworkUri)
-                .build()
-        )
-        .build()
-
-    private fun buildActionItem(
-        id: String,
-        title: String,
-        artworkUri: Uri? = null
-    ): MediaItem = MediaItem.Builder()
-        .setMediaId(id)
+        .apply {
+            if (uri != null) {
+                setUri(uri)
+                setRequestMetadata(MediaItem.RequestMetadata.Builder().setMediaUri(uri).build())
+            }
+        }
         .setMediaMetadata(
             MediaMetadata.Builder()
                 .setTitle(title)

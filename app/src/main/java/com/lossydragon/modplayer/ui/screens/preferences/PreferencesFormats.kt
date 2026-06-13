@@ -8,9 +8,13 @@ import androidx.compose.ui.*
 import androidx.compose.ui.hapticfeedback.*
 import androidx.compose.ui.platform.*
 import androidx.compose.ui.res.stringResource
+import androidx.compose.ui.tooling.preview.Preview
+import androidx.compose.ui.tooling.preview.datasource.LoremIpsum
 import com.lossydragon.modplayer.R
 import com.lossydragon.modplayer.ui.components.BackButton
+import com.lossydragon.modplayer.ui.theme.AppTheme
 import kotlinx.collections.immutable.ImmutableList
+import kotlinx.collections.immutable.toPersistentList
 
 @OptIn(ExperimentalMaterial3ExpressiveApi::class, ExperimentalMaterial3Api::class)
 @Composable
@@ -64,4 +68,17 @@ internal fun PreferencesFormats(
             )
         }
     )
+}
+
+@Preview
+@Composable
+private fun Preview() {
+    AppTheme {
+        PreferencesFormats(
+            snackbarHostState = SnackbarHostState(),
+            formatList = LoremIpsum(14).values.first().split(" ").toPersistentList(),
+            onBack = {},
+            onClick = {},
+        )
+    }
 }

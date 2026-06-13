@@ -60,10 +60,10 @@ class ModPlayer(
     private var currentIndex = 0
 
     /** +1 when navigating forward, -1 when navigating backward. Used by [skipUnplayable]. */
-    private var lastNavDirection: Int = 1
+    private var lastNavDirection = 1
 
     /** Counts consecutive skip attempts so we don't loop forever on an unplayable queue. */
-    private var skipAttempts: Int = 0
+    private var skipAttempts = 0
 
     /** True while [loadAndStartAt] is running a background [Thread]. */
     @Volatile
@@ -74,7 +74,7 @@ class ModPlayer(
      * position converges, then reset to -1. Guards against position flicker.
      */
     @Volatile
-    private var pendingSeekPositionMs: Long = -1L
+    private var pendingSeekPositionMs = -1L
 
     /**
      * True while shuffle is being toggled. Prevents [currentIndexFlow] from
@@ -83,7 +83,7 @@ class ModPlayer(
     @Volatile
     var isReordering = false
 
-    /** Per-frame snapshots from the render thread; null when idle. */
+    /** Per-frame snapshots from the render thread. */
     val frameInfoFlow by engine::frameInfoFlow
 
     /** True while the engine render loop is running. */
@@ -111,10 +111,6 @@ class ModPlayer(
     private val mainHandler = Handler(Looper.getMainLooper())
     private val scope = CoroutineScope(Dispatchers.Main + SupervisorJob())
     private var positionUpdateJob: Job? = null
-
-    /** Placeholder Artwork */
-    private fun drawableUri(resId: Int): Uri =
-        "android.resource://${context.packageName}/$resId".toUri()
 
     init {
         scope.launch {
@@ -153,13 +149,13 @@ class ModPlayer(
         }
     }
 
-    /* TODO kDoc */
+    /** Enables or disables single-track repeat in the engine. */
     fun isRepeatingOne(value: Boolean) = engine.isRepeatingOne(value)
 
-    /** Wraps [engine.setSequence] updates duration and position flows on success. */
+    /** Switches to sequence [index]; updates duration and position flows on success. */
     fun setSequence(index: Int): Boolean = engine.setSequence(index)
 
-    /** Sets [engine.playAllSequences] to play all sequences or not */
+    /** Enables or disables automatic playback of all module sequences. */
     fun setPlayAllSequences(value: Boolean) {
         engine.playAllSequences = value
     }
@@ -173,14 +169,13 @@ class ModPlayer(
     ) {
         this.shuffleMode = shuffleMode
         this.repeatMode = repeatMode
-        isRepeatingOne(this.repeatMode == REPEAT_MODE_ONE)
+        isRepeatingOne(repeatMode == REPEAT_MODE_ONE)
 
         requestAudioFocus()
 
         originalQueue.clear()
         originalQueue.addAll(files)
         applyQueueOrder(startAt)
-        invalidateState()
         loadAndStartAt(currentIndex)
         persistQueue()
     }
@@ -204,10 +199,9 @@ class ModPlayer(
 
     /** Jumps directly to [index] in the current queue. */
     fun jumpToIndex(index: Int) {
-        if (index in queue.indices) {
-            lastNavDirection = if (index >= currentIndex) 1 else -1
-            navigate(index)
-        }
+        if (index !in queue.indices) return
+        lastNavDirection = if (index >= currentIndex) 1 else -1
+        navigate(index)
     }
 
     /** Requests / re-requests audio focus from the system. */
@@ -222,185 +216,50 @@ class ModPlayer(
     /** Returns cached pattern data for the pattern view. */
     fun getPatternData(patternIndex: Int) = engine.getPatternData(patternIndex)
 
+    /** Fills [stats] with current Oboe stream statistics. */
     fun getAudioStats(stats: AudioStats) = engine.getAudioStats(stats)
 
     /**
-     * Builds [queue] and [playlist] from [originalQueue], applying shuffle if enabled.
-     * [startAt] is the desired starting index within [originalQueue].
+     * Flushes the queue state synchronously, cancels the coroutine scope, and
+     * stops the engine. Called from [PlayerService.onDestroy].
      */
-    private fun applyQueueOrder(startAt: Int = 0) {
-        Timber.d(
-            "applyQueueOrder shuffleModeEnabled=$shuffleMode " +
-                "startAt=$startAt originalQueue.size=${originalQueue.size}"
-        )
-
-        queue.clear()
-        playlist.clear()
-
-        if (shuffleMode) {
-            // Place the selected track first, then shuffle the rest.
-            val shuffled = originalQueue.toMutableList()
-            val first = shuffled.removeAt(startAt.coerceIn(0, shuffled.lastIndex))
-            shuffled.shuffle()
-            queue.add(first)
-            queue.addAll(shuffled)
-            currentIndex = 0
-        } else {
-            queue.addAll(originalQueue)
-            currentIndex = startAt.coerceIn(0, queue.lastIndex)
-        }
-
-        playlist.addAll(queue.map { it.toMediaItem() })
-        queueFlow.value = queue.toList()
-        currentIndexFlow.value = currentIndex
-        invalidateState()
-    }
-
-    /** Clears all queue state and notifies observers. */
-    private fun clearQueue() {
-        playlist.clear()
-        queue.clear()
-        originalQueue.clear()
-        currentIndex = 0
-        currentIndexFlow.value = 0
-        queueFlow.value = emptyList()
-        persistQueue()
-        invalidateState()
+    fun releaseEngine() {
+        if (originalQueue.isNotEmpty()) runBlocking { saveQueueState() }
+        scope.cancel("Releasing Engine")
+        Thread { engine.release() }.start()
     }
 
     /**
-     * Loads the module at [index] on a background thread.
+     * Restores the persisted queue state, starting playback only if
+     * [AppPreferences.getAutoResume] is enabled. Called on service start.
      *
-     * @param seekToMs Optional position to seek to after loading.
-     * @param autoStart Whether to begin playback immediately after loading.
+     * @return true if a non-empty queue was successfully restored.
      */
-    private fun loadAndStartAt(index: Int, seekToMs: Long? = null, autoStart: Boolean = true) {
-        val file = queue.getOrNull(index) ?: return
-        if (isLoading) return
-        isLoading = true
-
-        Thread {
-            Timber.d("loadAndStartAt: loading index=$index autoStart=$autoStart file=${file.name}")
-            if (engine.loadNext(file)) {
-                Timber.d("loadAndStartAt: loadNext succeeded, autoStart=$autoStart")
-
-                // todo sucks
-                // Replace the placeholder item with real metadata from libxmp.
-                val duration = engine.modVarsFlow.value.sequenceDuration(currentSequenceFlow.value)
-                val realItem = MediaItem.Builder()
-                    .setUri(file.uri)
-                    .setMediaId(file.filePath)
-                    .setMediaMetadata(file.toRealMetadata(duration.toLong()))
-                    .build()
-
-                mainHandler.post {
-                    playlist[index] = realItem
-                    moduleLoadedFlow.value++
-                    invalidateState()
-                }
-
-                if (autoStart) {
-                    Timber.d("loadAndStartAt: calling engine.start()")
-                    engine.start()
-                    if (seekToMs != null && seekToMs > 0L) {
-                        engine.seek(seekToMs.toInt())
-                        pendingSeekPositionMs = seekToMs
-                    }
-                }
-
-                mainHandler.post(::invalidateState)
-            } else {
-                mainHandler.post(::skipUnplayable)
-            }
-            isLoading = false
-        }.start()
-    }
-
-    /**
-     * Skips the current unplayable file, continuing in [lastNavDirection].
-     * Clears the queue if every item fails to load.
-     */
-    private fun skipUnplayable() {
-        skipAttempts++
-        if (skipAttempts >= queue.size) {
-            skipAttempts = 0
-            clearQueue()
-            return
+    suspend fun restoreQueue(): Boolean {
+        val state = prefs.getQueueState() ?: return false
+        val files = try {
+            Json.decodeFromString<List<ModuleEntity>>(state.json)
+        } catch (e: Exception) {
+            Timber.e(e, "Failed to restore queue")
+            prefs.clearQueueState()
+            return false
         }
-        if (lastNavDirection < 0) advanceToPrevious() else advanceToNext()
-    }
+        if (files.isEmpty() || originalQueue.isNotEmpty()) return false
 
-    /** Navigates to [to], loads and starts the module there. */
-    private fun navigate(to: Int) {
-        currentIndex = to
-        currentIndexFlow.value = currentIndex
-        pendingSeekPositionMs = -1L
+        originalQueue.addAll(files)
+        shuffleMode = state.shuffle
+        repeatMode = state.repeat
+        isRepeatingOne(repeatMode == REPEAT_MODE_ONE)
+        applyQueueOrder(startAt = state.index)
+
+        val autoResume = prefs.getAutoResume()
+        loadAndStartAt(
+            index = currentIndex,
+            seekToMs = state.positionMs.takeIf { autoResume && it > 0L },
+            autoStart = autoResume,
+        )
         invalidateState()
-        loadAndStartAt(currentIndex)
-        persistQueue()
-    }
-
-    /** Advances forward according to the current [repeatMode]. */
-    private fun advanceToNext() {
-        lastNavDirection = 1
-        when {
-            repeatMode == REPEAT_MODE_ONE -> navigate(currentIndex)
-
-            repeatMode == REPEAT_MODE_ALL -> {
-                val idx = if (currentIndex + 1 < queue.size) currentIndex + 1 else 0
-                navigate(idx)
-            }
-
-            currentIndex + 1 < queue.size -> navigate(currentIndex + 1)
-
-            else -> clearQueue()
-        }
-    }
-
-    /** Advances backward according to the current [repeatMode]. */
-    private fun advanceToPrevious() {
-        lastNavDirection = -1
-        when {
-            repeatMode == REPEAT_MODE_ONE -> navigate(currentIndex)
-
-            repeatMode == REPEAT_MODE_ALL -> {
-                val idx = if (currentIndex - 1 >= 0) currentIndex - 1 else queue.lastIndex
-                navigate(idx)
-            }
-
-            currentIndex - 1 >= 0 -> navigate(currentIndex - 1)
-
-            else -> navigate(0)
-        }
-    }
-
-    /** Starts the 500 ms position-update loop, also flushing queue state every 5 s. */
-    private fun startPositionUpdates() {
-        positionUpdateJob?.cancel()
-        positionUpdateJob = scope.launch {
-            var lastPersist = 0L
-            while (true) {
-                delay(500L.milliseconds)
-                // Clear a pending seek once the engine position has converged.
-                if (pendingSeekPositionMs >= 0 &&
-                    abs(engine.positionMs.value - pendingSeekPositionMs) < 2_000L
-                ) {
-                    pendingSeekPositionMs = -1L
-                }
-                invalidateState()
-                val now = System.currentTimeMillis()
-                if (now - lastPersist > 5_000) {
-                    persistQueue()
-                    lastPersist = now
-                }
-            }
-        }
-    }
-
-    /** Cancels the position-update loop. */
-    private fun stopPositionUpdates() {
-        positionUpdateJob?.cancel()
-        positionUpdateJob = null
+        return true
     }
 
     /**
@@ -425,21 +284,13 @@ class ModPlayer(
             COMMAND_SET_SHUFFLE_MODE,
         ).build()
 
+        val durationMs = engine.modVarsFlow.value.sequenceDuration(engine.currentSequenceFlow.value)
         val playlistItems = playlist.mapIndexed { i, item ->
             val uid = item.mediaId.ifEmpty {
-                item.localConfiguration?.uri?.toString()
-                    ?: i.toString()
+                item.localConfiguration?.uri?.toString() ?: i.toString()
             }
-
-            val duration = engine.modVarsFlow.value.sequenceDuration(
-                engine.currentSequenceFlow.value
-            )
-            val durationMs = duration
-            val durationUs = if (i == currentIndex && durationMs > 0) {
-                durationMs * 1_000L
-            } else {
-                C.TIME_UNSET
-            }
+            val durationUs =
+                if (i == currentIndex && durationMs > 0) durationMs * 1_000L else C.TIME_UNSET
             MediaItemData.Builder(uid)
                 .setMediaItem(item)
                 .setIsSeekable(true)
@@ -447,11 +298,8 @@ class ModPlayer(
                 .build()
         }
 
-        val position = if (pendingSeekPositionMs >= 0) {
-            pendingSeekPositionMs
-        } else {
-            engine.positionMs.value
-        }
+        val position =
+            if (pendingSeekPositionMs >= 0) pendingSeekPositionMs else engine.positionMs.value
         val playbackState = when {
             playlist.isEmpty() -> STATE_IDLE
             engine.endedNaturally -> STATE_ENDED
@@ -482,13 +330,10 @@ class ModPlayer(
             engine.pause()
         } else if (!engine.isPlaying.value) {
             requestAudioFocus()
-            if (!engine.initialized) {
-                if (!isLoading) loadAndStartAt(currentIndex)
-            } else {
-                when {
-                    engine.paused -> engine.resume()
-                    !engine.endedNaturally -> engine.start()
-                }
+            when {
+                !engine.initialized -> if (!isLoading) loadAndStartAt(currentIndex)
+                engine.paused -> engine.resume()
+                !engine.endedNaturally -> engine.start()
             }
         }
         return Futures.immediateVoidFuture()
@@ -497,61 +342,31 @@ class ModPlayer(
     /** Stores the new repeat mode and persists it with the queue. */
     override fun handleSetRepeatMode(repeatMode: Int): ListenableFuture<*> {
         this.repeatMode = repeatMode
-        isRepeatingOne(this.repeatMode == REPEAT_MODE_ONE)
+        isRepeatingOne(repeatMode == REPEAT_MODE_ONE)
         invalidateState()
         persistQueue()
         return Futures.immediateVoidFuture()
     }
 
     /**
-     * Toggles shuffle mode.
-     * Rebuilds [queue] so the currently-playing track stays at the front,
-     * preserving the real metadata item across the reorder.
+     * Toggles shuffle mode. Rebuilds [queue] so the currently-playing track stays
+     * at the front, preserving its real metadata item across the reorder.
      */
     override fun handleSetShuffleModeEnabled(shuffleModeEnabled: Boolean): ListenableFuture<*> {
-        this.shuffleMode = shuffleModeEnabled
-
+        shuffleMode = shuffleModeEnabled
         if (queue.isEmpty()) {
             invalidateState()
             return Futures.immediateVoidFuture()
         }
 
         isReordering = true
-
         val currentFile = queue.getOrNull(currentIndex)
-        val currentRealItem = playlist.getOrNull(currentIndex)
-
-        queue.clear()
-        playlist.clear()
-
-        if (shuffleModeEnabled) {
-            val remaining = originalQueue.toMutableList()
-            currentFile?.let { remaining.remove(it) }
-            remaining.shuffle()
-            currentFile?.let { queue.add(it) }
-            queue.addAll(remaining)
-            currentIndex = 0
-        } else {
-            queue.addAll(originalQueue)
-            currentIndex = currentFile
-                ?.let { originalQueue.indexOf(it) }
-                ?.coerceAtLeast(0)
-                ?: 0
-        }
-
-        playlist.addAll(queue.map { it.toMediaItem() })
-
-        // Restore real metadata for the current track - Xmp metadata belongs to
-        // the item that was loaded, not to whatever is currently at this index.
-        if (currentRealItem != null) playlist[currentIndex] = currentRealItem
-
-        currentIndexFlow.value = currentIndex
-        queueFlow.value = queue.toList()
-
+        applyQueueOrder(
+            startAt = currentFile?.let { originalQueue.indexOf(it) }?.coerceAtLeast(0) ?: 0,
+            retainCurrentItem = playlist.getOrNull(currentIndex),
+        )
         isReordering = false
-        invalidateState()
         persistQueue()
-
         return Futures.immediateVoidFuture()
     }
 
@@ -588,11 +403,9 @@ class ModPlayer(
     }
 
     /**
-     * Accepts a pre-resolved item list from [AutoBrowseCallback] (or playback resumption)
-     * and loads the queue starting at [startIndex].
-     *
-     * Queue expansion (sibling scanning) is done upstream in [AutoBrowseCallback.onSetMediaItems]
-     * so this handler simply trusts the list it receives.
+     * Accepts a pre-resolved item list from [AutoBrowseCallback] (or playback
+     * resumption) and loads the queue starting at [startIndex]. Queue expansion
+     * (sibling scanning) is done upstream, so the list is trusted as-is.
      */
     override fun handleSetMediaItems(
         mediaItems: List<MediaItem>,
@@ -608,36 +421,165 @@ class ModPlayer(
                 fileExtension = uri.lastPathSegment?.substringAfterLast('.', "") ?: "",
             )
         }
-        if (files.isEmpty()) return Futures.immediateVoidFuture()
-        loadQueue(files = files, startAt = startIndex.coerceIn(0, files.lastIndex))
+        if (files.isNotEmpty()) loadQueue(files, startAt = startIndex.coerceIn(0, files.lastIndex))
         return Futures.immediateVoidFuture()
     }
 
     /**
-     * Flushes the queue state synchronously, cancels the coroutine scope, and
-     * stops the engine. Called from [PlayerService.onDestroy].
+     * Builds [queue] and [playlist] from [originalQueue], applying shuffle if enabled.
+     *
+     * @param startAt Desired starting index within [originalQueue]; with shuffle on,
+     *   that item is placed first and the rest are shuffled behind it.
+     * @param retainCurrentItem Optional real-metadata item to keep at the current index.
      */
-    fun releaseEngine() {
-        if (originalQueue.isNotEmpty()) {
-            val saveIndex = if (shuffleMode) {
-                queue.getOrNull(currentIndex)
-                    ?.let { originalQueue.indexOf(it) }
-                    ?.coerceAtLeast(0) ?: 0
+    private fun applyQueueOrder(startAt: Int = 0, retainCurrentItem: MediaItem? = null) {
+        Timber.d("applyQueueOrder shuffle=$shuffleMode startAt=$startAt size=${originalQueue.size}")
+        queue.clear()
+        playlist.clear()
+
+        if (shuffleMode) {
+            val shuffled = originalQueue.toMutableList()
+            val first = shuffled.removeAt(startAt.coerceIn(0, shuffled.lastIndex))
+            shuffled.shuffle()
+            queue.add(first)
+            queue.addAll(shuffled)
+            currentIndex = 0
+        } else {
+            queue.addAll(originalQueue)
+            currentIndex = startAt.coerceIn(0, queue.lastIndex)
+        }
+
+        playlist.addAll(queue.map { it.toMediaItem() })
+        // Xmp metadata belongs to the loaded item, not whatever lands at this index.
+        retainCurrentItem?.let { playlist[currentIndex] = it }
+        queueFlow.value = queue.toList()
+        currentIndexFlow.value = currentIndex
+        invalidateState()
+    }
+
+    /** Clears all queue state and notifies observers. */
+    private fun clearQueue() {
+        playlist.clear()
+        queue.clear()
+        originalQueue.clear()
+        currentIndex = 0
+        currentIndexFlow.value = 0
+        queueFlow.value = emptyList()
+        persistQueue()
+        invalidateState()
+    }
+
+    /**
+     * Loads the module at [index] on a background thread.
+     *
+     * @param seekToMs Optional position to seek to after loading.
+     * @param autoStart Whether to begin playback immediately after loading.
+     */
+    private fun loadAndStartAt(index: Int, seekToMs: Long? = null, autoStart: Boolean = true) {
+        val file = queue.getOrNull(index) ?: return
+        if (isLoading) return
+        isLoading = true
+
+        Thread {
+            Timber.d("loadAndStartAt: loading index=$index autoStart=$autoStart file=${file.name}")
+            if (engine.loadNext(file)) {
+                // Replace the placeholder item with real metadata from libxmp.
+                val duration = engine.modVarsFlow.value.sequenceDuration(currentSequenceFlow.value)
+                val realItem = file.toMediaItem(file.toRealMetadata(duration.toLong()))
+                mainHandler.post {
+                    playlist[index] = realItem
+                    moduleLoadedFlow.value++
+                    invalidateState()
+                }
+
+                if (autoStart) {
+                    engine.start()
+                    if (seekToMs != null && seekToMs > 0L) {
+                        engine.seek(seekToMs.toInt())
+                        pendingSeekPositionMs = seekToMs
+                    }
+                }
+                mainHandler.post(::invalidateState)
             } else {
-                currentIndex
+                mainHandler.post(::skipUnplayable)
             }
-            runBlocking {
-                prefs.saveQueueState(
-                    json = Json.encodeToString(originalQueue.toList()),
-                    index = saveIndex,
-                    shuffle = shuffleMode,
-                    repeat = repeatMode,
-                    positionMs = engine.positionMs.value,
-                )
+            isLoading = false
+        }.start()
+    }
+
+    /**
+     * Skips the current unplayable file, continuing in [lastNavDirection].
+     * Clears the queue if every item fails to load.
+     */
+    private fun skipUnplayable() {
+        skipAttempts++
+        if (skipAttempts >= queue.size) {
+            skipAttempts = 0
+            clearQueue()
+            return
+        }
+        if (lastNavDirection < 0) advanceToPrevious() else advanceToNext()
+    }
+
+    /** Navigates to [to], loads and starts the module there. */
+    private fun navigate(to: Int) {
+        currentIndex = to
+        currentIndexFlow.value = to
+        pendingSeekPositionMs = -1L
+        invalidateState()
+        loadAndStartAt(to)
+        persistQueue()
+    }
+
+    /** Advances forward according to the current [repeatMode]. */
+    private fun advanceToNext() {
+        lastNavDirection = 1
+        when {
+            repeatMode == REPEAT_MODE_ONE -> navigate(currentIndex)
+            currentIndex + 1 < queue.size -> navigate(currentIndex + 1)
+            repeatMode == REPEAT_MODE_ALL -> navigate(0)
+            else -> clearQueue()
+        }
+    }
+
+    /** Advances backward according to the current [repeatMode]. */
+    private fun advanceToPrevious() {
+        lastNavDirection = -1
+        when {
+            repeatMode == REPEAT_MODE_ONE -> navigate(currentIndex)
+            currentIndex > 0 -> navigate(currentIndex - 1)
+            repeatMode == REPEAT_MODE_ALL -> navigate(queue.lastIndex)
+            else -> navigate(0)
+        }
+    }
+
+    /** Starts the 500 ms position-update loop, also flushing queue state every 5 s. */
+    private fun startPositionUpdates() {
+        positionUpdateJob?.cancel()
+        positionUpdateJob = scope.launch {
+            var lastPersist = 0L
+            while (true) {
+                delay(500L.milliseconds)
+                // Clear a pending seek once the engine position has converged.
+                if (pendingSeekPositionMs >= 0 &&
+                    abs(engine.positionMs.value - pendingSeekPositionMs) < 2_000L
+                ) {
+                    pendingSeekPositionMs = -1L
+                }
+                invalidateState()
+                val now = System.currentTimeMillis()
+                if (now - lastPersist > 5_000) {
+                    persistQueue()
+                    lastPersist = now
+                }
             }
         }
-        scope.cancel("Releasing Engine")
-        Thread { engine.release() }.start()
+    }
+
+    /** Cancels the position-update loop. */
+    private fun stopPositionUpdates() {
+        positionUpdateJob?.cancel()
+        positionUpdateJob = null
     }
 
     /**
@@ -646,91 +588,60 @@ class ModPlayer(
      */
     private fun persistQueue() {
         scope.launch {
-            if (originalQueue.isEmpty()) {
-                prefs.clearQueueState()
-                return@launch
-            }
-            val saveIndex = if (shuffleMode) {
-                queue.getOrNull(currentIndex)
-                    ?.let { originalQueue.indexOf(it) }
-                    ?.coerceAtLeast(0)
-                    ?: 0
-            } else {
-                currentIndex
-            }
-            prefs.saveQueueState(
-                json = Json.encodeToString(originalQueue.toList()),
-                index = saveIndex,
-                shuffle = shuffleMode,
-                repeat = repeatMode,
-                positionMs = engine.positionMs.value,
-            )
+            if (originalQueue.isEmpty()) prefs.clearQueueState() else saveQueueState()
         }
     }
+
+    private suspend fun saveQueueState() = prefs.saveQueueState(
+        json = Json.encodeToString(originalQueue.toList()),
+        index = if (shuffleMode) {
+            queue.getOrNull(currentIndex)?.let { originalQueue.indexOf(it) }?.coerceAtLeast(0) ?: 0
+        } else {
+            currentIndex
+        },
+        shuffle = shuffleMode,
+        repeat = repeatMode,
+        positionMs = engine.positionMs.value,
+    )
+
+    /** Placeholder artwork for the media notification. */
+    private fun drawableUri(resId: Int): Uri =
+        "android.resource://${context.packageName}/$resId".toUri()
 
     /**
-     * Restores the persisted queue state. Calls [loadAndStartAt] with autoStart=false
-     * unless [AppPreferences.getAutoResume] is enabled. Called on service start.
-     * @return `true` if a non-empty queue was successfully restored.
+     * Constructs a [MediaMetadata] with the given [title] and [artist], the app's placeholder
+     * album art, and an optional [durationMs]. Used to populate media session metadata for the
+     * lock-screen / notification; artwork is a static drawable because module files carry no
+     * embedded images.
      */
-    suspend fun restoreQueue(): Boolean {
-        val state = prefs.getQueueState() ?: return false
-        val files = try {
-            Json.decodeFromString<List<ModuleEntity>>(state.json)
-        } catch (e: Exception) {
-            Timber.e(e, "Failed to restore queue")
-            prefs.clearQueueState()
-            return false
-        }
-
-        if (files.isEmpty()) return false
-
-        if (originalQueue.isNotEmpty()) return false
-
-        originalQueue.clear()
-        originalQueue.addAll(files)
-        this.shuffleMode = state.shuffle
-        this.repeatMode = state.repeat
-        isRepeatingOne(this.repeatMode == REPEAT_MODE_ONE)
-        applyQueueOrder(startAt = state.index)
-
-        if (prefs.getAutoResume()) {
-            loadAndStartAt(index = currentIndex, seekToMs = state.positionMs.takeIf { it > 0L })
-        } else {
-            loadAndStartAt(index = currentIndex, autoStart = false)
-        }
-
-        invalidateState()
-        return true
-    }
+    private fun buildMetadata(
+        title: String,
+        artist: String,
+        durationMs: Long? = null
+    ): MediaMetadata = MediaMetadata.Builder()
+        .setTitle(title)
+        .setArtist(artist)
+        .apply { durationMs?.let { setDurationMs(it) } }
+        .setArtworkUri(drawableUri(R.drawable.aa_album_art))
+        .setIsPlayable(true)
+        .build()
 
     /**
      * Builds a [MediaItem] with placeholder metadata for initial queue population.
      * Real metadata (loaded from libxmp) is injected by [loadAndStartAt] later.
      */
-    private fun ModuleEntity.toMediaItem(): MediaItem = MediaItem.Builder()
+    private fun ModuleEntity.toMediaItem(
+        metadata: MediaMetadata = buildMetadata(name, type)
+    ): MediaItem = MediaItem.Builder()
         .setUri(uri)
         .setMediaId(filePath)
-        .setMediaMetadata(
-            MediaMetadata.Builder()
-                .setTitle(name)
-                .setArtist(type)
-                .setArtworkUri(drawableUri(R.drawable.aa_album_art))
-                .setIsPlayable(true)
-                .build()
-        )
+        .setMediaMetadata(metadata)
         .build()
 
     /** Builds [MediaMetadata] from libxmp after the module has been loaded successfully. */
-    private fun ModuleEntity.toRealMetadata(duration: Long): MediaMetadata {
-        val name = modVarsFlow.value.modName.ifBlank { filename }
-        val type = modVarsFlow.value.modType.ifBlank { fileExtension.uppercase() }
-        return MediaMetadata.Builder()
-            .setTitle(name)
-            .setArtist(type)
-            .setDurationMs(duration)
-            .setArtworkUri(drawableUri(R.drawable.aa_album_art))
-            .setIsPlayable(true)
-            .build()
-    }
+    private fun ModuleEntity.toRealMetadata(durationMs: Long): MediaMetadata = buildMetadata(
+        title = modVarsFlow.value.modName.ifBlank { filename },
+        artist = modVarsFlow.value.modType.ifBlank { fileExtension.uppercase() },
+        durationMs = durationMs,
+    )
 }

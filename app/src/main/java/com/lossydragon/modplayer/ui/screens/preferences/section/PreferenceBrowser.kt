@@ -60,7 +60,7 @@ fun PreferenceBrowser(colors: ListItemColors) {
                     val emptyText = stringResource(R.string.not_set)
                     Text(text = currentFolder.ifEmpty { emptyText })
                 },
-                shapes = ListItemDefaults.segmentedShapes(0, 0),
+                shapes = ListItemDefaults.segmentedShapes(0, 1),
                 colors = colors,
                 onClick = { folderPicker.launch(null) },
             )

@@ -290,13 +290,13 @@ METHOD(jint, getPatternRows)(JNIEnv* env, jobject obj, jint pat) {
   return g_backend == BACKEND_OPENMPT ? openmpt_getPatternRows(env, pat) : xmp_getPatternRows(env, pat);
 }
 
-METHOD(void, getPatternRow)(JNIEnv* env, jobject obj, jint pat, jint row, jbyteArray rowNotes, jbyteArray rowInstruments, jbyteArray rowFxType, jbyteArray rowFxParm) {
+METHOD(void, getPatternRow)(JNIEnv* env, jobject obj, jint pat, jint row, jbyteArray rowNotes, jbyteArray rowInstruments, jbyteArray rowFxType, jbyteArray rowFxParm, jbyteArray rowFx2Type, jbyteArray rowFx2Parm) {
   if (!checkBackend(env)) {
     LOG_ERROR("getPatternRow() - invalid backend");
     return;
   }
-  g_backend == BACKEND_OPENMPT ? openmpt_getPatternRow(env, pat, row, rowNotes, rowInstruments, rowFxType, rowFxParm)
-                               : xmp_getPatternRow(env, pat, row, rowNotes, rowInstruments, rowFxType, rowFxParm);
+  g_backend == BACKEND_OPENMPT ? openmpt_getPatternRow(env, pat, row, rowNotes, rowInstruments, rowFxType, rowFxParm, rowFx2Type, rowFx2Parm)
+                               : xmp_getPatternRow(env, pat, row, rowNotes, rowInstruments, rowFxType, rowFxParm, rowFx2Type, rowFx2Parm);
 }
 
 METHOD(void, getSampleData)(JNIEnv* env, jobject obj, jboolean trigger, jint ins, jint key, jint period, jint chn, jint width, jbyteArray buffer) {

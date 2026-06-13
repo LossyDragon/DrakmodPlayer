@@ -670,7 +670,20 @@ void xmp_getModVars(JNIEnv* env, jobject modVars) {
   env->DeleteLocalRef(renderingStr);
 }
 
-void xmp_getPatternRow(JNIEnv* env, jint pat, jint row, jbyteArray rowNotes, jbyteArray rowInstruments, jbyteArray rowFxType, jbyteArray rowFxParm) {
+// An effect slot is empty only when both type and parameter are zero: type 0 is
+// arpeggio (FX_ARPEGGIO shares the 0 encoding), which is a real effect whenever
+// its parameter is nonzero. Empty slots are reported as -1/-1.
+static void packEffect(uint8_t type, uint8_t parm, jbyte& outType, jbyte& outParm) {
+  if (type == 0 && parm == 0) {
+    outType = -1;
+    outParm = -1;
+  } else {
+    outType = static_cast<jbyte>(type);
+    outParm = static_cast<jbyte>(parm);
+  }
+}
+
+void xmp_getPatternRow(JNIEnv* env, jint pat, jint row, jbyteArray rowNotes, jbyteArray rowInstruments, jbyteArray rowFxType, jbyteArray rowFxParm, jbyteArray rowFx2Type, jbyteArray rowFx2Parm) {
   XmpPlayerState& state = XmpPlayerState::instance();
 
   if (!state.mod_is_loaded) return;
@@ -687,6 +700,8 @@ void xmp_getPatternRow(JNIEnv* env, jint pat, jint row, jbyteArray rowNotes, jby
   std::array<jbyte, XMP_MAX_CHANNELS> row_ins{};
   std::array<jbyte, XMP_MAX_CHANNELS> row_fxt{};
   std::array<jbyte, XMP_MAX_CHANNELS> row_fxp{};
+  std::array<jbyte, XMP_MAX_CHANNELS> row_f2t{};
+  std::array<jbyte, XMP_MAX_CHANNELS> row_f2p{};
 
   for (int i = 0; i < chn; i++) {
     const xmp_track* xxt = mi.mod->xxt[xxp->index[i]];
@@ -694,27 +709,16 @@ void xmp_getPatternRow(JNIEnv* env, jint pat, jint row, jbyteArray rowNotes, jby
 
     row_note[i] = static_cast<jbyte>(e.note);
     row_ins[i] = static_cast<jbyte>(e.ins);
-
-    if (e.fxt > 0) { // NOLINT(*-branch-clone)
-      row_fxt[i] = static_cast<jbyte>(e.fxt);
-      row_fxp[i] = static_cast<jbyte>(e.fxp);
-    } else if (e.f2t > 0) {
-      row_fxt[i] = static_cast<jbyte>(e.f2t);
-      row_fxp[i] = static_cast<jbyte>(e.f2p);
-    } else if (e.fxt == 0 && e.fxp > 0) {
-      // Likely Arpeggio
-      row_fxt[i] = static_cast<jbyte>(e.fxt);
-      row_fxp[i] = static_cast<jbyte>(e.fxp);
-    } else {
-      row_fxt[i] = -1;
-      row_fxp[i] = -1;
-    }
+    packEffect(e.fxt, e.fxp, row_fxt[i], row_fxp[i]);
+    packEffect(e.f2t, e.f2p, row_f2t[i], row_f2p[i]);
   }
 
   env->SetByteArrayRegion(rowNotes, 0, chn, row_note.data());
   env->SetByteArrayRegion(rowInstruments, 0, chn, row_ins.data());
   env->SetByteArrayRegion(rowFxType, 0, chn, row_fxt.data());
   env->SetByteArrayRegion(rowFxParm, 0, chn, row_fxp.data());
+  env->SetByteArrayRegion(rowFx2Type, 0, chn, row_f2t.data());
+  env->SetByteArrayRegion(rowFx2Parm, 0, chn, row_f2p.data());
 }
 
 void xmp_getSampleData(JNIEnv* env, jboolean trigger, jint ins, jint key, jint period, jint chn, jint width, jbyteArray buffer) {

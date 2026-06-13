@@ -97,7 +97,7 @@ object Player {
     external fun getFormats(): Array<String>
     external fun getFrameInfo(values: FrameInfo)
     external fun getModVars(vars: ModVars)
-    external fun getPatternRow(pat: Int, row: Int, rowNotes: ByteArray, rowInstruments: ByteArray, rowFxType: ByteArray, rowFxParm: ByteArray)
+    external fun getPatternRow(pat: Int, row: Int, rowNotes: ByteArray, rowInstruments: ByteArray, rowFxType: ByteArray, rowFxParm: ByteArray, rowFx2Type: ByteArray, rowFx2Parm: ByteArray)
     external fun getPatternRows(pat: Int): Int
     external fun getPlayer(parm: Int): Int
     external fun getSampleData(trigger: Boolean, ins: Int, key: Int, period: Int, chn: Int, width: Int, buffer: ByteArray?)
