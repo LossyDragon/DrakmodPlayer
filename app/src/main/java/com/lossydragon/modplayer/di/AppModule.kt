@@ -30,7 +30,7 @@ val appModule = module {
     single { AppPreferences(androidContext()) }
 
     // ViewModels
-    viewModel { FileBrowserViewModel(androidContext(), get(), get()) }
+    viewModel { FileBrowserViewModel(androidContext(), get(), get(), get()) }
     viewModel { DownloadsViewModel(androidContext(), get(), get(), get(), get()) }
     viewModel { PlayerViewModel(androidContext(), get(), get()) }
     viewModel { PlaylistsViewModel(androidContext(), get(), get()) }

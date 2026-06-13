@@ -10,7 +10,6 @@ import androidx.compose.ui.platform.*
 import androidx.compose.ui.res.*
 import androidx.compose.ui.tooling.preview.*
 import androidx.compose.ui.unit.*
-import androidx.core.net.toUri
 import com.lossydragon.modplayer.R
 import com.lossydragon.modplayer.db.entity.ModuleEntity
 import com.lossydragon.modplayer.ui.screens.browser.BrowserUiState
@@ -24,7 +23,9 @@ internal fun ModuleList(
     padding: PaddingValues,
     listState: LazyListState,
     onDir: (FileItem) -> Unit,
-    onSelect: (ModuleEntity) -> Unit
+    onSelect: (ModuleEntity) -> Unit,
+    onAddToPlaylist: ((ModuleEntity) -> Unit)? = null,
+    onAddFolderToPlaylist: ((FileItem) -> Unit)? = null
 ) {
     LazyColumn(
         modifier = Modifier.fillMaxSize(),
@@ -44,7 +45,8 @@ internal fun ModuleList(
                         title = dir.name,
                         comment = stringResource(R.string.directory),
                         leadingIcon = Icons.Default.Folder,
-                        onClick = { onDir(dir) }
+                        onClick = { onDir(dir) },
+                        onTrailingClick = onAddFolderToPlaylist?.let { { it(dir) } },
                     )
                 }
             )
@@ -57,6 +59,7 @@ internal fun ModuleList(
                         comment = file.moduleType.ifBlank { file.fileExtension },
                         leadingIcon = Icons.Default.AudioFile,
                         onClick = { onSelect(file) },
+                        onTrailingClick = onAddToPlaylist?.let { { it(file) } },
                     )
                 }
             )

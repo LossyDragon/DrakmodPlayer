@@ -19,10 +19,12 @@
     <string name="desc_search">Search Input</string>
     <string name="desc_search_button">Search Button</string>
     <string name="desc_search_clear">Clear Search Field</string>
+    <string name="desc_stop">Swipe to stop playing</string>
     <string name="desk_sort_button">Sort items button</string>
     <string name="dialog_message_clear_history">Clear your module search history?</string>
     <string name="dialog_message_delete_module">Delete %s?</string>
     <string name="dialog_message_delete_playlist">Are you sure you want to delete \'%s\'?\nThis cannot be undone!</string>
+    <string name="dialog_message_empty_playlist">No playlists yet. Create one in the Playlists tab.</string>
     <string name="dialog_message_pref_reset">Are you sure you want to reset all settings to their original value?\nThis action cannot be undone.</string>
     <string name="dialog_title_audio_info">Audio Info</string>
     <string name="dialog_title_clear_history">Clear History</string>
@@ -32,6 +34,7 @@
     <string name="dialog_title_mod_info">Mod Info</string>
     <string name="dialog_title_multi_choice">Multi Choice</string>
     <string name="dialog_title_new_playlist">New Playlist</string>
+    <string name="dialog_title_pick_playlist">Add to playlist</string>
     <string name="dialog_title_pref_reset">Reset Settings</string>
     <string name="dialog_title_single_choice">Single choice</string>
     <string name="dialog_title_song_instruments">Song Instruments</string>
@@ -49,11 +52,12 @@
     <string name="fab_play_shuffled">Play Shuffled</string>
     <string name="hex_code">#%s</string>
     <string name="history">History</string>
+    <string name="indexing">Indexing…</string>
     <string name="interp_linear">Linear</string>
     <string name="interp_nearest">Nearest</string>
-    <string name="interp_spline">Spline</string>
-    <string name="interp_openmpt_amiga_a500">Amiga A500</string>
     <string name="interp_openmpt_amiga_a1200">Amiga A1200</string>
+    <string name="interp_openmpt_amiga_a500">Amiga A500</string>
+    <string name="interp_spline">Spline</string>
     <string name="loading">Loading…</string>
     <string name="message_no_artists">No artists found.</string>
     <string name="message_no_history">No items stored in history</string>
@@ -103,6 +107,7 @@
     <string name="pref_auto_resume_desc">Restore the last queue and continue playback when the app opens.</string>
     <string name="pref_backend">Rendering Backend</string>
     <string name="pref_backend_desc">Decoder used for newly loaded tracks.</string>
+    <string name="pref_backend_invalid">Invalid</string>
     <string name="pref_backend_libopenmpt">libopenmpt</string>
     <string name="pref_backend_libxmp">libxmp</string>
     <string name="pref_boost">Amplification</string>
@@ -132,19 +137,19 @@
     <string name="pref_format_item_unsigned">Unsigned samples</string>
     <string name="pref_format_item_unsigned_desc">Mix to unsigned samples</string>
     <string name="pref_formats_mpt">OpenMPT Formats</string>
-    <string name="pref_formats_xmp">Libxmp Formats</string>
     <string name="pref_formats_mpt_desc">Supported Trackers libopenmpt can play by extension</string>
+    <string name="pref_formats_xmp">Libxmp Formats</string>
     <string name="pref_formats_xmp_desc">Supported Trackers libxmp can play by name</string>
+    <string name="pref_interp_item_amiga_a1200">Amiga A1200</string>
+    <string name="pref_interp_item_amiga_a1200_desc">OpenMPT Paula resampler with A1200 filter for Amiga modules.</string>
+    <string name="pref_interp_item_amiga_a500">Amiga A500</string>
+    <string name="pref_interp_item_amiga_a500_desc">OpenMPT Paula resampler with A500 filter for Amiga modules.</string>
     <string name="pref_interp_item_linear">Linear</string>
     <string name="pref_interp_item_linear_desc">Linear interpolation (default)</string>
     <string name="pref_interp_item_nearest">Nearest</string>
     <string name="pref_interp_item_nearest_desc">Nearest neighbor — sharp, low CPU</string>
     <string name="pref_interp_item_spline">Spline</string>
     <string name="pref_interp_item_spline_desc">Cubic spline — smoothest, highest CPU</string>
-    <string name="pref_interp_item_amiga_a500">Amiga A500</string>
-    <string name="pref_interp_item_amiga_a500_desc">OpenMPT Paula resampler with A500 filter for Amiga modules.</string>
-    <string name="pref_interp_item_amiga_a1200">Amiga A1200</string>
-    <string name="pref_interp_item_amiga_a1200_desc">OpenMPT Paula resampler with A1200 filter for Amiga modules.</string>
     <string name="pref_interpolation_type">Resampler</string>
     <string name="pref_interpolation_type_desc">Sample resampling mode. Amiga modes apply to libopenmpt Amiga modules.</string>
     <string name="pref_output_format">Output Format</string>
@@ -197,6 +202,7 @@
     <string name="pref_volume">Player Volume</string>
     <string name="pref_volume_desc">Master output volume (%).</string>
     <string name="random">Random</string>
+    <string name="reindexing">Reindexing…</string>
     <string name="rename">Rename</string>
     <string name="reset">Reset</string>
     <string name="results">Results</string>
@@ -241,6 +247,4 @@
     <string name="untitled">(untitled)</string>
     <string name="value_percent">%d%%</string>
     <string name="value_x">%dx</string>
-    <string name="desc_stop">Swipe to stop playing</string>
-    <string name="pref_backend_invalid">Invalid</string>
 </resources>

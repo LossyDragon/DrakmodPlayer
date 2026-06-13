@@ -21,6 +21,9 @@ interface PlaylistDao {
     @Insert
     suspend fun addEntry(entry: PlaylistEntryEntity)
 
+    @Insert
+    suspend fun addEntries(entries: List<PlaylistEntryEntity>)
+
     @Query("DELETE FROM playlist_entries WHERE playlistId = :playlistId AND uri = :uri")
     suspend fun removeEntry(playlistId: Long, uri: String)
 

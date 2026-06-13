@@ -2,14 +2,18 @@ package com.lossydragon.modplayer.ui.screens.browser
 
 import android.content.Context
 import android.net.Uri
+import androidx.annotation.StringRes
 import androidx.compose.runtime.*
 import androidx.core.net.toUri
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import androidx.media3.common.Player
+import com.lossydragon.modplayer.R
 import com.lossydragon.modplayer.data.ModuleRepository
+import com.lossydragon.modplayer.data.PlaylistRepository
 import com.lossydragon.modplayer.db.AppPreferences
 import com.lossydragon.modplayer.db.entity.ModuleEntity
+import com.lossydragon.modplayer.db.entity.PlaylistEntity
 import com.lossydragon.modplayer.util.takeReadWritePermission
 import kotlinx.collections.immutable.ImmutableList
 import kotlinx.collections.immutable.persistentListOf
@@ -50,7 +54,7 @@ data class BrowserUiState(
     val hasStorageAccess: Boolean = false,
     val isLoading: Boolean = true,
     val isShuffle: Boolean = false,
-    val loadingReason: String? = null,
+    @param:StringRes val loadingReason: Int? = null,
     val repeatMode: Int = Player.REPEAT_MODE_OFF,
     val sortOrder: BrowserSortOrder = BrowserSortOrder.NAME
 )
@@ -59,11 +63,15 @@ data class BrowserUiState(
 class FileBrowserViewModel(
     private val appContext: Context,
     private val prefs: AppPreferences,
-    private val db: ModuleRepository
+    private val db: ModuleRepository,
+    private val playlistRepo: PlaylistRepository
 ) : ViewModel() {
 
     val state: StateFlow<BrowserUiState>
         field = MutableStateFlow(BrowserUiState())
+
+    val playlists: StateFlow<ImmutableList<PlaylistEntity>>
+        field = MutableStateFlow<ImmutableList<PlaylistEntity>>(persistentListOf())
 
     private val currentPath = MutableStateFlow<String?>(null)
     private val currentChildren = MutableStateFlow<List<ModuleEntity>>(emptyList())
@@ -73,7 +81,7 @@ class FileBrowserViewModel(
 
     init {
         viewModelScope.launch {
-            state.update { it.copy(isLoading = true, loadingReason = "Loading...") }
+            state.update { it.copy(isLoading = true, loadingReason = R.string.loading) }
 
             val savedUri = prefs.getLastDirectoryUri()
             if (savedUri == null) {
@@ -108,13 +116,30 @@ class FileBrowserViewModel(
             val isShuffle = prefs.getGlobalShuffleFlow().first()
             state.update { it.copy(isShuffle = isShuffle) }
         }
+
+        playlistRepo.playlists
+            .onEach { playlists.value = it.toImmutableList() }
+            .launchIn(viewModelScope)
+    }
+
+    fun addFileToPlaylist(playlist: PlaylistEntity, file: ModuleEntity) {
+        viewModelScope.launch(Dispatchers.IO) {
+            runCatching { playlistRepo.addToPlaylist(playlist.id, file) }
+        }
+    }
+
+    fun addFolderToPlaylist(playlist: PlaylistEntity, folder: FileItem) {
+        viewModelScope.launch(Dispatchers.IO) {
+            val files = db.getDescendantModules(folder.uri.toString())
+            runCatching { playlistRepo.addAllToPlaylist(playlist.id, files) }
+        }
     }
 
     fun onRootFolderPicked(uri: Uri) {
         state.update {
             it.copy(
                 isLoading = true,
-                loadingReason = "Indexing...",
+                loadingReason = R.string.indexing,
                 hasStorageAccess = true
             )
         }
@@ -133,7 +158,7 @@ class FileBrowserViewModel(
 
     fun onRefresh() {
         val rootUri = dirStack.firstOrNull()?.first?.toUri() ?: return
-        state.update { it.copy(isLoading = true, loadingReason = "Reindexing...") }
+        state.update { it.copy(isLoading = true, loadingReason = R.string.reindexing) }
         viewModelScope.launch(Dispatchers.IO) {
             db.reindexDirectory(rootUri)
             state.update { it.copy(isLoading = false) }

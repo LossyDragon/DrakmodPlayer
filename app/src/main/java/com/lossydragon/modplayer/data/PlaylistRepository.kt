@@ -28,6 +28,21 @@ class PlaylistRepository(private val dao: PlaylistDao) {
         )
     }
 
+    suspend fun addAllToPlaylist(playlistId: Long, files: List<ModuleEntity>) {
+        val start = dao.getEntries(playlistId).size
+        dao.addEntries(
+            files.mapIndexed { i, file ->
+                PlaylistEntryEntity(
+                    playlistId = playlistId,
+                    position = start + i,
+                    uri = file.filePath,
+                    name = file.name,
+                    extension = file.fileExtension,
+                )
+            }
+        )
+    }
+
     suspend fun getPlaylistFiles(playlistId: Long): List<ModuleEntity> =
         dao.getEntries(playlistId).map {
             ModuleEntity(

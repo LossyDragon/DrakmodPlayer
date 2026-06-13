@@ -15,6 +15,7 @@ import androidx.compose.material3.*
 import androidx.compose.material3.pulltorefresh.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.*
+import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.*
 import androidx.compose.ui.input.nestedscroll.*
 import androidx.compose.ui.platform.*
@@ -26,6 +27,7 @@ import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.media3.common.Player
 import com.lossydragon.modplayer.R
 import com.lossydragon.modplayer.db.entity.ModuleEntity
+import com.lossydragon.modplayer.db.entity.PlaylistEntity
 import com.lossydragon.modplayer.player.PlaybackStatus
 import com.lossydragon.modplayer.player.PlayerUiState
 import com.lossydragon.modplayer.player.PlayerViewModel
@@ -39,6 +41,7 @@ import com.lossydragon.modplayer.ui.theme.AppTheme
 import com.lossydragon.modplayer.util.takeReadWritePermission
 import com.lossydragon.native.model.FrameInfo
 import com.lossydragon.native.model.ModVars
+import kotlinx.collections.immutable.ImmutableList
 import kotlinx.collections.immutable.persistentListOf
 import kotlinx.collections.immutable.toImmutableList
 import kotlinx.coroutines.launch
@@ -61,6 +64,11 @@ fun FileBrowserScreen(
 
     val browserState by browserViewModel.state.collectAsStateWithLifecycle()
     val playerState by playerViewModel.state.collectAsStateWithLifecycle()
+    val playlists by browserViewModel.playlists.collectAsStateWithLifecycle()
+
+    // Pending "add to playlist" target: a single file, or null meaning the current folder.
+    var pendingAdd by remember { mutableStateOf<ModuleEntity?>(null) }
+    var pendingFolderAdd by remember { mutableStateOf<FileItem?>(null) }
 
     val folderPicker = rememberLauncherForActivityResult(
         contract = ActivityResultContracts.OpenDocumentTree(),
@@ -76,6 +84,28 @@ fun FileBrowserScreen(
         if (!browserViewModel.navigateUp()) {
             onBack()
         }
+    }
+
+    val dialogTarget = pendingAdd ?: if (pendingFolderAdd != null) pendingFolderAdd else null
+    if (dialogTarget != null) {
+        PlaylistPickerDialog(
+            playlists = playlists,
+            onDismiss = {
+                pendingAdd = null
+                pendingFolderAdd = null
+            },
+            onPick = { playlist ->
+                val file = pendingAdd
+                val folder = pendingFolderAdd
+                if (file != null) {
+                    browserViewModel.addFileToPlaylist(playlist, file)
+                } else if (folder != null) {
+                    browserViewModel.addFolderToPlaylist(playlist, folder)
+                }
+                pendingAdd = null
+                pendingFolderAdd = null
+            },
+        )
     }
 
     FileBrowserScreenContent(
@@ -118,6 +148,8 @@ fun FileBrowserScreen(
             onNavigateToPlayer()
         },
         onDir = browserViewModel::navigateInto,
+        onAddToPlaylist = { pendingAdd = it },
+        onAddFolderToPlaylist = { pendingFolderAdd = it },
         onMiniPlayerTap = onNavigateToPlayer,
         onMiniPlayerToggle = playerViewModel::togglePlayPause,
         onMiniPlayerNext = playerViewModel::next,
@@ -143,6 +175,8 @@ private fun FileBrowserScreenContent(
     onPlayAll: () -> Unit,
     onSelect: (ModuleEntity) -> Unit,
     onDir: (FileItem) -> Unit,
+    onAddToPlaylist: (ModuleEntity) -> Unit,
+    onAddFolderToPlaylist: (FileItem) -> Unit,
     onMiniPlayerTap: () -> Unit,
     onMiniPlayerToggle: () -> Unit,
     onMiniPlayerNext: () -> Unit,
@@ -310,7 +344,7 @@ private fun FileBrowserScreenContent(
                 when {
                     browserState.isLoading -> ProgressbarIndicator(
                         modifier = Modifier.fillMaxSize(),
-                        text = browserState.loadingReason
+                        text = browserState.loadingReason?.let { stringResource(it) }
                     )
 
                     !browserState.hasStorageAccess -> MessageBox(
@@ -342,10 +376,59 @@ private fun FileBrowserScreenContent(
                         listState = listState,
                         onDir = onDir,
                         onSelect = onSelect,
+                        onAddToPlaylist = onAddToPlaylist,
+                        onAddFolderToPlaylist = onAddFolderToPlaylist,
                     )
                 }
             }
         }
+    )
+}
+
+@OptIn(ExperimentalMaterial3ExpressiveApi::class)
+@Composable
+private fun PlaylistPickerDialog(
+    playlists: ImmutableList<PlaylistEntity>,
+    onDismiss: () -> Unit,
+    onPick: (PlaylistEntity) -> Unit
+) {
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        title = { Text(text = stringResource(R.string.dialog_title_pick_playlist)) },
+        text = {
+            if (playlists.isEmpty()) {
+                Text(text = stringResource(R.string.dialog_message_empty_playlist))
+            } else {
+                LazyColumn {
+                    itemsIndexed(playlists) { idx, playlist ->
+                        ListItem(
+                            colors = ListItemDefaults.colors(
+                                containerColor = Color.Transparent
+                            ),
+                            shapes = ListItemDefaults.shapes(
+                                shape = MaterialTheme.shapes.small,
+                                focusedShape = MaterialTheme.shapes.small,
+                                pressedShape = MaterialTheme.shapes.small,
+                            ),
+                            onClick = { onPick(playlist) },
+                            content = { Text(text = playlist.name) },
+                            supportingContent = if (playlist.comment.isNotBlank()) {
+                                { Text(text = playlist.comment) }
+                            } else {
+                                null
+                            }
+                        )
+                        if (idx < playlists.size - 1) {
+                            Spacer(modifier = Modifier.height(8.dp))
+                        }
+                    }
+                }
+            }
+        },
+        confirmButton = {},
+        dismissButton = {
+            TextButton(onClick = onDismiss) { Text(text = "Cancel") }
+        },
     )
 }
 
@@ -512,6 +595,8 @@ private fun Preview(
             onPlayAll = {},
             onSelect = {},
             onDir = {},
+            onAddToPlaylist = {},
+            onAddFolderToPlaylist = {},
             onMiniPlayerTap = {},
             onMiniPlayerToggle = {},
             onMiniPlayerNext = {},
