@@ -1,9 +1,14 @@
 package com.lossydragon.modplayer.ui.screens.playlists.components
 
+import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.wrapContentSize
+import androidx.compose.foundation.layout.wrapContentWidth
 import androidx.compose.material.icons.*
 import androidx.compose.material.icons.filled.*
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
+import androidx.compose.ui.Modifier
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.tooling.preview.*
 import com.lossydragon.modplayer.R
@@ -47,10 +52,12 @@ internal fun DeletePlaylistDialog(
 @Composable
 private fun Preview() {
     AppTheme {
-        DeletePlaylistDialog(
-            playlist = PlaylistEntity(name = "Amiga Tunes"),
-            onDismiss = {},
-            onConfirm = {}
-        )
+        Surface(modifier = Modifier.fillMaxSize()) {
+            DeletePlaylistDialog(
+                playlist = PlaylistEntity(name = "Amiga Tunes"),
+                onDismiss = {},
+                onConfirm = {}
+            )
+        }
     }
 }

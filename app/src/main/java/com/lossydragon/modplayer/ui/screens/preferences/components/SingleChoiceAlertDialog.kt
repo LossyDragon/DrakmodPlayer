@@ -4,9 +4,13 @@ import androidx.annotation.StringRes
 import androidx.compose.foundation.layout.*
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
+import androidx.compose.ui.Modifier
 import androidx.compose.ui.res.*
+import androidx.compose.ui.tooling.preview.Preview
 import com.lossydragon.modplayer.R
+import com.lossydragon.modplayer.ui.theme.AppTheme
 import kotlinx.collections.immutable.ImmutableList
+import kotlinx.collections.immutable.persistentListOf
 
 internal data class PreferenceItem(
     val key: String,
@@ -81,4 +85,23 @@ private fun LabelRadioButton(
         supportingContent = { Text(text = stringResource(item.description)) },
         trailingContent = { RadioButton(selected = isSelected, onClick = null) },
     )
+}
+
+@Preview
+@Composable
+private fun Preview() {
+    AppTheme {
+        Surface(modifier = Modifier.fillMaxSize()) {
+            SingleChoiceAlertDialog(
+                selectedItemKey = "2",
+                onItemSelected = {},
+                items = persistentListOf(
+                    PreferenceItem("1", R.string.app_name, R.string.app_name),
+                    PreferenceItem("2", R.string.app_name, R.string.app_name),
+                    PreferenceItem("3", R.string.app_name, R.string.app_name),
+                    PreferenceItem("4", R.string.app_name, R.string.app_name),
+                ),
+            )
+        }
+    }
 }

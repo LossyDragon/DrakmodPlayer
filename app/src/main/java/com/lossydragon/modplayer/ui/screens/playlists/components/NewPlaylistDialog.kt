@@ -110,13 +110,15 @@ internal fun NewPlaylistDialog(
 @Composable
 private fun Preview_Edit() {
     AppTheme {
-        NewPlaylistDialog(
-            onDismiss = {},
-            onCreate = { _, _ -> },
-            onError = {},
-            initialName = "Name Name",
-            initialComment = "Comment Comment"
-        )
+        Surface(modifier = Modifier.fillMaxSize()) {
+            NewPlaylistDialog(
+                onDismiss = {},
+                onCreate = { _, _ -> },
+                onError = {},
+                initialName = stringResource(R.string.app_name),
+                initialComment = stringResource(R.string.app_name)
+            )
+        }
     }
 }
 
@@ -124,10 +126,12 @@ private fun Preview_Edit() {
 @Composable
 private fun Preview_New() {
     AppTheme {
-        NewPlaylistDialog(
-            onDismiss = {},
-            onCreate = { _, _ -> },
-            onError = {},
-        )
+        Surface(modifier = Modifier.fillMaxSize()) {
+            NewPlaylistDialog(
+                onDismiss = {},
+                onCreate = { _, _ -> },
+                onError = {},
+            )
+        }
     }
 }

@@ -44,7 +44,6 @@ fun PlayerBottomAppBar(
 @Composable
 private fun Preview() {
     AppTheme {
-        PlayerBottomAppBar {
-        }
+        PlayerBottomAppBar {}
     }
 }
