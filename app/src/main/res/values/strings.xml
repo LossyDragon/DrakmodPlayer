@@ -137,7 +137,7 @@
     <string name="pref_format_item_unsigned">Unsigned samples</string>
     <string name="pref_format_item_unsigned_desc">Mix to unsigned samples</string>
     <string name="pref_formats_mpt">OpenMPT Formats</string>
-    <string name="pref_formats_mpt_desc">Supported Trackers libopenmpt can play by extension</string>
+    <string name="pref_formats_mpt_desc">Supported Trackers libopenmpt can play by name</string>
     <string name="pref_formats_xmp">Libxmp Formats</string>
     <string name="pref_formats_xmp_desc">Supported Trackers libxmp can play by name</string>
     <string name="pref_interp_item_amiga_a1200">Amiga A1200</string>
