@@ -55,6 +55,11 @@ class AppPreferences(context: Context) {
 
     suspend fun resetAll() = dataStore.edit { it.clear() }
 
+    /* Debug */
+    private val fileLogging = booleanPreferencesKey("file_logging")
+    fun getFileLoggingFlow() = flow(fileLogging, false)
+    suspend fun setFileLogging(v: Boolean) = set(fileLogging, v)
+
     /* Application */
     private val appThemeAmoled = booleanPreferencesKey("app_theme_amoled")
     fun getAppThemeAmoledFlow() = flow(appThemeAmoled, false)

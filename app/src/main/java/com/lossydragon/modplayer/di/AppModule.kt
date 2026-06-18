@@ -2,6 +2,7 @@ package com.lossydragon.modplayer.di
 
 import androidx.room.Room
 import com.lossydragon.modplayer.core.Constants
+import com.lossydragon.modplayer.core.FileLoggingTree
 import com.lossydragon.modplayer.data.DownloadHistoryRepository
 import com.lossydragon.modplayer.data.ModArchiveService
 import com.lossydragon.modplayer.data.ModuleRepository
@@ -28,6 +29,7 @@ import org.koin.dsl.module
 val appModule = module {
     // Core
     single { AppPreferences(androidContext()) }
+    single { FileLoggingTree(androidContext()) }
 
     // ViewModels
     viewModel { FileBrowserViewModel(androidContext(), get(), get(), get()) }

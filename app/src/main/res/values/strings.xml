@@ -117,6 +117,8 @@
     <string name="pref_buffer_ms_desc">Audio buffer size. Smaller = lower latency but risk of glitches. Applies on next track.</string>
     <string name="pref_dsp">Lowpass Filter</string>
     <string name="pref_dsp_desc">Lowpass DSP smoothing high frequencies.</string>
+    <string name="pref_export_logs">Export Logs</string>
+    <string name="pref_export_logs_desc">Save current log file to Downloads</string>
     <string name="pref_flags">Player Flags</string>
     <string name="pref_flags_desc">VBlank timing, FX9 bug, FixLoop, Amiga 500 mixer. All except A500 apply on next track.</string>
     <string name="pref_flags_enabled" tools:ignore="PluralsCandidate">%d enabled</string>
@@ -152,6 +154,8 @@
     <string name="pref_interp_item_spline_desc">Cubic spline — smoothest, highest CPU</string>
     <string name="pref_interpolation_type">Resampler</string>
     <string name="pref_interpolation_type_desc">Sample resampling mode. Amiga modes apply to libopenmpt Amiga modules.</string>
+    <string name="pref_logging">File Logging</string>
+    <string name="pref_logging_desc">Write logs to a file for export</string>
     <string name="pref_output_format">Output Format</string>
     <string name="pref_output_format_desc">Sample format and channel layout. Default (16-bit stereo) is recommended. Applies on next track.</string>
     <string name="pref_pan">Pan Separation</string>
@@ -220,6 +224,8 @@
     <string name="size_hz">%d Hz</string>
     <string name="size_kb">%d KB</string>
     <string name="snack_export_cancelled">Export Cancelled</string>
+    <string name="snack_export_logs_fail">Couldn\'t export logs</string>
+    <string name="snack_export_logs_ok">Export successful</string>
     <string name="snack_export_ok">Playlists exported successfully</string>
     <string name="snack_import_cancelled">Import Cancelled</string>
     <string name="snack_import_ok">Imported %1$d playlists, %2$d entries</string>

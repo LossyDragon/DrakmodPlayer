@@ -1,11 +1,11 @@
 package com.lossydragon.modplayer.core
 
-import android.content.ContentValues
 import android.content.Context
 import android.os.Build
 import android.os.Environment
 import android.provider.MediaStore
 import com.lossydragon.modplayer.BuildConfig
+import com.lossydragon.modplayer.util.writeToDownloads
 import java.io.File
 import java.io.PrintWriter
 import java.io.StringWriter
@@ -86,39 +86,8 @@ class CrashHandler(
         }
     }
 
-    private fun writeToDownloads(fileName: String, content: String) {
-        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
-            // Android 10+ uses MediaStore. No permissions needed.
-            val values = ContentValues().apply {
-                put(MediaStore.Downloads.DISPLAY_NAME, fileName)
-                put(MediaStore.Downloads.MIME_TYPE, "text/plain")
-                put(
-                    MediaStore.Downloads.RELATIVE_PATH,
-                    "${Environment.DIRECTORY_DOWNLOADS}/$CRASH_FOLDER"
-                )
-                put(MediaStore.Downloads.IS_PENDING, 1)
-            }
-
-            val resolver = context.contentResolver
-            val uri = resolver.insert(MediaStore.Downloads.EXTERNAL_CONTENT_URI, values)
-            uri?.let {
-                resolver.openOutputStream(it)?.use { stream ->
-                    stream.write(content.toByteArray())
-                }
-                values.clear()
-                values.put(MediaStore.Downloads.IS_PENDING, 0)
-                resolver.update(it, values, null, null)
-            }
-        } else {
-            // Android 9 and below needs WRITE_EXTERNAL_STORAGE permission.
-            val downloadsDir = File(
-                Environment.getExternalStoragePublicDirectory(Environment.DIRECTORY_DOWNLOADS),
-                CRASH_FOLDER
-            ).apply { mkdirs() }
-
-            File(downloadsDir, fileName).writeText(content)
-        }
-    }
+    private fun writeToDownloads(fileName: String, content: String) =
+        context.writeToDownloads(fileName, content)
 
     private fun cleanupOldCrashFiles() {
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {

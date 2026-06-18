@@ -13,6 +13,7 @@ import androidx.compose.ui.text.style.*
 import androidx.compose.ui.tooling.preview.*
 import androidx.compose.ui.unit.*
 import com.lossydragon.modplayer.R
+import com.lossydragon.modplayer.core.FileLoggingTree
 import com.lossydragon.modplayer.db.AppPreferences
 import com.lossydragon.modplayer.ui.components.BackButton
 import com.lossydragon.modplayer.ui.screens.preferences.section.PreferenceBrowser
@@ -22,7 +23,9 @@ import com.lossydragon.modplayer.ui.screens.preferences.section.PreferenceOboe
 import com.lossydragon.modplayer.ui.screens.preferences.section.PreferencePlayer
 import com.lossydragon.modplayer.ui.screens.preferences.section.PreferenceXmp
 import com.lossydragon.modplayer.ui.theme.AppTheme
+import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
 import org.koin.compose.koinInject
 
 @OptIn(ExperimentalMaterial3ExpressiveApi::class, ExperimentalMaterial3Api::class)
@@ -41,6 +44,11 @@ internal fun PreferencesScreen(
         AppPreferences(LocalContext.current)
     } else {
         koinInject<AppPreferences>()
+    }
+    val fileLoggingTree = if (LocalView.current.isInEditMode) {
+        FileLoggingTree(LocalContext.current)
+    } else {
+        koinInject<FileLoggingTree>()
     }
 
     var isShowingResetDialog by remember { mutableStateOf(false) }
@@ -116,7 +124,22 @@ internal fun PreferencesScreen(
                         colors = colors,
                         onMptFormats = onMptFormats,
                         onXmpFormats = onXmpFormats,
-                        onAbout = onAbout
+                        onAbout = onAbout,
+                        onExportLogs = {
+                            scope.launch(Dispatchers.IO) {
+                                val success = fileLoggingTree.exportToDownloads()
+                                val msg = resource.getString(
+                                    if (success) {
+                                        R.string.snack_export_logs_ok
+                                    } else {
+                                        R.string.snack_export_logs_fail
+                                    }
+                                )
+                                withContext(Dispatchers.Main) {
+                                    snackbarHostState.showSnackbar(msg)
+                                }
+                            }
+                        }
                     )
                     Text(
                         modifier = Modifier
