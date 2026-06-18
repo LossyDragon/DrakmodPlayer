@@ -58,7 +58,10 @@ fun NavPreferences(
                 )
             }
             entry<NavKeyPreferences.About> {
-                TextButton(onClick = { backStack.removeLastOrNull() }) { Text("Back") }
+                PreferencesAbout(
+                    modifier = modifier,
+                    onBack = backStack::removeLastOrNull
+                )
             }
             entry<NavKeyPreferences.Formats> {
                 val context = LocalContext.current

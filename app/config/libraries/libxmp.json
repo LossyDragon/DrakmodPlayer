@@ -1,0 +1,11 @@
+{
+  "uniqueId": "libxmp",
+  "name": "libxmp",
+  "description": "Extended Module Player library",
+  "website": "https://github.com/libxmp/libxmp",
+  "licenses": ["MIT"],
+  "developers": [
+    { "name": "Claudio Matsuoka" },
+    { "name": "Hipolito Carraro Jr" }
+  ]
+}

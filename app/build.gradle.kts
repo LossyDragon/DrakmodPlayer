@@ -1,6 +1,7 @@
 import org.jetbrains.kotlin.gradle.dsl.JvmTarget
 
 plugins {
+    alias(libs.plugins.about.libraries)
     alias(libs.plugins.android.application)
     alias(libs.plugins.dependency.analysis)
     alias(libs.plugins.gradle.kotlinter)
@@ -19,6 +20,12 @@ kotlin {
 
 ksp {
     arg("room.schemaLocation", "$projectDir/schemas")
+}
+
+aboutLibraries {
+    collect {
+        configPath = file("config")
+    }
 }
 
 dependencyAnalysis {
@@ -47,7 +54,7 @@ android {
         minSdk = 26 // Oreo
         targetSdk = 37 // Cinnamon Bun (terrible codename).
 
-        versionCode = 14
+        versionCode = 15
         versionName = "1.0"
 
         ndk.abiFilters += listOf("armeabi-v7a", "arm64-v8a", "x86", "x86_64")
@@ -107,6 +114,7 @@ dependencies {
 
     ksp(libs.room.compiler)
 
+    implementation(libs.aboutlibraries.compose.m3)
     implementation(libs.bundles.compose)
     implementation(libs.bundles.koin)
     implementation(libs.bundles.ktor)

@@ -1,11 +1,13 @@
 [versions]
 java = "17"
+about-libs = "14.2.1" # https://mvnrepository.com/artifact/com.mikepenz.aboutlibraries.plugin.android/com.mikepenz.aboutlibraries.plugin.android.gradle.plugin
 activityCompose = "1.13.0" # https://mvnrepository.com/artifact/androidx.activity/activity-compose
 androidGradlePlugin = "9.2.1" # https://mvnrepository.com/artifact/com.android.application/com.android.application.gradle.plugin
 colorpickerCompose = "1.2.0" # https://mvnrepository.com/artifact/com.github.skydoves/colorpicker-compose
 composeBom = "2026.06.00" # https://mvnrepository.com/artifact/androidx.compose/compose-bom
 composeSettings = "3.1.0" # https://mvnrepository.com/artifact/com.github.alorma.compose-settings/ui-tiles-expressive/versions
 dataStore = "1.2.1" # https://mvnrepository.com/artifact/androidx.datastore/datastore-preferences
+dep-analysis = "3.15.0" # https://mvnrepository.com/artifact/com.autonomousapps.dependency-analysis
 koin-bom = "4.2.2" # https://mvnrepository.com/artifact/io.insert-koin/koin-core
 kotlin = "2.4.0" # https://mvnrepository.com/artifact/org.jetbrains.kotlin.android/org.jetbrains.kotlin.android.gradle.plugin
 kotlinXImmutable = "0.5.0" # https://mvnrepository.com/artifact/org.jetbrains.kotlinx/kotlinx-collections-immutable
@@ -21,6 +23,7 @@ oboe = "1.10.0" # https://mvnrepository.com/artifact/com.google.oboe/oboe
 paging = "3.5.0" # https://mvnrepository.com/artifact/androidx.paging/paging-compose
 reorderable = "3.1.0" # https://mvnrepository.com/artifact/sh.calvin.reorderable/reorderable
 room = "2.8.4" # https://mvnrepository.com/artifact/androidx.room/room-runtime
+stability = "0.10.0" # https://mvnrepository.com/artifact/com.github.skydoves.compose.stability.analyzer/com.github.skydoves.compose.stability.analyzer.gradle.plugin
 timber = "5.0.1" # https://mvnrepository.com/artifact/com.jakewharton.timber/timber
 
 [libraries]
@@ -31,12 +34,13 @@ compose-bom = { module = "androidx.compose:compose-bom", version.ref = "composeB
 compose-foundation = { module = "androidx.compose.foundation:foundation" }
 compose-material-icons-core = { module = "androidx.compose.material:material-icons-core" }
 compose-material-icons-extended = { module = "androidx.compose.material:material-icons-extended" }
-compose-material3 = { module = "androidx.compose.material3:material3", version = "1.5.0-alpha21" }
+compose-material3 = { module = "androidx.compose.material3:material3", version = "1.5.0-alpha22" }
 compose-runtime = { module = "androidx.compose.runtime:runtime" }
 compose-ui-tooling = { module = "androidx.compose.ui:ui-tooling" }
 compose-ui-tooling-preview = { module = "androidx.compose.ui:ui-tooling-preview" }
 compose-ui-ui = { module = "androidx.compose.ui:ui" }
 
+aboutlibraries-compose-m3 = { module = "com.mikepenz:aboutlibraries-compose-m3", version.ref = "about-libs" }
 androidx-lifecycle-viewmodel-navigation3 = { module = "androidx.lifecycle:lifecycle-viewmodel-navigation3", version.ref = "lifecycleViewmodel" }
 androidx-navigation3-ui = { module = "androidx.navigation3:navigation3-ui", version.ref = "navigation3" }
 compose-settings-ui = { module = "com.github.alorma.compose-settings:ui-tiles", version.ref = "composeSettings" }
@@ -108,5 +112,6 @@ gradle-kotlinter = { id = "org.jmailen.kotlinter", version.ref = "kotlinterGradl
 kotlin-compiler = { id = "org.jetbrains.kotlin.plugin.compose", version.ref = "kotlin" }
 kotlin-serialization = { id = "org.jetbrains.kotlin.plugin.serialization", version.ref = "kotlin" }
 ksp = { id = "com.google.devtools.ksp", version.ref = "ksp" }
-stability-analyzer = { id = "com.github.skydoves.compose.stability.analyzer", version = "0.9.0" }
-dependency-analysis = { id = "com.autonomousapps.dependency-analysis", version = "3.14.1" }
+stability-analyzer = { id = "com.github.skydoves.compose.stability.analyzer", version.ref = "stability" }
+dependency-analysis = { id = "com.autonomousapps.dependency-analysis", version.ref = "dep-analysis" }
+about-libraries = { id = "com.mikepenz.aboutlibraries.plugin.android", version.ref = "about-libs" }

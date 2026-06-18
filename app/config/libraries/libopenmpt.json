@@ -1,0 +1,11 @@
+{
+  "uniqueId": "libopenmpt",
+  "name": "libopenmpt",
+  "description": "C++ library and C interface to render tracker music",
+  "website": "https://github.com/OpenMPT/openmpt",
+  "licenses": ["BSD-3-Clause"],
+  "developers": [
+    { "name": "OpenMPT Project Developers and Contributors" },
+    { "name": "Olivier Lapicque" }
+  ]
+}
