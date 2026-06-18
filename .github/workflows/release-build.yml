@@ -100,6 +100,13 @@ jobs:
         with:
           cache-read-only: ${{ github.ref != 'refs/heads/master' }}
 
+      - name: Cache CMake build outputs
+        uses: actions/cache@v4
+        with:
+          path: renderer/.cxx
+          key: cmake-${{ runner.os }}-${{ hashFiles('renderer/src/main/cpp/**', 'renderer/build.gradle.kts') }}
+          restore-keys: cmake-${{ runner.os }}-
+
       - name: Cache Android SDK build-cache
         uses: actions/cache@v4
         with:

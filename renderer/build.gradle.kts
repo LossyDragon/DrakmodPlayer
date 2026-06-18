@@ -13,7 +13,8 @@ android {
 
     defaultConfig {
         minSdk = 26
-        ndk.abiFilters += listOf("armeabi-v7a", "arm64-v8a", "x86", "x86_64")
+        //noinspection ChromeOsAbiSupport
+        ndk.abiFilters += listOf("armeabi-v7a", "arm64-v8a")
         consumerProguardFiles("consumer-rules.pro")
         externalNativeBuild.cmake {
             cppFlags += listOf("-std=c++17")

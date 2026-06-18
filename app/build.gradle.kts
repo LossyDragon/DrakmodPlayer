@@ -57,7 +57,8 @@ android {
         versionCode = 16
         versionName = "1.0"
 
-        ndk.abiFilters += listOf("armeabi-v7a", "arm64-v8a", "x86", "x86_64")
+        //noinspection ChromeOsAbiSupport
+        ndk.abiFilters += listOf("armeabi-v7a", "arm64-v8a")
 
         val apiKey = project.property("modArchiveApiKey") as String
         buildConfigField("String", "API_KEY", apiKey)
