@@ -63,4 +63,6 @@ A spiritual successor to [cmatsuoka/xmp-android](https://github.com/cmatsuoka/xm
 ---
 
 ## License
-TBD
+This project is licensed under the [MIT License](LICENSE).
+
+Third-party library notices are listed in [NOTICE](NOTICE).
