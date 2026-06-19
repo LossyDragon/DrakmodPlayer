@@ -282,7 +282,6 @@ class ModPlayer(
             COMMAND_GET_METADATA,
             COMMAND_GET_TIMELINE,
             COMMAND_STOP,
-            COMMAND_PREPARE,
             COMMAND_SET_MEDIA_ITEM,
             COMMAND_CHANGE_MEDIA_ITEMS,
             COMMAND_SET_REPEAT_MODE,
