@@ -69,6 +69,10 @@ class ModPlayer(
     @Volatile
     private var isLoading = false
 
+    /** True when the user explicitly paused; prevents audio-focus regain from auto-resuming. */
+    @Volatile
+    private var userPaused = false
+
     /**
      * Desired seek target while a seek is in-flight. Held until the engine
      * position converges, then reset to -1. Guards against position flicker.
@@ -170,6 +174,7 @@ class ModPlayer(
         this.shuffleMode = shuffleMode
         this.repeatMode = repeatMode
         isRepeatingOne(repeatMode == REPEAT_MODE_ONE)
+        userPaused = false
 
         requestAudioFocus()
 
@@ -206,7 +211,7 @@ class ModPlayer(
 
     /** Requests / re-requests audio focus from the system. */
     fun requestAudioFocus() = audioFocus.request(
-        onGain = { engine.resume() },
+        onGain = { if (!userPaused) engine.resume() },
         onLoss = { engine.pause() }
     )
 
@@ -327,8 +332,10 @@ class ModPlayer(
                 "isLoading=$isLoading queue=${queue.size}"
         )
         if (!playWhenReady) {
+            userPaused = true
             engine.pause()
         } else if (!engine.isPlaying.value) {
+            userPaused = false
             requestAudioFocus()
             when {
                 !engine.initialized -> if (!isLoading) loadAndStartAt(currentIndex)
