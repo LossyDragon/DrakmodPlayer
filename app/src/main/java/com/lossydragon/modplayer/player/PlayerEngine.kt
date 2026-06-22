@@ -200,7 +200,6 @@ class PlayerEngine(
      */
     fun pause() {
         Timber.d("pause")
-        endedNaturally = false
         paused = true
         Player.setPlaying(false)
         isPlaying.value = false

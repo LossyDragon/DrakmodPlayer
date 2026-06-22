@@ -211,7 +211,17 @@ class ModPlayer(
 
     /** Requests / re-requests audio focus from the system. */
     fun requestAudioFocus() = audioFocus.request(
-        onGain = { if (!userPaused) engine.resume() },
+        onGain = {
+            if (!userPaused) {
+                when {
+                    engine.paused -> engine.resume()
+
+                    // Delayed-focus case: engine loaded and waiting to start (not paused, not playing).
+                    engine.initialized && !engine.isPlaying.value && !engine.endedNaturally ->
+                        Thread { engine.start() }.start()
+                }
+            }
+        },
         onLoss = { engine.pause() }
     )
 
@@ -258,6 +268,7 @@ class ModPlayer(
         applyQueueOrder(startAt = state.index)
 
         val autoResume = prefs.getAutoResume()
+        if (autoResume) requestAudioFocus()
         loadAndStartAt(
             index = currentIndex,
             seekToMs = state.positionMs.takeIf { autoResume && it > 0L },

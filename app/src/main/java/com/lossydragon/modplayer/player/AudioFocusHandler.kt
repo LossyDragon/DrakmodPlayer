@@ -26,6 +26,9 @@ class AudioFocusHandler(context: Context) {
      */
     fun request(onGain: () -> Unit, onLoss: () -> Unit) {
         if (hasFocus) return
+        // Abandon any previous request so its listener doesn't fire alongside the new one.
+        focusRequest?.let { audioManager.abandonAudioFocusRequest(it) }
+        focusRequest = null
 
         val attributes = AudioAttributes.Builder()
             .setUsage(AudioAttributes.USAGE_MEDIA)

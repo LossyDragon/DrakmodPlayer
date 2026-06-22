@@ -101,7 +101,10 @@ void set_xmp_context(void* ctx) {
 static int render_xmp(void* audioData, int32_t numFrames, int32_t numChannels, int32_t bytesPerSample) {
   if (xmp_ctx == nullptr) return -1;
   int numBytes = numFrames * numChannels * bytesPerSample;
-  return xmp_play_buffer(xmp_ctx, audioData, numBytes, xmp_loop_flag.load(std::memory_order_relaxed));
+  int ret = xmp_play_buffer(xmp_ctx, audioData, numBytes, xmp_loop_flag.load(std::memory_order_relaxed));
+  // xmp_play_buffer returns XMP_END (1) on end-of-module; normalise to -1 so onAudioReady
+  // sets module_ended the same way the libopenmpt callback does.
+  return (ret == XMP_END) ? -1 : ret;
 }
 
 void reset_render_callback() {
