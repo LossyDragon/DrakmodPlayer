@@ -118,6 +118,12 @@ class ModPlayer(
 
     init {
         scope.launch {
+            prefs.getGlobalSubSongsFlow().collect { value ->
+                engine.playAllSequences = value
+            }
+        }
+
+        scope.launch {
             engine.isPlaying.collect { playing ->
                 Timber.i(
                     "isPlaying collector: playing=$playing " +

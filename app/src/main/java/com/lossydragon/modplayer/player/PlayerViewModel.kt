@@ -26,7 +26,6 @@ import kotlinx.coroutines.flow.launchIn
 import kotlinx.coroutines.flow.onEach
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
-import kotlinx.coroutines.runBlocking
 
 /** UI state and domain models for the module player. */
 
@@ -124,11 +123,12 @@ class PlayerViewModel(
             state.update { it.copy(currentSequence = 0) }
         }.launchIn(viewModelScope)
 
-        runBlocking {
-            val view = prefs.getPlayerViewFlow().first()
-            val subsongs = prefs.getGlobalShuffleFlow().first()
-            player.setPlayAllSequences(subsongs)
-            state.update { it.copy(playerView = view, playAllSequences = subsongs) }
+        prefs.getGlobalSubSongsFlow().onEach { subsongs ->
+            state.update { it.copy(playAllSequences = subsongs) }
+        }.launchIn(viewModelScope)
+
+        viewModelScope.launch {
+            state.update { it.copy(playerView = prefs.getPlayerViewFlow().first()) }
         }
     }
 
