@@ -295,6 +295,8 @@ class ModPlayer(
             COMMAND_SEEK_TO_MEDIA_ITEM,
             COMMAND_SEEK_TO_PREVIOUS,
             COMMAND_SEEK_TO_NEXT,
+            COMMAND_SEEK_FORWARD,
+            COMMAND_SEEK_BACK,
             COMMAND_GET_CURRENT_MEDIA_ITEM,
             COMMAND_GET_METADATA,
             COMMAND_GET_TIMELINE,
@@ -336,6 +338,8 @@ class ModPlayer(
             .setPlayWhenReady(engine.isPlaying.value, PLAY_WHEN_READY_CHANGE_REASON_USER_REQUEST)
             .setPlaybackState(playbackState)
             .setContentPositionMs(position)
+            .setSeekForwardIncrementMs(10_000L) // 10 Seconds
+            .setSeekBackIncrementMs(10_000L) // 10 Seconds
             .build()
     }
 
