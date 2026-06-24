@@ -54,7 +54,7 @@ android {
         minSdk = 26 // Oreo
         targetSdk = 37 // Cinnamon Bun (terrible codename).
 
-        versionCode = 18
+        versionCode = 19
         versionName = "1.0"
 
         //noinspection ChromeOsAbiSupport
