@@ -27,7 +27,22 @@ if (OPENMPT_WAVEFORM_PATCH_CHECK EQUAL 0)
             RESULT_VARIABLE OPENMPT_WAVEFORM_PATCH_APPLY
     )
     if (NOT OPENMPT_WAVEFORM_PATCH_APPLY EQUAL 0)
-        message(FATAL_ERROR "Failed to apply OpenMPT waveform API patch")
+        # --check passed but apply still failed. This can happen in CI when the
+        # restored cmake cache (.cxx) triggers a re-configure while the openmpt
+        # submodule is freshly checked out — git apply --check runs with
+        # ERROR_QUIET so safe.directory or similar warnings are silenced and it
+        # returns 0, then the real apply surfaces the error. Fall back to a
+        # reverse check: if the patch is already applied we can safely continue.
+        execute_process(
+                COMMAND git apply --reverse --check --ignore-whitespace "${OPENMPT_WAVEFORM_PATCH}"
+                WORKING_DIRECTORY "${CMAKE_CURRENT_SOURCE_DIR}/openmpt"
+                RESULT_VARIABLE OPENMPT_WAVEFORM_PATCH_ALREADY_APPLIED
+                OUTPUT_QUIET
+                ERROR_QUIET
+        )
+        if (NOT OPENMPT_WAVEFORM_PATCH_ALREADY_APPLIED EQUAL 0)
+            message(FATAL_ERROR "Failed to apply OpenMPT waveform API patch")
+        endif ()
     endif ()
 else ()
     execute_process(
