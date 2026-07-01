@@ -64,6 +64,7 @@ class MainActivity : ComponentActivity() {
 
     override fun onStart() {
         super.onStart()
+        if (controllerFuture != null) return
         val sessionToken = SessionToken(
             this,
             ComponentName(this, PlayerService::class.java)
