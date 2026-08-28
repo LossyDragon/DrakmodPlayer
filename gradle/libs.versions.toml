@@ -1,29 +1,29 @@
 [versions]
 java = "17"
-about-libs = "14.2.1" # https://mvnrepository.com/artifact/com.mikepenz.aboutlibraries.plugin.android/com.mikepenz.aboutlibraries.plugin.android.gradle.plugin
+about-libs = "15.1.1" # https://mvnrepository.com/artifact/com.mikepenz.aboutlibraries.plugin.android/com.mikepenz.aboutlibraries.plugin.android.gradle.plugin
 activityCompose = "1.13.0" # https://mvnrepository.com/artifact/androidx.activity/activity-compose
-androidGradlePlugin = "9.2.1" # https://mvnrepository.com/artifact/com.android.application/com.android.application.gradle.plugin
+androidGradlePlugin = "9.3.2" # https://mvnrepository.com/artifact/com.android.application/com.android.application.gradle.plugin
 colorpickerCompose = "1.2.0" # https://mvnrepository.com/artifact/com.github.skydoves/colorpicker-compose
-composeBom = "2026.06.00" # https://mvnrepository.com/artifact/androidx.compose/compose-bom
+composeBom = "2026.08.00" # https://mvnrepository.com/artifact/androidx.compose/compose-bom
 composeSettings = "3.1.0" # https://mvnrepository.com/artifact/com.github.alorma.compose-settings/ui-tiles-expressive/versions
 dataStore = "1.2.1" # https://mvnrepository.com/artifact/androidx.datastore/datastore-preferences
-dep-analysis = "3.15.0" # https://mvnrepository.com/artifact/com.autonomousapps.dependency-analysis
+dep-analysis = "3.19.1" # https://mvnrepository.com/artifact/com.autonomousapps.dependency-analysis
 koin-bom = "4.2.2" # https://mvnrepository.com/artifact/io.insert-koin/koin-core
-kotlin = "2.4.0" # https://mvnrepository.com/artifact/org.jetbrains.kotlin.android/org.jetbrains.kotlin.android.gradle.plugin
-kotlinXImmutable = "0.5.0" # https://mvnrepository.com/artifact/org.jetbrains.kotlinx/kotlinx-collections-immutable
-kotlinterGradle = "5.5.0" # // https://github.com/jeremymailen/kotlinter-gradle
+kotlin = "2.4.10" # https://mvnrepository.com/artifact/org.jetbrains.kotlin.android/org.jetbrains.kotlin.android.gradle.plugin
+kotlinXImmutable = "0.5.1" # https://mvnrepository.com/artifact/org.jetbrains.kotlinx/kotlinx-collections-immutable
+kotlinterGradle = "5.7.0" # // https://github.com/jeremymailen/kotlinter-gradle
 kotlinxSerialization = "1.11.0" # https://mvnrepository.com/artifact/org.jetbrains.kotlinx/kotlinx-serialization-json
-ksp = "2.3.9" # https://mvnrepository.com/artifact/com.google.devtools.ksp/symbol-processing-api
-ktor = "3.5.0" # https://mvnrepository.com/artifact/io.ktor/ktor-client-core
+ksp = "2.3.11" # https://mvnrepository.com/artifact/com.google.devtools.ksp/symbol-processing-api
+ktor = "3.5.2" # https://mvnrepository.com/artifact/io.ktor/ktor-client-core
 lifecycleViewmodel = "2.11.0" # https://mvnrepository.com/artifact/androidx.lifecycle/lifecycle-viewmodel-navigation3
-materialKolor = "5.0.0-alpha07" # https://mvnrepository.com/artifact/com.materialkolor/material-kolor
-media3 = "1.10.1" # https://mvnrepository.com/artifact/androidx.media3/media3-common/
-navigation3 = "1.1.3" # https://mvnrepository.com/artifact/androidx.navigation3/navigation3-runtime
+materialKolor = "5.0.1" # https://mvnrepository.com/artifact/com.materialkolor/material-kolor
+media3 = "1.11.0" # https://mvnrepository.com/artifact/androidx.media3/media3-common/
+navigation3 = "1.1.7" # https://mvnrepository.com/artifact/androidx.navigation3/navigation3-runtime
 oboe = "1.10.0" # https://mvnrepository.com/artifact/com.google.oboe/oboe
-paging = "3.5.0" # https://mvnrepository.com/artifact/androidx.paging/paging-compose
+paging = "3.5.1" # https://mvnrepository.com/artifact/androidx.paging/paging-compose
 reorderable = "3.1.0" # https://mvnrepository.com/artifact/sh.calvin.reorderable/reorderable
 room = "2.8.4" # https://mvnrepository.com/artifact/androidx.room/room-runtime
-stability = "0.10.0" # https://mvnrepository.com/artifact/com.github.skydoves.compose.stability.analyzer/com.github.skydoves.compose.stability.analyzer.gradle.plugin
+stability = "0.13.0" # https://mvnrepository.com/artifact/com.github.skydoves.compose.stability.analyzer/com.github.skydoves.compose.stability.analyzer.gradle.plugin
 timber = "5.0.1" # https://mvnrepository.com/artifact/com.jakewharton.timber/timber
 
 [libraries]

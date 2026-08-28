@@ -16,6 +16,8 @@ import com.lossydragon.modplayer.ui.theme.AppTheme
 import com.lossydragon.modplayer.util.annotatedLinkString
 import com.mikepenz.aboutlibraries.ui.compose.android.produceLibraries
 import com.mikepenz.aboutlibraries.ui.compose.m3.LibrariesContainer
+import com.mikepenz.aboutlibraries.ui.compose.variant.DefaultLibraryBadges
+import com.mikepenz.aboutlibraries.ui.compose.variant.LibraryBadges
 
 @Composable
 fun PreferencesAbout(
@@ -38,7 +40,7 @@ fun PreferencesAbout(
             modifier = Modifier
                 .fillMaxSize()
                 .padding(paddingValues),
-            showDescription = true,
+            badges = DefaultLibraryBadges,
             header = {
                 item {
                     Column(
