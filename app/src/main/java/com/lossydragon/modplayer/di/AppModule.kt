@@ -9,6 +9,7 @@ import com.lossydragon.modplayer.data.ModuleRepository
 import com.lossydragon.modplayer.data.PlaylistRepository
 import com.lossydragon.modplayer.db.AppDatabase
 import com.lossydragon.modplayer.db.AppPreferences
+import com.lossydragon.modplayer.player.Engine
 import com.lossydragon.modplayer.player.ModPlayer
 import com.lossydragon.modplayer.player.PlayerEngine
 import com.lossydragon.modplayer.player.PlayerViewModel
@@ -33,9 +34,9 @@ val appModule = module {
 
     // ViewModels
     viewModel { FileBrowserViewModel(androidContext(), get(), get(), get()) }
-    viewModel { DownloadsViewModel(androidContext(), get(), get(), get(), get()) }
+    viewModel { DownloadsViewModel(androidContext(), get(), get(), get(), get(), get()) }
     viewModel { PlayerViewModel(androidContext(), get(), get()) }
-    viewModel { PlaylistsViewModel(androidContext(), get(), get()) }
+    viewModel { PlaylistsViewModel(androidContext(), get()) }
 
     // Database
     single {
@@ -43,12 +44,20 @@ val appModule = module {
             androidContext(),
             AppDatabase::class.java,
             Constants.ROOM_DATABASE_NAME,
-        ).fallbackToDestructiveMigration(true).build()
+        )
+            .addMigrations(*AppDatabase.MIGRATIONS)
+            // Pre-playlist schemas hold nothing worth keeping; everything newer must migrate
+            // so user playlists are never silently dropped by a schema bump.
+            .fallbackToDestructiveMigrationFrom(
+                true,
+                *(1..AppDatabase.LAST_DESTRUCTIVE_VERSION).toList().toIntArray(),
+            )
+            .build()
     }
     single { get<AppDatabase>().moduleMetadataDao() }
     single { get<AppDatabase>().downloadHistoryDao() }
     single { get<AppDatabase>().playlistDao() }
-    single { ModuleRepository(androidContext(), get()) }
+    single { ModuleRepository(androidContext(), get(), get()) }
     single { DownloadHistoryRepository(get()) }
     single { PlaylistRepository(get()) }
 
@@ -65,6 +74,6 @@ val appModule = module {
     single { ModArchiveService(get()) }
 
     // Media Player
-    single { PlayerEngine(androidContext(), get()) }
+    single<Engine> { PlayerEngine(androidContext(), get()) }
     single { ModPlayer(androidContext(), get(), get()) }
 }

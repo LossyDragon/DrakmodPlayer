@@ -12,6 +12,7 @@ import androidx.media3.session.LibraryResult
 import androidx.media3.session.MediaLibraryService.LibraryParams
 import androidx.media3.session.MediaLibraryService.MediaLibrarySession
 import androidx.media3.session.MediaSession
+import androidx.media3.session.SessionError
 import com.google.common.collect.ImmutableList
 import com.google.common.util.concurrent.Futures
 import com.google.common.util.concurrent.ListenableFuture
@@ -21,6 +22,7 @@ import com.lossydragon.modplayer.db.AppPreferences
 import com.lossydragon.modplayer.db.dao.ModuleDao
 import com.lossydragon.modplayer.db.dao.PlaylistDao
 import com.lossydragon.modplayer.db.entity.ModuleEntity
+import com.lossydragon.modplayer.db.entity.toModuleEntity
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
@@ -46,8 +48,16 @@ class AutoBrowseCallback(
         putInt("android.media.browse.CONTENT_STYLE_PLAYABLE_HINT", 2)
     }
 
-    private val searchResultsCache = mutableMapOf<String, List<MediaItem>>()
+    /** Results of the most recent searches, served page by page from [onGetSearchResult]. */
+    private val searchResultsCache = object : LinkedHashMap<String, List<MediaItem>>() {
+        override fun removeEldestEntry(eldest: MutableMap.MutableEntry<String, List<MediaItem>>?) =
+            size > MAX_CACHED_SEARCHES
+    }
     private var activeSearchJob: Job? = null
+
+    private companion object {
+        const val MAX_CACHED_SEARCHES = 8
+    }
 
     override fun onGetLibraryRoot(
         session: MediaLibrarySession,
@@ -78,6 +88,7 @@ class AutoBrowseCallback(
                 parentId == AutoMediaId.HOME -> getHomeChildren()
                 parentId == AutoMediaId.FILE_BROWSER -> getFileBrowserRoot()
                 parentId == AutoMediaId.PLAYLISTS -> getPlaylists()
+                AutoMediaId.isPlaylist(parentId) -> getPlaylistEntries(parentId)
                 AutoMediaId.isDir(parentId) -> getDirectoryChildren(parentId)
                 else -> ImmutableList.of()
             }
@@ -87,6 +98,7 @@ class AutoBrowseCallback(
 
     /**
      * For PLAY_ALL / SHUFFLE_ALL, queries all valid modules from the DB.
+     * For a playlist entry tap, queues that playlist.
      * For a single file tap, resolves its siblings from the DB using parentPath.
      */
     override fun onSetMediaItems(
@@ -99,6 +111,16 @@ class AutoBrowseCallback(
         val singleId = mediaItems.singleOrNull()?.mediaId
         if (singleId == AutoMediaId.PLAY_ALL || singleId == AutoMediaId.SHUFFLE_ALL) {
             return buildPlayAllFuture(shuffle = singleId == AutoMediaId.SHUFFLE_ALL)
+        }
+
+        if (singleId != null && AutoMediaId.isPlaylistEntry(singleId)) {
+            return ioFuture {
+                val (playlistId, _) = AutoMediaId.playlistEntryParts(singleId)
+                    ?: throw IllegalArgumentException("Malformed playlist entry id: $singleId")
+                val entries = buildPlaylistEntryItems(playlistId)
+                val startIdx = entries.indexOfFirst { it.mediaId == singleId }.coerceAtLeast(0)
+                MediaSession.MediaItemsWithStartPosition(entries, startIdx, 0L)
+            }
         }
 
         if (singleId == null || !AutoMediaId.isFile(singleId)) {
@@ -119,7 +141,7 @@ class AutoBrowseCallback(
 
             val siblings = modulesDao.getChildrenOnce(parentPath)
                 .filter { !it.isDirectory && it.isValidModule }
-                .map { buildPlayableItem(AutoMediaId.file(it.filePath), it.name, it.uri) }
+                .map { fileItem(it) }
 
             val startIdx = siblings.indexOfFirst { it.mediaId == singleId }.coerceAtLeast(0)
             MediaSession.MediaItemsWithStartPosition(siblings, startIdx, 0L)
@@ -132,8 +154,13 @@ class AutoBrowseCallback(
         mediaItems: List<MediaItem>
     ): ListenableFuture<List<MediaItem>> {
         val resolved = mediaItems.map { item ->
+            val id = item.mediaId
             val uri = when {
-                AutoMediaId.isFile(item.mediaId) -> AutoMediaId.uriFromFile(item.mediaId).toUri()
+                AutoMediaId.isFile(id) -> AutoMediaId.uriFromFile(id).toUri()
+
+                AutoMediaId.isPlaylistEntry(id) ->
+                    AutoMediaId.playlistEntryParts(id)?.second?.toUri()
+
                 else -> item.localConfiguration?.uri
             }
             if (uri != null) item.buildUpon().setUri(uri).build() else item
@@ -151,20 +178,32 @@ class AutoBrowseCallback(
         val future = SettableFuture.create<LibraryResult<Void>>()
         activeSearchJob?.cancel()
         activeSearchJob = scope.launch(Dispatchers.IO) {
-            val playlistItems = playlistDao.searchByName(query).map { entry ->
-                buildPlayableItem(AutoMediaId.file(entry.uri), entry.name, entry.uri.toUri())
+            try {
+                val playlistItems = playlistDao.searchByName(query).map { entry ->
+                    buildPlayableItem(
+                        id = AutoMediaId.file(entry.uri),
+                        title = entry.name,
+                        uri = entry.uri.toUri(),
+                        module = entry.toModuleEntity(),
+                    )
+                }
+                val fileItems = modulesDao.searchBy(query)
+                    .filter { it.isValidModule }
+                    .map { fileItem(it) }
+
+                val seen = mutableSetOf<String>()
+                val items = (playlistItems + fileItems).filter { seen.add(it.mediaId) }
+                synchronized(searchResultsCache) { searchResultsCache[query] = items }
+
+                Timber.d("onSearch: found ${items.size} results for '$query'")
+                session.notifySearchResultChanged(browser, query, items.size, params)
+                future.set(LibraryResult.ofVoid())
+            } catch (e: Exception) {
+                // Includes CancellationException from a newer search: the browser must still get
+                // an answer or it waits on this future forever.
+                Timber.w(e, "onSearch failed for '$query'")
+                future.set(LibraryResult.ofError(SessionError.ERROR_UNKNOWN))
             }
-            val fileItems = modulesDao.searchBy(query)
-                .filter { it.isValidModule }
-                .map { buildPlayableItem(AutoMediaId.file(it.filePath), it.name, it.uri) }
-
-            val seen = mutableSetOf<String>()
-            val items = (playlistItems + fileItems).filter { seen.add(it.mediaId) }
-            searchResultsCache[query] = items
-
-            Timber.d("onSearch: found ${items.size} results for '$query'")
-            session.notifySearchResultChanged(browser, query, items.size, params)
-            future.set(LibraryResult.ofVoid())
         }
         return future
     }
@@ -178,7 +217,8 @@ class AutoBrowseCallback(
         params: LibraryParams?
     ): ListenableFuture<LibraryResult<ImmutableList<MediaItem>>> {
         Timber.d("onGetSearchResult: query='$query' page=$page pageSize=$pageSize")
-        val paged = (searchResultsCache[query] ?: emptyList()).drop(page * pageSize).take(pageSize)
+        val results = synchronized(searchResultsCache) { searchResultsCache[query] } ?: emptyList()
+        val paged = results.drop(page * pageSize).take(pageSize)
         return Futures.immediateFuture(
             LibraryResult.ofItemList(ImmutableList.copyOf(paged), params)
         )
@@ -202,6 +242,7 @@ class AutoBrowseCallback(
                     title = file.filename,
                     uri = file.uri,
                     artworkUri = drawableUri(R.drawable.aa_file),
+                    module = file,
                 )
             }
             MediaSession.MediaItemsWithStartPosition(mediaItems, state.index, state.positionMs)
@@ -211,43 +252,76 @@ class AutoBrowseCallback(
     private fun getRootChildren(): ImmutableList<MediaItem> = ImmutableList.of(
         buildBrowsableItem(
             id = AutoMediaId.HOME,
-            title = "Home",
+            title = context.getString(R.string.auto_home),
             type = MediaMetadata.MEDIA_TYPE_FOLDER_MIXED,
             extras = contentStyleExtras,
             artworkUri = drawableUri(R.drawable.aa_home)
         ),
         buildBrowsableItem(
             id = AutoMediaId.PLAYLISTS,
-            title = "Playlists",
+            title = context.getString(R.string.auto_playlists),
             type = MediaMetadata.MEDIA_TYPE_FOLDER_PLAYLISTS,
             extras = contentStyleExtras,
             artworkUri = drawableUri(R.drawable.aa_playlists)
         ),
         buildBrowsableItem(
             id = AutoMediaId.FILE_BROWSER,
-            title = "File Browser",
+            title = context.getString(R.string.auto_file_browser),
             type = MediaMetadata.MEDIA_TYPE_FOLDER_MIXED,
             artworkUri = drawableUri(R.drawable.aa_browser)
         ),
     )
 
-    private fun getPlaylists(): ImmutableList<MediaItem> = ImmutableList.of(
-        buildBrowsableItem(
-            id = "playlists_coming_soon",
-            title = "Coming Soon",
-            type = MediaMetadata.MEDIA_TYPE_FOLDER_PLAYLISTS
+    /** One browsable node per Room playlist, or a placeholder when there are none. */
+    private suspend fun getPlaylists(): ImmutableList<MediaItem> {
+        val playlists = playlistDao.getAllPlaylistsOnce()
+        if (playlists.isEmpty()) {
+            return ImmutableList.of(
+                buildBrowsableItem(
+                    id = AutoMediaId.PLAYLISTS_EMPTY,
+                    title = context.getString(R.string.auto_no_playlists),
+                    type = MediaMetadata.MEDIA_TYPE_FOLDER_PLAYLISTS,
+                )
+            )
+        }
+        return ImmutableList.copyOf(
+            playlists.map { playlist ->
+                buildBrowsableItem(
+                    id = AutoMediaId.playlist(playlist.id),
+                    title = playlist.name,
+                    type = MediaMetadata.MEDIA_TYPE_PLAYLIST,
+                    artworkUri = drawableUri(R.drawable.aa_playlists),
+                )
+            }
         )
-    )
+    }
+
+    private suspend fun getPlaylistEntries(parentId: String): ImmutableList<MediaItem> {
+        val playlistId = AutoMediaId.playlistIdFrom(parentId) ?: return ImmutableList.of()
+        return ImmutableList.copyOf(buildPlaylistEntryItems(playlistId))
+    }
+
+    /** Playable items for every entry of [playlistId], in playlist order. */
+    private suspend fun buildPlaylistEntryItems(playlistId: Long): List<MediaItem> =
+        playlistDao.getEntries(playlistId).map { entry ->
+            buildPlayableItem(
+                id = AutoMediaId.playlistEntry(playlistId, entry.uri),
+                title = entry.name,
+                uri = entry.uri.toUri(),
+                artworkUri = drawableUri(R.drawable.aa_file),
+                module = entry.toModuleEntity(),
+            )
+        }
 
     private fun getHomeChildren(): ImmutableList<MediaItem> = ImmutableList.of(
         buildPlayableItem(
             id = AutoMediaId.SHUFFLE_ALL,
-            title = "Shuffle",
+            title = context.getString(R.string.auto_shuffle_all),
             artworkUri = drawableUri(R.drawable.aa_shuffle)
         ),
         buildPlayableItem(
             id = AutoMediaId.PLAY_ALL,
-            title = "Play all",
+            title = context.getString(R.string.auto_play_all),
             artworkUri = drawableUri(R.drawable.aa_play_all)
         )
     )
@@ -279,7 +353,8 @@ class AutoBrowseCallback(
                         id = AutoMediaId.file(entity.filePath),
                         title = entity.name,
                         uri = entity.uri,
-                        artworkUri = drawableUri(R.drawable.aa_file)
+                        artworkUri = drawableUri(R.drawable.aa_file),
+                        module = entity,
                     )
 
                     else -> null
@@ -291,7 +366,7 @@ class AutoBrowseCallback(
         shuffle: Boolean
     ): ListenableFuture<MediaSession.MediaItemsWithStartPosition> = ioFuture {
         val items = modulesDao.getAllValidModules()
-            .map { buildPlayableItem(AutoMediaId.file(it.filePath), it.name, it.uri) }
+            .map { fileItem(it) }
             .toMutableList()
         if (shuffle) items.shuffle()
         MediaSession.MediaItemsWithStartPosition(items, 0, 0L)
@@ -334,11 +409,19 @@ class AutoBrowseCallback(
         )
         .build()
 
+    private fun fileItem(entity: ModuleEntity): MediaItem = buildPlayableItem(
+        id = AutoMediaId.file(entity.filePath),
+        title = entity.name,
+        uri = entity.uri,
+        module = entity,
+    )
+
     private fun buildPlayableItem(
         id: String,
         title: String,
         uri: Uri? = null,
-        artworkUri: Uri? = null
+        artworkUri: Uri? = null,
+        module: ModuleEntity? = null
     ): MediaItem = MediaItem.Builder()
         .setMediaId(id)
         .apply {
@@ -354,6 +437,7 @@ class AutoBrowseCallback(
                 .setIsPlayable(true)
                 .setMediaType(MediaMetadata.MEDIA_TYPE_MUSIC)
                 .setArtworkUri(artworkUri)
+                .setExtras(module?.let(MediaItemExtras::of))
                 .build()
         )
         .build()

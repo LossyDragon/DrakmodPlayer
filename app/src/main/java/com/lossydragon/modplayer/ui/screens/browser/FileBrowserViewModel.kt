@@ -7,7 +7,6 @@ import androidx.compose.runtime.*
 import androidx.core.net.toUri
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
-import androidx.media3.common.Player
 import com.lossydragon.modplayer.R
 import com.lossydragon.modplayer.data.ModuleRepository
 import com.lossydragon.modplayer.data.PlaylistRepository
@@ -23,13 +22,11 @@ import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.filterNotNull
-import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.flatMapLatest
 import kotlinx.coroutines.flow.launchIn
 import kotlinx.coroutines.flow.onEach
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
-import kotlinx.coroutines.runBlocking
 
 /** UI state and domain models for the SAF file browser. */
 
@@ -55,7 +52,6 @@ data class BrowserUiState(
     val isLoading: Boolean = true,
     val isShuffle: Boolean = false,
     @param:StringRes val loadingReason: Int? = null,
-    val repeatMode: Int = Player.REPEAT_MODE_OFF,
     val sortOrder: BrowserSortOrder = BrowserSortOrder.NAME
 )
 
@@ -93,7 +89,7 @@ class FileBrowserViewModel(
             state.update { it.copy(hasStorageAccess = true) }
 
             launch(Dispatchers.IO) {
-                db.indexDirectory(savedUri.toUri())
+                db.indexDirectoryIfStale(savedUri.toUri())
                 state.update { it.copy(isLoading = false) }
             }
         }
@@ -110,12 +106,6 @@ class FileBrowserViewModel(
         prefs.getGlobalShuffleFlow().onEach { isShuffle ->
             state.update { it.copy(isShuffle = isShuffle) }
         }.launchIn(viewModelScope)
-
-        runBlocking {
-            // Meh...
-            val isShuffle = prefs.getGlobalShuffleFlow().first()
-            state.update { it.copy(isShuffle = isShuffle) }
-        }
 
         playlistRepo.playlists
             .onEach { playlists.value = it.toImmutableList() }
@@ -186,10 +176,6 @@ class FileBrowserViewModel(
     fun setShuffle() {
         val value = !state.value.isShuffle
         viewModelScope.launch { prefs.setGlobalShuffle(value) }
-    }
-
-    fun setRepeatMode(mode: Int) {
-        state.update { it.copy(repeatMode = mode) }
     }
 
     fun setSortOrder(order: BrowserSortOrder) {

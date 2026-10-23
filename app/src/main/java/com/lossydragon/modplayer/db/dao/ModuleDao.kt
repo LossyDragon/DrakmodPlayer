@@ -1,15 +1,21 @@
 package com.lossydragon.modplayer.db.dao
 
 import androidx.room.Dao
+import androidx.room.Insert
+import androidx.room.OnConflictStrategy
 import androidx.room.Query
-import androidx.room.Upsert
 import com.lossydragon.modplayer.db.entity.ModuleEntity
 import kotlinx.coroutines.flow.Flow
 
 @Dao
 interface ModuleDao {
 
-    @Upsert
+    /**
+     * Insert-or-replace keyed on the unique `filePath` index. (`@Upsert` would key on the
+     * auto-generated `id`, which is always 0 for a freshly scanned entity, and so always
+     * inserts a duplicate.) REPLACE assigns a new `id`; nothing references it.
+     */
+    @Insert(onConflict = OnConflictStrategy.REPLACE)
     suspend fun upsert(item: ModuleEntity)
 
     @Query(

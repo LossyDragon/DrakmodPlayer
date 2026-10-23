@@ -4,7 +4,6 @@ import android.content.Context
 import android.media.AudioAttributes
 import android.media.AudioFocusRequest
 import android.media.AudioManager
-import com.lossydragon.native.Player
 import timber.log.Timber
 
 /**
@@ -23,8 +22,9 @@ class AudioFocusHandler(context: Context) {
      * Requests [AudioManager.AUDIOFOCUS_GAIN] if not already held.
      * @param onGain Invoked when focus is (re)granted after a transient loss.
      * @param onLoss Invoked when focus is lost permanently or transiently.
+     * @param onDuck Invoked with true while another app wants us quieter, false when it is done.
      */
-    fun request(onGain: () -> Unit, onLoss: () -> Unit) {
+    fun request(onGain: () -> Unit, onLoss: () -> Unit, onDuck: (Boolean) -> Unit) {
         if (hasFocus) return
         // Abandon any previous request so its listener doesn't fire alongside the new one.
         focusRequest?.let { audioManager.abandonAudioFocusRequest(it) }
@@ -42,14 +42,17 @@ class AudioFocusHandler(context: Context) {
                 Timber.i("Audio Focus Changed: $change")
                 when (change) {
                     AudioManager.AUDIOFOCUS_GAIN -> {
-                        Player.setPlayer(Player.XMP_PLAYER_VOLUME, Player.DEFAULT_PLAYER_VOLUME)
+                        onDuck(false)
                         hasFocus = true
                         onGain()
                     }
 
-                    AudioManager.AUDIOFOCUS_LOSS_TRANSIENT_CAN_DUCK ->
-                        Player.setPlayer(Player.XMP_PLAYER_VOLUME, 70)
+                    AudioManager.AUDIOFOCUS_LOSS_TRANSIENT_CAN_DUCK -> onDuck(true)
 
+                    // LOSS_TRANSIENT is followed by GAIN once the other app is done.
+                    // LOSS (permanent, e.g. the car radio taking over) is not: Android never
+                    // sends GAIN after it. Staying paused until the user presses play, which
+                    // re-requests focus, is the intended behaviour — not a stuck player.
                     AudioManager.AUDIOFOCUS_LOSS,
                     AudioManager.AUDIOFOCUS_LOSS_TRANSIENT -> {
                         hasFocus = false

@@ -3,6 +3,7 @@ package com.lossydragon.modplayer.ui.screens.downloads
 import android.content.Context
 import android.net.Uri
 import android.provider.DocumentsContract
+import androidx.annotation.StringRes
 import androidx.compose.runtime.*
 import androidx.core.net.toUri
 import androidx.lifecycle.ViewModel
@@ -11,15 +12,19 @@ import androidx.paging.Pager
 import androidx.paging.PagingConfig
 import androidx.paging.PagingData
 import androidx.paging.cachedIn
+import com.lossydragon.modplayer.R
 import com.lossydragon.modplayer.data.DownloadHistoryRepository
 import com.lossydragon.modplayer.data.ModArchiveService
+import com.lossydragon.modplayer.data.ModuleRepository
 import com.lossydragon.modplayer.data.ResultPagingSource
 import com.lossydragon.modplayer.db.AppPreferences
 import com.lossydragon.modplayer.model.Module
 import com.lossydragon.modplayer.model.ModuleResult
 import com.lossydragon.modplayer.model.ResultItem
+import com.lossydragon.modplayer.util.createPartialDownload
+import com.lossydragon.modplayer.util.discardPartialDownload
+import com.lossydragon.modplayer.util.finalizeDownload
 import com.lossydragon.modplayer.util.findDownloadedModule
-import com.lossydragon.modplayer.util.getOrCreateOutputFile
 import io.ktor.client.HttpClient
 import io.ktor.client.request.get
 import io.ktor.client.statement.bodyAsChannel
@@ -28,6 +33,7 @@ import io.ktor.utils.io.readAvailable
 import kotlinx.collections.immutable.ImmutableList
 import kotlinx.collections.immutable.persistentListOf
 import kotlinx.collections.immutable.toPersistentList
+import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.Job
@@ -42,6 +48,7 @@ import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
 import timber.log.Timber
 
 enum class SearchType { ARTIST, TITLE }
@@ -87,8 +94,13 @@ class DownloadsViewModel(
     private val service: ModArchiveService,
     private val httpClient: HttpClient,
     private val historyRepo: DownloadHistoryRepository,
+    private val moduleRepo: ModuleRepository,
     prefs: AppPreferences
 ) : ViewModel() {
+
+    private companion object {
+        const val DOWNLOAD_BUFFER_BYTES = 64 * 1024
+    }
 
     private var downloadJob: Job? = null
     private val lastDirectory: Flow<String?> = prefs.getLastDirectoryFlow()
@@ -194,67 +206,68 @@ class DownloadsViewModel(
     fun downloadModule(module: Module) {
         downloadJob?.cancel()
         downloadJob = viewModelScope.launch(Dispatchers.IO) {
+            moduleResultState.update { it.copy(downloadStatus = DownloadStatus.Loading) }
+
+            val rootUri = lastDirectory.firstOrNull()?.toUri() ?: run {
+                setDownloadError(R.string.download_error_no_folder)
+                return@launch
+            }
+            val download = appContext.createPartialDownload(rootUri, module) ?: run {
+                setDownloadError(R.string.download_error_create_file)
+                return@launch
+            }
+
             try {
-                moduleResultState.update { it.copy(downloadStatus = DownloadStatus.Loading) }
-
-                val rootUri = lastDirectory.firstOrNull()?.toUri() ?: run {
-                    moduleResultState.update {
-                        it.copy(downloadStatus = DownloadStatus.Error("No folder selected"))
-                    }
-                    return@launch
-                }
-
-                val outputFile = appContext.getOrCreateOutputFile(
-                    rootUri = rootUri,
-                    module = module
-                ) ?: run {
-                    moduleResultState.update {
-                        it.copy(
-                            downloadStatus = DownloadStatus.Error("Could not create output file")
-                        )
-                    }
-                    return@launch
-                }
                 val response = httpClient.get(module.downloadUrl)
                 val totalBytes = response.contentLength() ?: 0L
                 val channel = response.bodyAsChannel()
                 var bytesRead = 0L
-                val buf = ByteArray(8192)
+                var lastPercent = -1
+                val buf = ByteArray(DOWNLOAD_BUFFER_BYTES)
 
-                outputFile.use { out ->
+                download.stream.use { out ->
                     while (!channel.isClosedForRead) {
                         val read = channel.readAvailable(buf, 0, buf.size)
                         if (read < 0) break
                         out.write(buf, 0, read)
                         bytesRead += read
                         if (totalBytes > 0) {
-                            moduleResultState.update {
-                                it.copy(
-                                    downloadStatus = DownloadStatus.Progress(
-                                        bytesRead * 100f / totalBytes
-                                    )
-                                )
+                            // Whole-percent steps only; per-chunk updates recompose too often.
+                            val percent = (bytesRead * 100 / totalBytes).toInt()
+                            if (percent != lastPercent) {
+                                lastPercent = percent
+                                val status = DownloadStatus.Progress(percent.toFloat())
+                                moduleResultState.update { it.copy(downloadStatus = status) }
                             }
                         }
                     }
                 }
-                moduleResultState.update {
-                    it.copy(
-                        downloadStatus = DownloadStatus.Success,
-                        moduleExists = true
-                    )
+
+                if (appContext.finalizeDownload(rootUri, download) == null) {
+                    appContext.discardPartialDownload(download)
+                    setDownloadError(R.string.download_error_create_file)
+                    return@launch
                 }
+                // Make it show up in the file browser without a manual refresh.
+                moduleRepo.indexDirectory(rootUri)
+                moduleResultState.update {
+                    it.copy(downloadStatus = DownloadStatus.Success, moduleExists = true)
+                }
+            } catch (e: CancellationException) {
+                appContext.discardPartialDownload(download)
+                moduleResultState.update { it.copy(downloadStatus = DownloadStatus.None) }
+                throw e
             } catch (e: Exception) {
                 Timber.e(e)
-                moduleResultState.update {
-                    it.copy(
-                        downloadStatus = DownloadStatus.Error(
-                            e.message ?: "Download failed"
-                        )
-                    )
-                }
+                appContext.discardPartialDownload(download)
+                setDownloadError(R.string.download_error_failed, e.message)
             }
         }
+    }
+
+    private fun setDownloadError(@StringRes fallback: Int, detail: String? = null) {
+        val message = detail ?: appContext.getString(fallback)
+        moduleResultState.update { it.copy(downloadStatus = DownloadStatus.Error(message)) }
     }
 
     fun deleteModule(module: Module) {
@@ -277,14 +290,20 @@ class DownloadsViewModel(
 
     fun searchFileOrTitle(query: String) {
         searchState.update {
-            it.copy(title = "Results: $query", activeType = SearchResultType.MODULES)
+            it.copy(
+                title = appContext.getString(R.string.download_title_results, query),
+                activeType = SearchResultType.MODULES,
+            )
         }
         searchCommand.value = SearchCommand.FileOrTitle(query)
     }
 
     fun searchArtist(query: String) {
         searchState.update {
-            it.copy(title = "Artists: $query", activeType = SearchResultType.ARTISTS)
+            it.copy(
+                title = appContext.getString(R.string.download_title_artists, query),
+                activeType = SearchResultType.ARTISTS,
+            )
         }
         searchCommand.value = SearchCommand.Artist(query)
     }
@@ -301,9 +320,10 @@ class DownloadsViewModel(
 
     private suspend fun checkExists(module: Module) = findModuleUri(module) != null
 
-    private suspend fun findModuleUri(module: Module): Uri? {
-        val rootUri = (lastDirectory.firstOrNull() ?: return null).toUri()
-        return appContext.findDownloadedModule(
+    /** SAF queries: keep off the main thread. */
+    private suspend fun findModuleUri(module: Module): Uri? = withContext(Dispatchers.IO) {
+        val rootUri = (lastDirectory.firstOrNull() ?: return@withContext null).toUri()
+        appContext.findDownloadedModule(
             rootUri = rootUri,
             artist = module.artist,
             filename = module.url.substringAfterLast('#'),

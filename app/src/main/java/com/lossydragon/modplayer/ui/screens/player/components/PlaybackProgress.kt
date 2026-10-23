@@ -6,25 +6,22 @@ import androidx.compose.runtime.*
 import androidx.compose.ui.*
 import androidx.compose.ui.tooling.preview.*
 import androidx.compose.ui.unit.*
-import com.lossydragon.modplayer.player.PlayerUiState
 import com.lossydragon.modplayer.ui.theme.AppTheme
 import com.lossydragon.modplayer.util.formatMs
 import com.lossydragon.native.model.FrameInfo
 
 @Composable
 internal fun PlaybackProgress(
-    state: PlayerUiState,
+    frameInfo: FrameInfo,
     onSeek: (Long) -> Unit
 ) {
-    val duration = state.frameInfo.totalTime.toFloat().coerceAtLeast(1f)
+    val duration = frameInfo.totalTime.toFloat().coerceAtLeast(1f)
 
     var isSeeking by remember { mutableStateOf(false) }
-    var seekPosition by remember { mutableFloatStateOf(0f) }
-
-    val displayValue = if (isSeeking) {
-        seekPosition
-    } else {
-        (state.frameInfo.time.toFloat() / duration).coerceIn(0f, 1f)
+    val state = rememberSliderState()
+    // The engine drives the thumb except while the user is dragging it.
+    LaunchedEffect(frameInfo.time, duration) {
+        if (!isSeeking) state.value = (frameInfo.time.toFloat() / duration).coerceIn(0f, 1f)
     }
 
     Row(
@@ -35,30 +32,30 @@ internal fun PlaybackProgress(
             Text(
                 modifier = Modifier.padding(horizontal = 6.dp),
                 text = if (isSeeking) {
-                    (seekPosition * duration).toLong().formatMs()
+                    (state.value * duration).toLong().formatMs()
                 } else {
-                    state.frameInfo.time.toLong().formatMs()
+                    frameInfo.time.toLong().formatMs()
                 },
                 style = MaterialTheme.typography.titleMedium,
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
             )
 
             Slider(
+                state = state,
                 modifier = Modifier.weight(1f),
-                value = displayValue,
                 onValueChange = {
                     isSeeking = true
-                    seekPosition = it
+                    state.value = it
                 },
                 onValueChangeFinished = {
-                    onSeek((seekPosition * duration).toLong())
+                    onSeek((state.value * duration).toLong())
                     isSeeking = false
                 },
             )
 
             Text(
                 modifier = Modifier.padding(horizontal = 6.dp),
-                text = state.frameInfo.totalTime.toLong().formatMs(),
+                text = frameInfo.totalTime.toLong().formatMs(),
                 style = MaterialTheme.typography.titleMedium,
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
             )
@@ -72,11 +69,9 @@ private fun Preview() {
     AppTheme {
         Surface {
             PlaybackProgress(
-                state = PlayerUiState(
-                    frameInfo = FrameInfo(
-                        time = 47_000,
-                        totalTime = 237_000,
-                    )
+                frameInfo = FrameInfo(
+                    time = 47_000,
+                    totalTime = 237_000,
                 ),
                 onSeek = {}
             )

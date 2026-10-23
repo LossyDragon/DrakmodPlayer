@@ -5,6 +5,8 @@
 #include <cstring>
 #include <oboe/Oboe.h>
 #include <pthread.h>
+#include <sched.h>
+#include <time.h>
 
 #define TAG "DrakPlayer Oboe"
 #define LOG_INFO(...) __android_log_print(ANDROID_LOG_INFO, TAG, __VA_ARGS__)
@@ -36,11 +38,29 @@ class XmpAudioCallback;
 static XmpAudioCallback* audio_callback = nullptr;
 static int actual_channels = 2;
 static int effective_format_flags = 0;
+static int requested_buffer_ms = 0;
 static pthread_mutex_t mutex;
+
+void note_underrun() {
+  underrun_count.fetch_add(1, std::memory_order_relaxed);
+}
+
+// Asks Oboe for roughly `ms` of buffering. Oboe clamps to the device's capacity range.
+static void apply_buffer_size(int ms) {
+  if (!audio_stream || ms <= 0) return;
+  const int32_t frames = static_cast<int32_t>(static_cast<int64_t>(audio_stream->getSampleRate()) * ms / 1000);
+  auto result = audio_stream->setBufferSizeInFrames(frames);
+  if (result) {
+    LOG_INFO("Buffer size: requested %d ms (%d frames), got %d frames (capacity %d)",
+      ms, frames, result.value(), audio_stream->getBufferCapacityInFrames());
+  } else {
+    LOG_WARN("setBufferSizeInFrames(%d) failed: %s", frames, oboe::convertToText(result.error()));
+  }
+}
 
 // Spin until the current callback invocation finishes (at most one burst period, ~5ms).
 static void wait_for_callback() {
-  while (in_callback.load(std::memory_order_acquire)) {}
+  while (in_callback.load(std::memory_order_acquire)) sched_yield();
 }
 
 class XmpAudioCallback : public oboe::AudioStreamDataCallback,
@@ -71,7 +91,15 @@ public:
 
     AudioRenderCallback callback = render_callback.load(std::memory_order_acquire);
     if (xmp_playing.load(std::memory_order_acquire) && callback != nullptr) {
+      timespec t0{};
+      clock_gettime(CLOCK_MONOTONIC, &t0);
       int ret = callback(audioData, numFrames, numChannels, bytesPerSample);
+      timespec t1{};
+      clock_gettime(CLOCK_MONOTONIC, &t1);
+      // Rendering that takes longer than the audio it produced can't keep up: an app-side glitch.
+      const int64_t spent_ns = (t1.tv_sec - t0.tv_sec) * 1000000000LL + (t1.tv_nsec - t0.tv_nsec);
+      const int64_t budget_ns = static_cast<int64_t>(numFrames) * 1000000000LL / audioStream->getSampleRate();
+      if (spent_ns > budget_ns) note_underrun();
       if (ret < 0) {
         bool was_ended = module_ended.exchange(true, std::memory_order_release);
         if (!was_ended) LOG_INFO("onAudioReady: module_ended set by render callback");
@@ -188,6 +216,12 @@ static int oboe_open(int sample_rate, int performance_mode, int channel_count, i
     ->setSampleRate(sample_rate)
     ->setSharingMode(oboe::SharingMode::Shared);
 
+  // The capacity is an upper bound for setBufferSizeInFrames(); request enough to
+  // honour the user's buffer preference (the device may still hand back less).
+  if (requested_buffer_ms > 0 && sample_rate > 0) {
+    builder.setBufferCapacityInFrames(static_cast<int32_t>(static_cast<int64_t>(sample_rate) * requested_buffer_ms / 1000));
+  }
+
   oboe::Result result = builder.openStream(audio_stream);
   if (result != oboe::Result::OK) {
     LOG_ERROR("Failed to open stream: %s", oboe::convertToText(result));
@@ -197,8 +231,10 @@ static int oboe_open(int sample_rate, int performance_mode, int channel_count, i
   }
 
   audio_disconnected.store(false, std::memory_order_release);
+  underrun_count.store(0, std::memory_order_relaxed);
 
   actual_channels = audio_stream->getChannelCount();
+  apply_buffer_size(requested_buffer_ms);
 
   const char* sharingMode = (audio_stream->getSharingMode() == oboe::SharingMode::Exclusive) ? "Exclusive" : "Shared";
 
@@ -249,8 +285,8 @@ int get_effective_format_flags() {
   return effective_format_flags;
 }
 
-int open_audio(int rate, int latency, int performance_mode, int channel_count, int audio_api, int format_flags) {
-  (void)latency;
+int open_audio(int rate, int buffer_ms, int performance_mode, int channel_count, int audio_api, int format_flags) {
+  requested_buffer_ms = buffer_ms;
 
   if (pthread_mutex_init(&mutex, nullptr) != 0) {
     LOG_ERROR("Failed to initialize mutex");

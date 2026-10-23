@@ -4,12 +4,23 @@ import android.net.Uri
 import androidx.compose.runtime.*
 import androidx.core.net.toUri
 import androidx.room.Entity
+import androidx.room.Index
 import androidx.room.PrimaryKey
 import kotlinx.serialization.Serializable
 
+/**
+ * One indexed SAF entry (file or directory). [filePath] is the natural key; [id] only
+ * exists so Room has a rowid-style PK and is never referenced elsewhere.
+ */
 @Immutable
 @Serializable
-@Entity(tableName = "modules")
+@Entity(
+    tableName = "modules",
+    indices = [
+        Index(value = ["filePath"], unique = true),
+        Index(value = ["parentPath"]),
+    ],
+)
 data class ModuleEntity(
     @PrimaryKey(autoGenerate = true)
     val id: Int = 0,

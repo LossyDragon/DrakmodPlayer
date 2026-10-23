@@ -14,3 +14,11 @@ data class PlaylistEntryEntity(
     val name: String,
     val extension: String
 )
+
+/** The playable form of an entry; size/metadata are unknown until the module is loaded. */
+fun PlaylistEntryEntity.toModuleEntity(): ModuleEntity = ModuleEntity(
+    filename = name,
+    fileExtension = extension,
+    filePath = uri,
+    fileSize = 0L,
+)

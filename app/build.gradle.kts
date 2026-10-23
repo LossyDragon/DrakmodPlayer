@@ -97,6 +97,9 @@ android {
         compose = true
         buildConfig = true
     }
+    testOptions {
+        unitTests.isIncludeAndroidResources = true
+    }
     splits {
         abi {
             // isEnable = true
@@ -128,4 +131,7 @@ dependencies {
     implementation(libs.paging.compose)
     implementation(libs.reorderable)
     implementation(libs.timber)
+
+    testImplementation(libs.junit)
+    testImplementation(libs.robolectric)
 }

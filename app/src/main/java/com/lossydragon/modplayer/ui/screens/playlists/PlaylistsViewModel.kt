@@ -11,8 +11,6 @@ import com.lossydragon.modplayer.data.toRoomEntities
 import com.lossydragon.modplayer.data.writeExportToUri
 import com.lossydragon.modplayer.db.entity.ModuleEntity
 import com.lossydragon.modplayer.db.entity.PlaylistEntity
-import com.lossydragon.modplayer.player.PlayerUiState
-import com.lossydragon.modplayer.player.PlayerViewModel
 import kotlinx.collections.immutable.ImmutableList
 import kotlinx.collections.immutable.persistentListOf
 import kotlinx.collections.immutable.toImmutableList
@@ -43,11 +41,8 @@ data class ImportResultUi(
 
 class PlaylistsViewModel(
     private val appContext: Context,
-    private val repo: PlaylistRepository,
-    private val player: PlayerViewModel
+    private val repo: PlaylistRepository
 ) : ViewModel() {
-
-    val playerState: StateFlow<PlayerUiState> get() = player.state
 
     val state: StateFlow<PlaylistsUiState>
         field = MutableStateFlow(PlaylistsUiState())
@@ -225,33 +220,6 @@ class PlaylistsViewModel(
     fun dismissImportResult() = state.update { it.copy(importResult = null) }
 
     fun dismissExportSuccess() = state.update { it.copy(exportSuccess = false) }
-
-    fun playPlaylist(startAt: Int = 0, isShuffle: Boolean = false) {
-        val entries = state.value.entries
-        if (entries.isEmpty()) return
-        player.playAll(
-            files = entries.toImmutableList(),
-            startAt = startAt,
-            isShuffle = isShuffle,
-        )
-    }
-
-    fun playEntry(file: ModuleEntity) {
-        val entries = state.value.entries
-        val index = entries.indexOf(file).coerceAtLeast(0)
-        player.playAll(
-            files = entries.toImmutableList(),
-            startAt = index,
-            isShuffle = false,
-        )
-    }
-
-    // Mini player controls
-    fun togglePlayPause() = player.togglePlayPause()
-
-    fun next() = player.next()
-
-    fun previous() = player.previous()
 
     private fun refreshEntries() {
         val playlist = state.value.selectedPlaylist ?: return

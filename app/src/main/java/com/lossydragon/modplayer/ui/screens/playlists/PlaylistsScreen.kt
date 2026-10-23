@@ -74,6 +74,7 @@ fun NavPlaylists(
     val playlistsViewModel = koinViewModel<PlaylistsViewModel>()
 
     val playerState by playerViewModel.state.collectAsStateWithLifecycle()
+    val frameInfo by playerViewModel.frameInfo.collectAsStateWithLifecycle()
     val playlistsState by playlistsViewModel.state.collectAsStateWithLifecycle()
 
     val backStack = rememberNavBackStack(NavKeyPlaylists.List)
@@ -95,6 +96,7 @@ fun NavPlaylists(
                     modifier = modifier,
                     state = playlistsState,
                     playerState = playerState,
+                    frameInfo = frameInfo,
                     snackbarHostState = snackbarHostState,
                     onBack = onBack,
                     onNavigateToPlayer = onNavigateToPlayer,
@@ -130,6 +132,7 @@ fun NavPlaylists(
                     playlistName = key.playlistName,
                     state = playlistsState,
                     playerState = playerState,
+                    frameInfo = frameInfo,
                     snackbarHostState = snackbarHostState,
                     onBack = { backStack.removeLastOrNull() },
                     onNavigateToPlayer = onNavigateToPlayer,
@@ -137,9 +140,28 @@ fun NavPlaylists(
                     onMiniPlayerNext = playerViewModel::next,
                     onMiniPlayerPrev = playerViewModel::previous,
                     onMiniPlayerStop = playerViewModel::stop,
-                    onPlayEntry = playlistsViewModel::playEntry,
-                    onPlayAll = { playlistsViewModel.playPlaylist() },
-                    onShuffle = { playlistsViewModel.playPlaylist(isShuffle = true) },
+                    onPlayEntry = { file ->
+                        val entries = playlistsState.entries
+                        playerViewModel.playAll(
+                            files = entries,
+                            startAt = entries.indexOf(file).coerceAtLeast(0),
+                            isShuffle = false,
+                        )
+                    },
+                    onPlayAll = {
+                        playerViewModel.playAll(
+                            files = playlistsState.entries,
+                            startAt = 0,
+                            isShuffle = false,
+                        )
+                    },
+                    onShuffle = {
+                        playerViewModel.playAll(
+                            files = playlistsState.entries,
+                            startAt = 0,
+                            isShuffle = true,
+                        )
+                    },
                     onRemoveEntry = playlistsViewModel::removeFromPlaylist,
                     onReorderEntry = playlistsViewModel::reorderEntry,
                 )
@@ -154,6 +176,7 @@ private fun PlaylistListScreen(
     modifier: Modifier = Modifier,
     state: PlaylistsUiState,
     playerState: PlayerUiState,
+    frameInfo: FrameInfo,
     snackbarHostState: SnackbarHostState,
     onBack: () -> Unit,
     onNavigateToPlayer: () -> Unit,
@@ -334,6 +357,7 @@ private fun PlaylistListScreen(
                 content = {
                     MiniPlayerBar(
                         state = playerState,
+                        frameInfo = frameInfo,
                         onTap = onNavigateToPlayer,
                         onPlayPause = onMiniPlayerToggle,
                         onNext = onMiniPlayerNext,
@@ -416,6 +440,7 @@ private fun PlaylistEntriesScreen(
     playlistName: String,
     state: PlaylistsUiState,
     playerState: PlayerUiState,
+    frameInfo: FrameInfo,
     snackbarHostState: SnackbarHostState,
     onBack: () -> Unit,
     onNavigateToPlayer: () -> Unit,
@@ -463,6 +488,7 @@ private fun PlaylistEntriesScreen(
             ) {
                 MiniPlayerBar(
                     state = playerState,
+                    frameInfo = frameInfo,
                     onTap = onNavigateToPlayer,
                     onPlayPause = onMiniPlayerToggle,
                     onNext = onMiniPlayerNext,
@@ -616,7 +642,6 @@ private val playingState = PlayerUiState(
         name = "Beneath the Fallen Stars",
         type = "Impulse Tracker",
     ),
-    frameInfo = FrameInfo(time = 47_000, totalTime = 237_000,),
 )
 
 private data class PlaylistPreviewState(
@@ -707,6 +732,7 @@ private fun PreviewPlaylistListScreen(
             modifier = Modifier,
             state = params.playlistsState,
             playerState = params.playerState,
+            frameInfo = FrameInfo(time = 47_000, totalTime = 237_000),
             snackbarHostState = SnackbarHostState(),
             onBack = {},
             onNavigateToPlayer = {},
@@ -738,6 +764,7 @@ private fun PreviewPlaylistEntriesScreen(
             playlistName = params.playlistsState.selectedPlaylist?.name ?: "AAAAA",
             state = params.playlistsState,
             playerState = params.playerState,
+            frameInfo = FrameInfo(time = 47_000, totalTime = 237_000),
             snackbarHostState = SnackbarHostState(),
             onBack = {},
             onNavigateToPlayer = {},

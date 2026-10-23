@@ -24,6 +24,8 @@ typedef int (*AudioRenderCallback)(void* audioData, int32_t numFrames, int32_t n
 
 int get_audio_stats(struct AudioStats* stats);
 
+void note_underrun(void); // render callback could not produce audio in time (app-side glitch)
+
 int get_effective_format_flags(void);
 
 int open_audio(int, int, int, int, int, int);

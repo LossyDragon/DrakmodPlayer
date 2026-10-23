@@ -38,6 +38,7 @@ private fun noteStr(note: Int): String = when {
 fun DebugView(
     modifier: Modifier = Modifier,
     state: PlayerUiState,
+    frameInfo: FrameInfo,
     isPlaying: Boolean
 ) {
     Column {
@@ -49,7 +50,7 @@ fun DebugView(
             content = {
                 item { PlaybackInfo(state) }
                 item { ModVarsInfo(state) }
-                item { FrameInfo(state) }
+                item { FrameInfo(frameInfo) }
             },
         )
         HorizontalDivider(Modifier.fillMaxWidth())
@@ -157,8 +158,7 @@ private fun ChannelInfo(
 }
 
 @Composable
-private fun FrameInfo(state: PlayerUiState) {
-    val fi = state.frameInfo
+private fun FrameInfo(fi: FrameInfo) {
     Column(verticalArrangement = Arrangement.spacedBy(1.dp)) {
         DebugHeader("FrameInfo")
         DebugRow("Pos/Pat/Row", "${fi.pos} / ${fi.pattern} / ${fi.row}")
@@ -261,13 +261,6 @@ private fun Preview() {
             miNumSequences = 2,
             miComment = "Made with FastTracker II",
         ),
-        frameInfo = FrameInfo(
-            pos = 2, pattern = 3, row = 6,
-            speed = 6, bpm = 125,
-            time = 32450, totalTime = 186000,
-            loopCount = 0, sequence = 0,
-            virtChannels = 8, virtUsed = 3,
-        ),
         currentSequence = 0,
         currentQueueIndex = 2,
         isShuffle = true,
@@ -277,6 +270,13 @@ private fun Preview() {
         DebugView(
             modifier = Modifier.fillMaxSize(),
             state = state,
+            frameInfo = FrameInfo(
+                pos = 2, pattern = 3, row = 6,
+                speed = 6, bpm = 125,
+                time = 32450, totalTime = 186000,
+                loopCount = 0, sequence = 0,
+                virtChannels = 8, virtUsed = 3,
+            ),
             isPlaying = true,
         )
     }

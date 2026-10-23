@@ -131,10 +131,6 @@ jboolean xmp_init(JNIEnv* env, jint rate, jint ms, jint mode, jint channels, jin
   return JNI_TRUE;
 }
 
-jboolean xmp_restartAudio(JNIEnv* env) {
-  return restart_audio() == 0 ? JNI_TRUE : JNI_FALSE;
-}
-
 jboolean xmp_setSequence(JNIEnv* env, jint seq) {
   XmpPlayerState& state = XmpPlayerState::instance();
   const xmp_module_info& mi = state.mi;
@@ -152,16 +148,13 @@ jboolean xmp_setSequence(JNIEnv* env, jint seq) {
   return JNI_TRUE;
 }
 
-jboolean xmp_stopAudio(JNIEnv* env) {
-  return stop_audio() == 0 ? JNI_TRUE : JNI_FALSE;
-}
-
 jboolean xmp_testFd(JNIEnv* env, jint fd, jobject modInfo) {
   LOG_INFO("testModuleFd() called - fd: %d, tid: %d", fd, gettid());
   initModInfoFields(env);
 
   lseek(fd, 0, SEEK_SET);
   std::vector<unsigned char> data = readFd(fd);
+  close(fd); // ownership was transferred by ParcelFileDescriptor.detachFd()
   if (data.empty()) {
     LOG_ERROR("testModuleFd() - failed to read fd %d", fd);
     return JNI_FALSE;
@@ -307,18 +300,8 @@ jint xmp_mute(JNIEnv* env, jint chn, jint status) {
   return xmp_channel_mute(state.ctx, chn, status);
 }
 
-jint xmp_nextPosition(JNIEnv* env) {
-  XmpPlayerState& state = XmpPlayerState::instance();
-  return xmp_next_position(state.ctx);
-}
-
 jint xmp_playAudio(JNIEnv* env) {
   return play_audio();
-}
-
-jint xmp_prevPosition(JNIEnv* env) {
-  XmpPlayerState& state = XmpPlayerState::instance();
-  return xmp_prev_position(state.ctx);
 }
 
 jint xmp_releaseModule(JNIEnv* env) {
@@ -333,12 +316,6 @@ jint xmp_releaseModule(JNIEnv* env) {
   return 0;
 }
 
-jint xmp_restartModule(JNIEnv* env) {
-  XmpPlayerState& state = XmpPlayerState::instance();
-  xmp_restart_module(state.ctx);
-  return 0;
-}
-
 jint xmp_seek(JNIEnv* env, jint time) {
   XmpPlayerState& state = XmpPlayerState::instance();
   std::unique_lock<std::mutex> lock = state.lock();
@@ -350,11 +327,6 @@ jint xmp_setPlayer(JNIEnv* env, jint parm, jint value) {
   auto res = xmp_set_player(state.ctx, parm, value);
   if (res != 0) LOG_WARN("xmp_play_buffer: %s (%d)", xmpErrorString(res), res);
   return res;
-}
-
-jint xmp_setPosition(JNIEnv* env, jint n) {
-  XmpPlayerState& state = XmpPlayerState::instance();
-  return xmp_set_position(state.ctx, n);
 }
 
 jint xmp_startPlayer(JNIEnv* env, jint rate, jint format) {
@@ -381,20 +353,6 @@ jint xmp_startPlayer(JNIEnv* env, jint rate, jint format) {
   return ret;
 }
 
-jint xmp_stopModule(JNIEnv* env) {
-  XmpPlayerState& state = XmpPlayerState::instance();
-  xmp_stop_module(state.ctx);
-  return 0;
-}
-
-jint xmp_time(JNIEnv* env) {
-  XmpPlayerState& state = XmpPlayerState::instance();
-  if (!state.playing) return -1;
-  xmp_frame_info fi = {};
-  xmp_get_frame_info(state.ctx, &fi);
-  return fi.time;
-}
-
 jobjectArray xmp_getFormats(JNIEnv* env) {
   const char* const* list = xmp_get_format_list();
   int num = 0;
@@ -409,10 +367,6 @@ jobjectArray xmp_getFormats(JNIEnv* env) {
   }
   env->DeleteLocalRef(stringClass);
   return result;
-}
-
-jstring xmp_getVersion(JNIEnv* env) {
-  return env->NewStringUTF(xmp_version);
 }
 
 void xmp_getAudioStats(JNIEnv* env, jobject info) {

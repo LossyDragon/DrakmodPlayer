@@ -19,11 +19,21 @@ android {
         externalNativeBuild.cmake {
             cppFlags += listOf("-std=c++17")
             arguments += listOf(
-                "-DCMAKE_BUILD_TYPE=Release", // DEBUG
                 "-DBUILD_SHARED=OFF",
                 "-DANDROID_SUPPORT_FLEXIBLE_PAGE_SIZES=ON",
                 "-DANDROID_STL=c++_shared"
             )
+        }
+    }
+
+    buildTypes {
+        // Optimised + symbols: an -O0 libopenmpt/libxmp can't keep up with the audio callback,
+        // but a plain Release build has nothing for the native debugger to work with.
+        debug {
+            externalNativeBuild.cmake.arguments += "-DCMAKE_BUILD_TYPE=RelWithDebInfo"
+        }
+        release {
+            externalNativeBuild.cmake.arguments += "-DCMAKE_BUILD_TYPE=Release"
         }
     }
 

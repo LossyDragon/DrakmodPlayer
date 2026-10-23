@@ -4,7 +4,6 @@ import android.content.ContentResolver
 import android.content.Context
 import android.net.Uri
 import android.provider.DocumentsContract
-import androidx.core.net.toUri
 import com.lossydragon.modplayer.model.Module
 import java.io.OutputStream
 import timber.log.Timber
@@ -91,24 +90,6 @@ fun ContentResolver.queryDirectoryEntries(treeRoot: Uri, docId: String): List<Di
         }
     }
     return entries
-}
-
-/**
- * Checks whether a SAF URI is still accessible.
- * Queries the content resolver and returns false if the file no longer exists
- * or the app no longer holds permission.
- */
-fun ContentResolver.isUriAccessible(uri: String): Boolean = try {
-    this.query(
-        uri.toUri(),
-        arrayOf(DocumentsContract.Document.COLUMN_DOCUMENT_ID),
-        null,
-        null,
-        null,
-    )?.use { it.count >= 0 } ?: false
-} catch (e: Exception) {
-    Timber.w("URI accessibility check failed: $this - ${e.message}")
-    false
 }
 
 /**
@@ -218,22 +199,21 @@ fun Context.findDownloadedModule(
     null
 }
 
-/**
- * Returns an [OutputStream] for [module]'s file in the download directory,
- * creating the file if it does not exist. Returns null on failure.
- */
-fun Context.getOrCreateOutputFile(
-    rootUri: Uri,
-    module: Module
-): OutputStream? = try {
-    val dirUri = getDownloadDir(rootUri, module) ?: return null
-    val dirDocId = DocumentsContract.getDocumentId(dirUri)
-    val filename = module.url.substringAfterLast('#')
-    val cr = contentResolver
+/** An in-progress download: bytes go to [partUri]; [finalName] is applied by [finalizeDownload]. */
+class PartialDownload(
+    val dirUri: Uri,
+    val partUri: Uri,
+    val finalName: String,
+    val stream: OutputStream
+)
 
+private const val PART_SUFFIX = ".part"
+
+/** Finds a child document of [dirUri] named [name], or null. */
+private fun ContentResolver.findChildFile(rootUri: Uri, dirUri: Uri, name: String): Uri? {
+    val dirDocId = DocumentsContract.getDocumentId(dirUri)
     val childrenUri = DocumentsContract.buildChildDocumentsUriUsingTree(rootUri, dirDocId)
-    var fileUri: Uri? = null
-    cr.query(
+    query(
         childrenUri,
         arrayOf(
             DocumentsContract.Document.COLUMN_DOCUMENT_ID,
@@ -244,21 +224,56 @@ fun Context.getOrCreateOutputFile(
         null,
     )?.use { cursor ->
         while (cursor.moveToNext()) {
-            if (cursor.getString(1) == filename) {
-                fileUri = DocumentsContract
-                    .buildDocumentUriUsingTree(rootUri, cursor.getString(0))
-                break
+            if (cursor.getString(1) == name) {
+                return DocumentsContract.buildDocumentUriUsingTree(rootUri, cursor.getString(0))
             }
         }
     }
+    return null
+}
 
-    if (fileUri == null) {
-        fileUri = DocumentsContract
-            .createDocument(cr, dirUri, "application/octet-stream", filename)
+/**
+ * Opens a `<filename>.part` document for [module] in its download directory (replacing a stale
+ * one), so an interrupted download never leaves a file that looks complete.
+ */
+fun Context.createPartialDownload(
+    rootUri: Uri,
+    module: Module
+): PartialDownload? = try {
+    val dirUri = getDownloadDir(rootUri, module) ?: return null
+    val finalName = module.url.substringAfterLast('#')
+    val partName = finalName + PART_SUFFIX
+    val cr = contentResolver
+
+    cr.findChildFile(rootUri, dirUri, partName)?.let { DocumentsContract.deleteDocument(cr, it) }
+    val partUri = DocumentsContract.createDocument(cr, dirUri, "application/octet-stream", partName)
+        ?: return null
+    val stream = cr.openOutputStream(partUri) ?: run {
+        DocumentsContract.deleteDocument(cr, partUri)
+        return null
     }
-
-    fileUri?.let { cr.openOutputStream(it) }
+    PartialDownload(dirUri, partUri, finalName, stream)
 } catch (e: Exception) {
     Timber.e(e)
     null
+}
+
+/** Replaces any existing final file and renames the `.part` into place. Returns the final URI. */
+fun Context.finalizeDownload(rootUri: Uri, download: PartialDownload): Uri? = try {
+    val cr = contentResolver
+    cr.findChildFile(rootUri, download.dirUri, download.finalName)
+        ?.let { DocumentsContract.deleteDocument(cr, it) }
+    DocumentsContract.renameDocument(cr, download.partUri, download.finalName)
+} catch (e: Exception) {
+    Timber.e(e)
+    null
+}
+
+/** Removes the `.part` file of a failed or cancelled download. */
+fun Context.discardPartialDownload(download: PartialDownload) {
+    try {
+        DocumentsContract.deleteDocument(contentResolver, download.partUri)
+    } catch (e: Exception) {
+        Timber.w(e, "Could not delete ${download.partUri}")
+    }
 }

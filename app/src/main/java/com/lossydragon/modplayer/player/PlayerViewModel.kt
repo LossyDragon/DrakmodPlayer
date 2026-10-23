@@ -20,7 +20,6 @@ import kotlinx.collections.immutable.persistentListOf
 import kotlinx.collections.immutable.toImmutableList
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
-import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.launchIn
 import kotlinx.coroutines.flow.onEach
@@ -43,7 +42,6 @@ data class PlayerUiState(
     val status: PlaybackStatus = PlaybackStatus.IDLE,
     val playerView: Int = 0,
     val modVars: ModVars = ModVars(),
-    val frameInfo: FrameInfo = FrameInfo(),
     val currentSequence: Int = 0,
     val repeatMode: Int = Player.REPEAT_MODE_OFF,
     val currentQueueIndex: Int = 0,
@@ -61,10 +59,36 @@ class PlayerViewModel(
     val state: StateFlow<PlayerUiState>
         field = MutableStateFlow(PlayerUiState())
 
+    /**
+     * Per-render-frame snapshot (~50 Hz). Kept out of [state] on purpose so that only the
+     * progress / pattern / channel composables recompose at that rate, not the whole screen.
+     */
+    val frameInfo: StateFlow<FrameInfo> by player::frameInfoFlow
+
     val needsBackendSetup: StateFlow<Boolean>
         field = MutableStateFlow(false)
 
+    /**
+     * Mirrors shuffle / repeat from the player. These can change without the UI asking
+     * (queue restore on service start, notification or Android Auto toggles), so the
+     * local copies in [state] must follow the player rather than the other way round.
+     */
+    private val playerListener = object : Player.Listener {
+        override fun onShuffleModeEnabledChanged(shuffleModeEnabled: Boolean) {
+            state.update { it.copy(isShuffle = shuffleModeEnabled) }
+        }
+
+        override fun onRepeatModeChanged(repeatMode: Int) {
+            state.update { it.copy(repeatMode = repeatMode) }
+        }
+    }
+
     init {
+        player.addListener(playerListener)
+        state.update {
+            it.copy(isShuffle = player.shuffleModeEnabled, repeatMode = player.repeatMode)
+        }
+
         prefs.getRenderingBackendFlow().onEach { backend ->
             needsBackendSetup.value = backend == RenderingBackend.INVALID
         }.launchIn(viewModelScope)
@@ -77,8 +101,8 @@ class PlayerViewModel(
             state.update { it.copy(playerView = view) }
         }.launchIn(viewModelScope)
 
-        combine(player.modVarsFlow, player.frameInfoFlow) { mv, fi ->
-            state.update { it.copy(modVars = mv, frameInfo = fi) }
+        player.modVarsFlow.onEach { mv ->
+            state.update { it.copy(modVars = mv) }
         }.launchIn(viewModelScope)
 
         player.currentSequenceFlow.onEach { seq ->
@@ -190,20 +214,18 @@ class PlayerViewModel(
 
     fun playAtIndex(index: Int) = player.jumpToIndex(index)
 
+    /** [playerListener] updates [state] once the player has applied the change. */
     fun toggleShuffle() {
-        val newShuffle = !state.value.isShuffle
-        player.shuffleModeEnabled = newShuffle
-        state.update { it.copy(isShuffle = newShuffle) }
+        player.shuffleModeEnabled = !state.value.isShuffle
     }
 
+    /** [playerListener] updates [state] once the player has applied the change. */
     fun toggleLoop() {
-        val newMode = when (state.value.repeatMode) {
+        player.repeatMode = when (state.value.repeatMode) {
             Player.REPEAT_MODE_OFF -> Player.REPEAT_MODE_ONE
             Player.REPEAT_MODE_ONE -> Player.REPEAT_MODE_ALL
             else -> Player.REPEAT_MODE_OFF
         }
-        player.setRepeatMode(newMode)
-        state.update { it.copy(repeatMode = newMode) }
     }
 
     fun setSequence(index: Int) = player.setSequence(index)
@@ -233,5 +255,9 @@ class PlayerViewModel(
 
     private fun ensureServiceRunning() {
         appContext.startService(Intent(appContext, PlayerService::class.java))
+    }
+
+    override fun onCleared() {
+        player.removeListener(playerListener)
     }
 }

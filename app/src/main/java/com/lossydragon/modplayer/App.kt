@@ -20,7 +20,7 @@ class App : Application() {
     private class ReleaseTree : Timber.Tree() {
         override fun log(priority: Int, tag: String?, message: String, t: Throwable?) {
             if (priority == Log.DEBUG) return
-            Log.println(priority, "Mod Player", message)
+            Log.println(priority, "Drakmod", message)
         }
     }
 

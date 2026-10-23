@@ -44,9 +44,11 @@ import com.lossydragon.native.model.ModVars
 import com.lossydragon.native.model.Sequence
 import kotlin.time.Duration.Companion.seconds
 import kotlinx.collections.immutable.toPersistentList
+import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.isActive
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
 import org.koin.compose.viewmodel.koinViewModel
 
 private sealed class PlayerAction {
@@ -102,12 +104,19 @@ fun PlayerScreen(
     var showModInfo by remember { mutableStateOf(false) }
     var showCommentInfo by remember { mutableStateOf(false) }
 
-    val patternIndex = state.frameInfo.pattern
+    val frameInfo by viewModel.frameInfo.collectAsStateWithLifecycle()
+
+    // Pattern data is fetched over JNI (one call per row) and cached in the engine. Resolve it
+    // off the composition path so a cache miss never blocks a frame; keyed on the module too,
+    // since the same pattern index means something else after a queue change.
+    val patternIndex = frameInfo.pattern
     val channels = state.modVars.chn
-    val patternData = if (patternIndex < 0 || channels == 0) {
-        PatternData()
-    } else {
-        viewModel.getPatternData(patternIndex)
+    val patternData by produceState(PatternData(), patternIndex, channels, state.currentModule) {
+        value = if (patternIndex < 0 || channels == 0) {
+            PatternData()
+        } else {
+            withContext(Dispatchers.Default) { viewModel.getPatternData(patternIndex) }
+        }
     }
 
     LaunchedEffect(state.currentModule) {
@@ -190,6 +199,7 @@ fun PlayerScreen(
         modifier = modifier,
         snackBarHostState = snackBarHostState,
         state = state,
+        frameInfo = frameInfo,
         patternData = patternData,
         queueSheetState = queueSheetState,
         durationsSheetState = durationsSheetState,
@@ -281,6 +291,7 @@ fun PlayerScreen(
 private fun PlayerScreenContent(
     snackBarHostState: SnackbarHostState,
     state: PlayerUiState,
+    frameInfo: FrameInfo,
     patternData: PatternData,
     queueSheetState: SheetState,
     durationsSheetState: SheetState,
@@ -351,8 +362,11 @@ private fun PlayerScreenContent(
                 contentPadding = PaddingValues(bottom = 8.dp),
                 content = {
                     HorizontalDivider(modifier = Modifier.fillMaxWidth())
-                    PatternInfoRow(fi = state.frameInfo)
-                    PlaybackProgress(state = state, onSeek = { onAction(PlayerAction.OnSeek(it)) })
+                    PatternInfoRow(fi = frameInfo)
+                    PlaybackProgress(
+                        frameInfo = frameInfo,
+                        onSeek = { onAction(PlayerAction.OnSeek(it)) },
+                    )
                     Spacer(modifier = Modifier.height(4.dp))
                     ChipList(
                         isShuffle = state.isShuffle,
@@ -401,7 +415,7 @@ private fun PlayerScreenContent(
                         modifier = Modifier.fillMaxSize(),
                         module = state.currentModule,
                         pattern = patternData,
-                        currentRow = state.frameInfo.row,
+                        currentRow = frameInfo.row,
                         showRowNumbers = state.showRowNumbers,
                     )
 
@@ -416,6 +430,7 @@ private fun PlayerScreenContent(
                     2 -> DebugView(
                         modifier = Modifier.fillMaxSize(),
                         state = state,
+                        frameInfo = frameInfo,
                         isPlaying = (state.status == PlaybackStatus.PLAYING) &&
                             !queueSheetState.isVisible && !durationsSheetState.isVisible
                     )
@@ -499,16 +514,17 @@ private val previewPlayerState = PlayerUiState(
         ),
         instruments = Array(12) { "Instrument ${it + 1}" },
     ),
-    frameInfo = FrameInfo(
-        pos = 3,
-        pattern = 5,
-        row = 14,
-        numRows = 64,
-        speed = 6,
-        bpm = 125,
-        time = 47_000,
-        totalTime = 237_000,
-    ),
+)
+
+private val previewFrameInfo = FrameInfo(
+    pos = 3,
+    pattern = 5,
+    row = 14,
+    numRows = 64,
+    speed = 6,
+    bpm = 125,
+    time = 47_000,
+    totalTime = 237_000,
 )
 
 private class PlayerPreviewParameter :
@@ -542,6 +558,7 @@ private fun Preview(
     AppTheme {
         PlayerScreenContent(
             state = state,
+            frameInfo = previewFrameInfo,
             snackBarHostState = SnackbarHostState(),
             patternData = PatternData(),
             queueSheetState = queueSheetState,

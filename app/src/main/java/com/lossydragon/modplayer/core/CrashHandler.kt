@@ -21,7 +21,6 @@ class CrashHandler(
     companion object {
         private const val LOG_CAT_COUNT = 500
         private const val CRASH_FILE_HISTORY_COUNT = 2
-        private const val CRASH_FOLDER = "DragonPlayer"
 
         val timestamp: String
             get() = SimpleDateFormat("yyyy-MM-dd_HH-mm-ss", Locale.getDefault()).format(Date())
@@ -58,7 +57,7 @@ class CrashHandler(
             }.toString()
 
             val time = timestamp
-            val fileName = "xmp_crash_$time.txt"
+            val fileName = "${Constants.CRASH_FILE_PREFIX}$time.txt"
 
             val crashReport = buildString {
                 appendLine("Timestamp: $time")
@@ -100,7 +99,8 @@ class CrashHandler(
             )
             val selection = "${MediaStore.Downloads.RELATIVE_PATH} LIKE ? AND " +
                 "${MediaStore.Downloads.DISPLAY_NAME} LIKE ?"
-            val selectionArgs = arrayOf("%$CRASH_FOLDER%", "crash_%.txt")
+            val selectionArgs =
+                arrayOf("%${Constants.DOWNLOADS_FOLDER}%", "${Constants.CRASH_FILE_PREFIX}%.txt")
             val sortOrder = "${MediaStore.Downloads.DATE_MODIFIED} DESC"
 
             resolver.query(
@@ -126,9 +126,12 @@ class CrashHandler(
             // Android 9 and below uses direct file cleanup
             val downloadsDir = File(
                 Environment.getExternalStoragePublicDirectory(Environment.DIRECTORY_DOWNLOADS),
-                CRASH_FOLDER
+                Constants.DOWNLOADS_FOLDER
             )
-            downloadsDir.listFiles()?.let { files ->
+            val crashFiles = downloadsDir.listFiles { file ->
+                file.name.startsWith(Constants.CRASH_FILE_PREFIX)
+            }
+            crashFiles?.let { files ->
                 if (files.size > CRASH_FILE_HISTORY_COUNT) {
                     files.sortedByDescending { it.lastModified() }
                         .drop(CRASH_FILE_HISTORY_COUNT)

@@ -9,8 +9,12 @@
 #include <unistd.h>
 #include <vector>
 
-#define GET_CLASS(a, b) a.clazz = env->FindClass(b)
-#define GET_FIELD(a, b, c) a.b = env->GetFieldID(a.clazz, #b, c)
+// FindClass returns a local ref that dies with the JNI call, so it is only kept
+// on the stack while the (stable) field IDs are resolved.
+#define GET_CLASS(a, b)                       \
+  jclass jniClazz_ = env->FindClass(b);       \
+  a.initialized = (jniClazz_ != nullptr)
+#define GET_FIELD(a, b, c) a.b = env->GetFieldID(jniClazz_, #b, c)
 
 // Text sanitizer for charsets like CP437.
 inline std::string sanitizeForJni(const char* src) {
@@ -22,7 +26,7 @@ inline std::string sanitizeForJni(const char* src) {
 }
 
 struct AudioStatsFields {
-  jclass clazz = nullptr;
+  bool initialized = false;
   jfieldID xrunCount = nullptr;
   jfieldID underrunCount = nullptr;
   jfieldID framesPerBurst = nullptr;
@@ -36,7 +40,7 @@ struct AudioStatsFields {
 };
 
 struct ChannelInfoFields {
-  jclass clazz = nullptr;
+  bool initialized = false;
   jfieldID volumes = nullptr;
   jfieldID finalVols = nullptr;
   jfieldID pans = nullptr;
@@ -51,7 +55,7 @@ struct ChannelInfoFields {
 };
 
 struct FrameInfoFields {
-  jclass clazz = nullptr;
+  bool initialized = false;
   jfieldID pos = nullptr;
   jfieldID pattern = nullptr;
   jfieldID row = nullptr;
@@ -72,13 +76,13 @@ struct FrameInfoFields {
 };
 
 struct ModInfoFields {
-  jclass clazz = nullptr;
+  bool initialized = false;
   jfieldID name = nullptr;
   jfieldID type = nullptr;
 };
 
 struct ModVarsFields {
-  jclass clazz = nullptr;
+  bool initialized = false;
   jfieldID name = nullptr;
   jfieldID type = nullptr;
   jfieldID pat = nullptr;
@@ -99,7 +103,7 @@ struct ModVarsFields {
 };
 
 struct SequenceFields {
-  jclass clazz = nullptr;
+  bool initialized = false;
   jfieldID entryPoint = nullptr;
   jfieldID duration = nullptr;
 };

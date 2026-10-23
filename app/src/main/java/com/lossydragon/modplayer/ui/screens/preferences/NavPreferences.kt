@@ -13,6 +13,7 @@ import androidx.navigation3.runtime.rememberSaveableStateHolderNavEntryDecorator
 import androidx.navigation3.ui.NavDisplay
 import com.lossydragon.modplayer.util.shareLink
 import com.lossydragon.native.Player
+import com.lossydragon.native.RenderingBackend
 import kotlinx.collections.immutable.toPersistentList
 import kotlinx.serialization.Serializable
 
@@ -65,7 +66,13 @@ fun NavPreferences(
             }
             entry<NavKeyPreferences.Formats> {
                 val context = LocalContext.current
-                val formats = remember(it.format) { Player.getFormats().sorted() }
+                val formats = remember(it.format) {
+                    val backend = when (it.format) {
+                        "mpt" -> RenderingBackend.OPENMPT
+                        else -> RenderingBackend.LIBXMP
+                    }
+                    Player.getFormats(backend).sorted()
+                }
                 PreferencesFormats(
                     modifier = modifier,
                     snackbarHostState = snackbarHostState,

@@ -69,8 +69,15 @@ std::string metadata(openmpt_module* mod, const char* key) {
 
 int renderOpenMpt(void* audioData, int32_t numFrames, int32_t numChannels, int32_t bytesPerSample) {
   OpenMptState& state = OpenMptState::instance();
+  const size_t numBytes = static_cast<size_t>(numFrames) * numChannels * bytesPerSample;
+
+  // UI-side holders of this mutex (pattern/channel/sample queries) keep it for
+  // microseconds, so waiting is far cheaper than dropping a burst of audio.
   std::lock_guard<std::mutex> lock(state.mutex);
-  if (!state.mod || !state.playing) return 0;
+  if (!state.mod || !state.playing) {
+    memset(audioData, 0, numBytes);
+    return 0;
+  }
 
   static int render_count = 0;
   if (++render_count % 5000 == 0) {
@@ -83,8 +90,14 @@ int renderOpenMpt(void* audioData, int32_t numFrames, int32_t numChannels, int32
   size_t frames = 0;
   if (bytesPerSample == 2 && numChannels == 2) {
     frames = openmpt_module_read_interleaved_stereo(state.mod, state.actual_rate, numFrames, static_cast<int16_t*>(audioData));
+    if (frames < static_cast<size_t>(numFrames)) {
+      memset(static_cast<int16_t*>(audioData) + frames * 2, 0, (numFrames - frames) * 2 * sizeof(int16_t));
+    }
   } else {
-    std::vector<int16_t> stereo(static_cast<size_t>(numFrames) * 2);
+    // Scratch buffer lives across callbacks so the RT thread never touches the heap.
+    static std::vector<int16_t> stereo;
+    if (stereo.size() < static_cast<size_t>(numFrames) * 2) stereo.resize(static_cast<size_t>(numFrames) * 2);
+    memset(audioData, 0, numBytes);
     frames = openmpt_module_read_interleaved_stereo(state.mod, state.actual_rate, numFrames, stereo.data());
     if (bytesPerSample == 2 && numChannels == 1) {
       auto* out = static_cast<int16_t*>(audioData);
@@ -185,10 +198,6 @@ jboolean openmpt_init(JNIEnv* env, jint rate, jint ms, jint mode, jint channels,
   return JNI_TRUE;
 }
 
-jboolean openmpt_restartAudio(JNIEnv* env) {
-  return JNI_FALSE;
-}
-
 jboolean openmpt_setSequence(JNIEnv* env, jint seq) {
   OpenMptState& state = OpenMptState::instance();
   std::lock_guard<std::mutex> lock(state.mutex);
@@ -200,14 +209,11 @@ jboolean openmpt_setSequence(JNIEnv* env, jint seq) {
   return JNI_TRUE;
 }
 
-jboolean openmpt_stopAudio(JNIEnv* env) {
-  return JNI_FALSE;
-}
-
 jboolean openmpt_testFd(JNIEnv* env, jint fd, jobject modInfo) {
   initModInfoFields(env);
   lseek(fd, 0, SEEK_SET);
   std::vector<unsigned char> data = readFd(fd);
+  close(fd); // ownership was transferred by ParcelFileDescriptor.detachFd()
   if (data.empty()) return JNI_FALSE;
 
   int error = OPENMPT_ERROR_OK;
@@ -311,16 +317,8 @@ jint openmpt_mute(JNIEnv* env, jint chn, jint status) {
   return openmpt_module_channel_mute(state.mod, chn, status);
 }
 
-jint openmpt_nextPosition(JNIEnv* env) {
-  return JNI_FALSE;
-}
-
 jint openmpt_playAudio(JNIEnv* env) {
   return play_audio();
-}
-
-jint openmpt_prevPosition(JNIEnv* env) {
-  return JNI_FALSE;
 }
 
 jint openmpt_releaseModule(JNIEnv* env) {
@@ -328,10 +326,6 @@ jint openmpt_releaseModule(JNIEnv* env) {
   std::lock_guard<std::mutex> lock(state.mutex);
   destroyModule(state);
   return 0;
-}
-
-jint openmpt_restartModule(JNIEnv* env) {
-  return JNI_FALSE;
 }
 
 jint openmpt_seek(JNIEnv* env, jint time) {
@@ -350,10 +344,6 @@ jint openmpt_setPlayer(JNIEnv* env, jint parm, jint value) {
   if (parm == 2) openmpt_module_ctl_set_integer(state.mod, "render.interpolationfilterlength", value);
   if (parm == 7) openmpt_module_ctl_set_integer(state.mod, "render.mastergain.millibel", (value - 100) * 60);
   return 0;
-}
-
-jint openmpt_setPosition(JNIEnv* env, jint n) {
-  return JNI_FALSE;
 }
 
 jint openmpt_setResampler(JNIEnv* env, jint mode) {
@@ -376,7 +366,9 @@ jint openmpt_setResampler(JNIEnv* env, jint mode) {
 
 jint openmpt_startPlayer(JNIEnv* env, jint rate, jint format) {
   OpenMptState& state = OpenMptState::instance();
-  state.actual_rate = rate > 0 ? rate : state.actual_rate;
+  // Render at the rate the Oboe stream was actually opened with (set by openmpt_init),
+  // never the requested one: a mismatch here plays everything at the wrong pitch.
+  (void)rate;
   set_render_callback(renderOpenMpt);
   std::lock_guard<std::mutex> lock(state.mutex);
   state.playing = true;
@@ -387,14 +379,6 @@ jint openmpt_startPlayer(JNIEnv* env, jint rate, jint format) {
   }
   set_playing(1);
   return 0;
-}
-
-jint openmpt_stopModule(JNIEnv* env) {
-  return JNI_FALSE;
-}
-
-jint openmpt_time(JNIEnv* env) {
-  return JNI_FALSE;
 }
 
 jobjectArray openmpt_getFormats(JNIEnv* env) {
@@ -416,13 +400,6 @@ jobjectArray openmpt_getFormats(JNIEnv* env) {
     env->DeleteLocalRef(s);
   }
   env->DeleteLocalRef(stringClass);
-  return result;
-}
-
-jstring openmpt_getVersion(JNIEnv* env) {
-  const char* version = openmpt_get_string("library_version");
-  jstring result = env->NewStringUTF(version ? version : "");
-  openmpt_free_string(version);
   return result;
 }
 

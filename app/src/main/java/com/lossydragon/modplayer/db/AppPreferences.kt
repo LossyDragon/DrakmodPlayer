@@ -21,6 +21,14 @@ import kotlinx.coroutines.flow.firstOrNull
 import kotlinx.coroutines.flow.map
 import timber.log.Timber
 
+/** The cheap, frequently-updated half of the persisted queue. */
+data class PlaybackState(
+    val index: Int,
+    val positionMs: Long,
+    val repeat: Int,
+    val shuffle: Boolean
+)
+
 data class QueueState(
     val index: Int,
     val json: String,
@@ -29,6 +37,7 @@ data class QueueState(
     val shuffle: Boolean
 )
 
+// On-disk identifier: renaming it resets every setting and forgets the music folder unless migrated.
 private val Context.dataStore by preferencesDataStore(
     name = "xmp_prefs",
     corruptionHandler = ReplaceFileCorruptionHandler {
@@ -37,7 +46,8 @@ private val Context.dataStore by preferencesDataStore(
     }
 )
 
-class AppPreferences(context: Context) {
+// Open so tests can substitute in-memory behaviour for the methods [ModPlayer] depends on.
+open class AppPreferences(context: Context) {
 
     private val dataStore: DataStore<Preferences> = context.dataStore
 
@@ -79,12 +89,16 @@ class AppPreferences(context: Context) {
     suspend fun getLastDirectoryUri() = get(lastDirectoryUri, "").ifBlank { null }
     suspend fun setLastDirectoryUri(v: String) = set(lastDirectoryUri, v)
 
+    private val lastIndexedAt = longPreferencesKey("last_indexed_at")
+    suspend fun getLastIndexedAt() = get(lastIndexedAt, 0L)
+    suspend fun setLastIndexedAt(v: Long) = set(lastIndexedAt, v)
+
     private val globalShuffle = booleanPreferencesKey("global_shuffle")
     fun getGlobalShuffleFlow() = flow(globalShuffle, false)
     suspend fun setGlobalShuffle(v: Boolean) = set(globalShuffle, v)
 
     private val globalSubSongs = booleanPreferencesKey("global_subsongs")
-    fun getGlobalSubSongsFlow() = flow(globalSubSongs, false)
+    open fun getGlobalSubSongsFlow(): Flow<Boolean> = flow(globalSubSongs, false)
     suspend fun setGlobalSubSongs(v: Boolean) = set(globalSubSongs, v)
 
     /* Player */
@@ -150,7 +164,7 @@ class AppPreferences(context: Context) {
     /* Playback */
     private val autoResume = booleanPreferencesKey("auto_resume")
     fun getAutoResumeFlow() = flow(autoResume, false)
-    suspend fun getAutoResume() = get(autoResume, false)
+    open suspend fun getAutoResume(): Boolean = get(autoResume, false)
     suspend fun setAutoResume(v: Boolean) = set(autoResume, v)
 
     private val showRowNumbers = booleanPreferencesKey("show_row_numbers")
@@ -162,21 +176,23 @@ class AppPreferences(context: Context) {
     private val queueShuffle = booleanPreferencesKey("queue_shuffle")
     private val queueRepeat = intPreferencesKey("queue_repeat")
     private val queuePositionMs = longPreferencesKey("queue_position_ms")
-    suspend fun saveQueueState(
-        json: String,
-        index: Int,
-        shuffle: Boolean,
-        repeat: Int,
-        positionMs: Long
-    ) = dataStore.edit {
-        it[queueJson] = json
-        it[queueIndex] = index
-        it[queueShuffle] = shuffle
-        it[queueRepeat] = repeat
-        it[queuePositionMs] = positionMs
+
+    /** Stores the serialized queue contents. Call only when the queue itself changes. */
+    open suspend fun saveQueueList(json: String) {
+        dataStore.edit { it[queueJson] = json }
     }
 
-    suspend fun getQueueState(): QueueState? {
+    /** Stores index / position / modes. Cheap enough to call periodically. */
+    open suspend fun savePlaybackState(state: PlaybackState) {
+        dataStore.edit {
+            it[queueIndex] = state.index
+            it[queueShuffle] = state.shuffle
+            it[queueRepeat] = state.repeat
+            it[queuePositionMs] = state.positionMs
+        }
+    }
+
+    open suspend fun getQueueState(): QueueState? {
         val data = dataStore.data.firstOrNull() ?: return null
         val json = data[queueJson]?.takeIf { it.isNotBlank() } ?: return null
         return QueueState(
@@ -188,11 +204,13 @@ class AppPreferences(context: Context) {
         )
     }
 
-    suspend fun clearQueueState() = dataStore.edit {
-        it.remove(queueJson)
-        it.remove(queueIndex)
-        it.remove(queueShuffle)
-        it.remove(queueRepeat)
-        it.remove(queuePositionMs)
+    open suspend fun clearQueueState() {
+        dataStore.edit {
+            it.remove(queueJson)
+            it.remove(queueIndex)
+            it.remove(queueShuffle)
+            it.remove(queueRepeat)
+            it.remove(queuePositionMs)
+        }
     }
 }

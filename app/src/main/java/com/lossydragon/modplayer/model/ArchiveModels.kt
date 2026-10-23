@@ -109,7 +109,7 @@ data class Module(
             ?.alias
             ?.trim()
             ?: artistInfo.guessedArtistList.firstOrNull()?.trim()
-            ?: "unknown"
+            ?: Constants.UNKNOWN_ARTIST
     val formattedComment: String
         get() = comment.lineSequence().joinToString("\n") { it.fromHtml() }
     val formattedInstruments: String

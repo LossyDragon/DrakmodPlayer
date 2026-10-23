@@ -26,7 +26,7 @@ ModVarsFields g_modVars{};
 SequenceFields g_sequence{};
 
 void initAudioStatsFields(JNIEnv* env) {
-  if (g_audioStats.clazz) return;
+  if (g_audioStats.initialized) return;
   GET_CLASS(g_audioStats, "com/lossydragon/native/model/AudioStats");
   GET_FIELD(g_audioStats, xrunCount, "I");
   GET_FIELD(g_audioStats, underrunCount, "I");
@@ -41,7 +41,7 @@ void initAudioStatsFields(JNIEnv* env) {
 }
 
 void initChannelInfoFields(JNIEnv* env) {
-  if (g_channelInfo.clazz) return;
+  if (g_channelInfo.initialized) return;
   GET_CLASS(g_channelInfo, "com/lossydragon/native/model/ChannelInfo");
   GET_FIELD(g_channelInfo, volumes, "[I");
   GET_FIELD(g_channelInfo, finalVols, "[I");
@@ -57,7 +57,7 @@ void initChannelInfoFields(JNIEnv* env) {
 }
 
 void initFrameInfoFields(JNIEnv* env) {
-  if (g_frameInfo.clazz) return;
+  if (g_frameInfo.initialized) return;
   GET_CLASS(g_frameInfo, "com/lossydragon/native/model/FrameInfo");
   GET_FIELD(g_frameInfo, pos, "I");
   GET_FIELD(g_frameInfo, pattern, "I");
@@ -79,14 +79,14 @@ void initFrameInfoFields(JNIEnv* env) {
 }
 
 void initModInfoFields(JNIEnv* env) {
-  if (g_modInfo.clazz) return;
+  if (g_modInfo.initialized) return;
   GET_CLASS(g_modInfo, "com/lossydragon/native/model/ModInfo");
   GET_FIELD(g_modInfo, name, "Ljava/lang/String;");
   GET_FIELD(g_modInfo, type, "Ljava/lang/String;");
 }
 
 void initModVarsFields(JNIEnv* env) {
-  if (g_modVars.clazz) return;
+  if (g_modVars.initialized) return;
   GET_CLASS(g_modVars, "com/lossydragon/native/model/ModVars");
   GET_FIELD(g_modVars, name, "Ljava/lang/String;");
   GET_FIELD(g_modVars, type, "Ljava/lang/String;");
@@ -108,7 +108,7 @@ void initModVarsFields(JNIEnv* env) {
 }
 
 void initSequenceFields(JNIEnv* env) {
-  if (g_sequence.clazz) return;
+  if (g_sequence.initialized) return;
   GET_CLASS(g_sequence, "com/lossydragon/native/model/Sequence");
   GET_FIELD(g_sequence, entryPoint, "I");
   GET_FIELD(g_sequence, duration, "I");

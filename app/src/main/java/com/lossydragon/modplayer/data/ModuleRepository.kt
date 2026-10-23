@@ -2,6 +2,8 @@ package com.lossydragon.modplayer.data
 
 import android.content.Context
 import android.net.Uri
+import com.lossydragon.modplayer.core.Constants
+import com.lossydragon.modplayer.db.AppPreferences
 import com.lossydragon.modplayer.db.dao.ModuleDao
 import com.lossydragon.modplayer.db.entity.ModuleEntity
 import com.lossydragon.modplayer.util.queryDirectoryEntries
@@ -12,8 +14,14 @@ import kotlinx.coroutines.flow.Flow
 
 class ModuleRepository(
     private val context: Context,
-    private val dao: ModuleDao
+    private val dao: ModuleDao,
+    private val prefs: AppPreferences
 ) {
+
+    private companion object {
+        /** How long the index is trusted before a cold start walks the tree again. */
+        const val INDEX_MAX_AGE_MS = 15 * 60 * 1000L
+    }
 
     fun getChildren(parentPath: String): Flow<List<ModuleEntity>> = dao.getChildren(parentPath)
 
@@ -38,6 +46,13 @@ class ModuleRepository(
     suspend fun indexDirectory(uri: Uri) {
         val existingPaths = dao.getAllFilePaths().toHashSet()
         indexInternal(uri, existingPaths)
+        prefs.setLastIndexedAt(System.currentTimeMillis())
+    }
+
+    /** [indexDirectory], unless one ran within the last [INDEX_MAX_AGE_MS]. */
+    suspend fun indexDirectoryIfStale(uri: Uri) {
+        if (System.currentTimeMillis() - prefs.getLastIndexedAt() < INDEX_MAX_AGE_MS) return
+        indexDirectory(uri)
     }
 
     suspend fun reindexDirectory(uri: Uri) {
@@ -47,6 +62,7 @@ class ModuleRepository(
         indexInternal(uri, skipPaths, seenPaths)
         val removed = allPaths - seenPaths
         if (removed.isNotEmpty()) dao.deleteByFilePaths(removed.toList())
+        prefs.setLastIndexedAt(System.currentTimeMillis())
     }
 
     private suspend fun indexInternal(
@@ -86,7 +102,10 @@ class ModuleRepository(
                     if (path !in skipPaths) {
                         val ext = entry.name.substringAfterLast('.', "").lowercase()
                         val modInfo = ModInfo()
-                        val isValid = Player.testFromFd(context, entry.childUri, modInfo)
+                        // Testing reads the whole file into memory; don't do that for
+                        // things that are obviously not modules (archives, images, mp3s...).
+                        val isValid = ext !in Constants.SKIP_EXTENSIONS &&
+                            Player.testFromFd(context, entry.childUri, modInfo)
                         dao.upsert(
                             ModuleEntity(
                                 filename = entry.name.trim(),

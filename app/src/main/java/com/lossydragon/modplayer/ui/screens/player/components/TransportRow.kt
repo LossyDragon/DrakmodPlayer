@@ -7,8 +7,10 @@ import androidx.compose.material.icons.filled.*
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.*
+import androidx.compose.ui.res.*
 import androidx.compose.ui.tooling.preview.*
 import androidx.compose.ui.unit.*
+import com.lossydragon.modplayer.R
 import com.lossydragon.modplayer.player.PlaybackStatus
 import com.lossydragon.modplayer.ui.theme.AppTheme
 
@@ -37,7 +39,7 @@ internal fun TransportRow(
             content = {
                 Icon(
                     imageVector = Icons.Default.Stop,
-                    contentDescription = "Stop",
+                    contentDescription = stringResource(R.string.desc_stop_button),
                     modifier = Modifier.size(24.dp),
                 )
             }
@@ -49,7 +51,7 @@ internal fun TransportRow(
             content = {
                 Icon(
                     imageVector = Icons.Default.SkipPrevious,
-                    contentDescription = "Previous",
+                    contentDescription = stringResource(R.string.desc_previous),
                     modifier = Modifier.size(32.dp),
                 )
             }
@@ -75,7 +77,7 @@ internal fun TransportRow(
             content = {
                 Icon(
                     imageVector = Icons.Default.SkipNext,
-                    contentDescription = "Next",
+                    contentDescription = stringResource(R.string.desc_next),
                     modifier = Modifier.size(32.dp),
                 )
             }
@@ -86,7 +88,7 @@ internal fun TransportRow(
             content = {
                 Icon(
                     imageVector = Icons.AutoMirrored.Filled.QueueMusic,
-                    contentDescription = "Open Queue",
+                    contentDescription = stringResource(R.string.desc_open_queue),
                     modifier = Modifier.size(24.dp),
                 )
             }

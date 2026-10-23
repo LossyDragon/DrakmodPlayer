@@ -2,7 +2,7 @@
 // Created by Lossy on 6/10/2026.
 //
 #include <android/log.h>
-#include <stdatomic.h>
+#include <atomic>
 #include <unistd.h>
 #include <jni.h>
 #include "audio.h"
@@ -15,14 +15,12 @@ constexpr const char* TAG = "Drakplayer JNI";
 #define LOG_ERROR(...) __android_log_print(ANDROID_LOG_ERROR, TAG, __VA_ARGS__)
 
 #define METHOD(type, name) JNIEXPORT type JNICALL Java_com_lossydragon_native_Player_##name
-#define GET_CLASS(a, b) a.clazz = env->FindClass(b)
-#define GET_FIELD(a, b, c) a.b = env->GetFieldID(a.clazz, #b, c)
 
 #define BACKEND_OPENMPT 0
 #define BACKEND_LIBXMP 1
 #define BACKEND_INVALID -1
 
-static _Atomic int g_backend = BACKEND_INVALID;
+static std::atomic<int> g_backend(BACKEND_INVALID);
 
 static jboolean checkBackend(JNIEnv* env) {
   if (g_backend != BACKEND_INVALID) return JNI_TRUE;
@@ -118,22 +116,6 @@ METHOD(jint, releaseModule)(JNIEnv* env, jobject obj) {
   return g_backend == BACKEND_OPENMPT ? openmpt_releaseModule(env) : xmp_releaseModule(env);
 }
 
-METHOD(jboolean, stopAudio)(JNIEnv* env, jobject obj) {
-  if (!checkBackend(env)) {
-    LOG_ERROR("stopAudio() - invalid backend");
-    return JNI_FALSE;
-  }
-  return g_backend == BACKEND_OPENMPT ? openmpt_stopAudio(env) : xmp_stopAudio(env);
-}
-
-METHOD(jboolean, restartAudio)(JNIEnv* env, jobject obj) {
-  if (!checkBackend(env)) {
-    LOG_ERROR("restartAudio() - invalid backend");
-    return JNI_FALSE;
-  }
-  return g_backend == BACKEND_OPENMPT ? openmpt_restartAudio(env) : xmp_restartAudio(env);
-}
-
 METHOD(jboolean, hasAudioDisconnected)(JNIEnv* env, jobject obj) {
   return has_audio_disconnected() ? JNI_TRUE : JNI_FALSE;
 }
@@ -162,60 +144,12 @@ METHOD(void, setLoopMode)(JNIEnv* env, jobject obj, jboolean loop) {
   g_backend == BACKEND_OPENMPT ? openmpt_setLoopMode(env, loop) : xmp_setLoopMode(env, loop);
 }
 
-METHOD(jint, nextPosition)(JNIEnv* env, jobject obj) {
-  if (!checkBackend(env)) {
-    LOG_ERROR("nextPosition() - invalid backend");
-    return JNI_FALSE;
-  }
-  return g_backend == BACKEND_OPENMPT ? openmpt_nextPosition(env) : xmp_nextPosition(env);
-}
-
-METHOD(jint, prevPosition)(JNIEnv* env, jobject obj) {
-  if (!checkBackend(env)) {
-    LOG_ERROR("prevPosition() - invalid backend");
-    return JNI_FALSE;
-  }
-  return g_backend == BACKEND_OPENMPT ? openmpt_prevPosition(env) : xmp_prevPosition(env);
-}
-
-METHOD(jint, setPosition)(JNIEnv* env, jobject obj, jint pos) {
-  if (!checkBackend(env)) {
-    LOG_ERROR("setPosition() - invalid backend");
-    return JNI_FALSE;
-  }
-  return g_backend == BACKEND_OPENMPT ? openmpt_setPosition(env, pos) : xmp_setPosition(env, pos);
-}
-
-METHOD(jint, stopModule)(JNIEnv* env, jobject obj) {
-  if (!checkBackend(env)) {
-    LOG_ERROR("stopModule() - invalid backend");
-    return JNI_FALSE;
-  }
-  return g_backend == BACKEND_OPENMPT ? openmpt_stopModule(env) : xmp_stopModule(env);
-}
-
-METHOD(jint, restartModule)(JNIEnv* env, jobject obj) {
-  if (!checkBackend(env)) {
-    LOG_ERROR("restartModule() - invalid backend");
-    return JNI_FALSE;
-  }
-  return g_backend == BACKEND_OPENMPT ? openmpt_restartModule(env) : xmp_restartModule(env);
-}
-
 METHOD(jint, seek)(JNIEnv* env, jobject obj, jint time) {
   if (!checkBackend(env)) {
     LOG_ERROR("seek() - invalid backend");
     return JNI_FALSE;
   }
   return g_backend == BACKEND_OPENMPT ? openmpt_seek(env, time) : xmp_seek(env, time);
-}
-
-METHOD(jint, time)(JNIEnv* env, jobject obj) {
-  if (!checkBackend(env)) {
-    LOG_ERROR("time() - invalid backend");
-    return JNI_FALSE;
-  }
-  return g_backend == BACKEND_OPENMPT ? openmpt_time(env) : xmp_time(env);
 }
 
 METHOD(jint, mute)(JNIEnv* env, jobject obj, jint chn, jint status) {
@@ -258,20 +192,15 @@ METHOD(void, getModVars)(JNIEnv* env, jobject obj, jobject modVars) {
   g_backend == BACKEND_OPENMPT ? openmpt_getModVars(env, modVars) : xmp_getModVars(env, modVars);
 }
 
-METHOD(jstring, getVersion)(JNIEnv* env, jobject obj) {
-  if (!checkBackend(env)) {
-    LOG_ERROR("getVersion() - invalid backend");
-    return JNI_FALSE;
+// Both format lists are static library data, so this works for either backend at any time,
+// independent of (and without touching) the one currently selected.
+METHOD(jobjectArray, getFormats)(JNIEnv* env, jobject obj, jint backend) {
+  if (backend != BACKEND_OPENMPT && backend != BACKEND_LIBXMP) {
+    jclass cls = env->FindClass("java/lang/IllegalArgumentException");
+    env->ThrowNew(cls, "unknown backend id");
+    return nullptr;
   }
-  return g_backend == BACKEND_OPENMPT ? openmpt_getVersion(env) : xmp_getVersion(env);
-}
-
-METHOD(jobjectArray, getFormats)(JNIEnv* env, jobject obj) {
-  if (!checkBackend(env)) {
-    LOG_ERROR("getFormats() - invalid backend");
-    return JNI_FALSE;
-  }
-  return g_backend == BACKEND_OPENMPT ? openmpt_getFormats(env) : xmp_getFormats(env);
+  return backend == BACKEND_OPENMPT ? openmpt_getFormats(env) : xmp_getFormats(env);
 }
 
 METHOD(void, getChannelData)(JNIEnv* env, jobject obj, jobject channelInfo) {
@@ -332,6 +261,6 @@ METHOD(jint, setResampler)(JNIEnv* env, jobject, jint mode) {
     LOG_WARN("setResampler() - libxmp backend does not support resampler");
     return JNI_FALSE;
   }
-  return g_backend == BACKEND_OPENMPT ?: openmpt_setResampler(env, mode);
+  return openmpt_setResampler(env, mode);
 }
 }

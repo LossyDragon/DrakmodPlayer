@@ -29,7 +29,7 @@ A spiritual successor to [cmatsuoka/xmp-android](https://github.com/cmatsuoka/xm
 - **Module info, instrument list, and song messages** viewable per track
 
 ### Integration
-- **Android Auto support** (WIP, usable) — browse and play from your car
+- **Android Auto support** (WIP, usable) — browse files and playlists, search, and play from your car
 - **Media session integration** — lock screen, watch, and notification controls
 - **System playback resumption** (WIP, not working)
 - **Voice search** (WIP, not started)
@@ -46,7 +46,20 @@ A spiritual successor to [cmatsuoka/xmp-android](https://github.com/cmatsuoka/xm
 
 ## Requirements
 - Android 8.0 (API 26) or higher
-- Architectures: arm64-v8a, armeabi-v7a, x86, x86_64
+- Architectures: arm64-v8a, armeabi-v7a
+
+---
+
+## Building
+- Clone with submodules: `git clone --recursive …` (or `git submodule update --init --recursive`).
+- The libopenmpt submodule is patched at CMake configure time with
+  `renderer/src/main/cpp/patches/openmpt-waveform-api.patch` (adds channel/sample state and
+  per-channel mute to the C API). After the first build `git status` will therefore show the
+  submodule as modified — that is expected; don't commit or reset it.
+- The Mod Archive search needs an API key: set `modArchiveApiKey="your-key"` (quotes included —
+  the value is used as a Java string literal) in `~/.gradle/gradle.properties`, or
+  `ORG_GRADLE_PROJECT_modArchiveApiKey` in the environment. Without one the app builds
+  fine and the download tab is disabled.
 
 ---
 

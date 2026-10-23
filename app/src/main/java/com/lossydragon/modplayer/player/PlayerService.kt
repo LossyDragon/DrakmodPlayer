@@ -78,16 +78,16 @@ class PlayerService : MediaLibraryService() {
     override fun onDestroy() {
         mediaLibrarySession.release()
         player.abandonAudioFocus()
+        // [player] is a process singleton reused by the next service instance, so only the
+        // native engine is torn down here — see [ModPlayer.releaseEngine].
         player.releaseEngine()
         scope.cancel()
         super.onDestroy()
     }
 
     override fun onTaskRemoved(rootIntent: Intent?) {
-        if (!isPlaybackOngoing) {
-            player.releaseEngine()
-            stopSelf()
-        }
+        // Nothing to release here: stopSelf() leads to onDestroy(), which does it once.
+        if (!isPlaybackOngoing) stopSelf()
     }
 
     override fun onGetSession(controllerInfo: MediaSession.ControllerInfo) = mediaLibrarySession

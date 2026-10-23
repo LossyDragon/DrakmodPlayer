@@ -46,13 +46,23 @@ fun SettingsSlider(
         supportingContent = {
             Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
                 subtitle?.invoke()
-                Slider(
+                val state = rememberSliderState(
                     value = value,
-                    onValueChange = onValueChange,
+                    steps = steps,
+                    trackRange = valueRange,
+                )
+                // The state owns the position; follow [value] when it changes from outside
+                // (e.g. "reset preferences") without fighting an in-progress drag.
+                LaunchedEffect(value) { state.value = value }
+                Slider(
+                    state = state,
                     modifier = Modifier.fillMaxWidth(),
                     enabled = enabled,
-                    valueRange = valueRange,
-                    steps = steps,
+                    // With a callback set, SliderState leaves writing the value to us.
+                    onValueChange = {
+                        state.value = it
+                        onValueChange(it)
+                    },
                     onValueChangeFinished = onValueChangeFinished,
                     colors = sliderColors,
                 )

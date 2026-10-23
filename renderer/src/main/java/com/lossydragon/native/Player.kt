@@ -94,14 +94,14 @@ object Player {
     external fun endPlayer(): Int
     external fun getAudioStats(stats: AudioStats)
     external fun getChannelData(ci: ChannelInfo)
-    external fun getFormats(): Array<String>
+    fun getFormats(backend: RenderingBackend): Array<String> = getFormats(backend.id)
+    private external fun getFormats(backend: Int): Array<String>
     external fun getFrameInfo(values: FrameInfo)
     external fun getModVars(vars: ModVars)
     external fun getPatternRow(pat: Int, row: Int, rowNotes: ByteArray, rowInstruments: ByteArray, rowFxType: ByteArray, rowFxParm: ByteArray, rowFx2Type: ByteArray, rowFx2Parm: ByteArray)
     external fun getPatternRows(pat: Int): Int
     external fun getPlayer(parm: Int): Int
     external fun getSampleData(trigger: Boolean, ins: Int, key: Int, period: Int, chn: Int, width: Int, buffer: ByteArray?)
-    external fun getVersion(): String
     external fun hasAudioDisconnected(): Boolean
     external fun hasModuleEnded(): Boolean
     external fun init(rate: Int, ms: Int, perfMode: Int, channels: Int, audioApi: Int, flags: Int): Boolean
@@ -115,37 +115,49 @@ object Player {
     external fun setPlayer(parm: Int, value: Int): Int
     external fun setPlaying(value: Boolean)
     external fun setResampler(mode: Int): Int
-    external fun restartModule(): Int
-    external fun stopModule(): Int
-    external fun setPosition(pos: Int): Int
-    external fun prevPosition(): Int
-    external fun nextPosition(): Int
-    external fun restartAudio(): Boolean
-    external fun stopAudio(): Boolean
     external fun setSequence(seq: Int): Boolean
     external fun startPlayer(rate: Int, format: Int = 0): Int
     external fun testModuleFd(fd: Int, modInfo: ModInfo): Boolean
-    external fun time(): Int
 
+    /** Result of [loadFromFd] when the URI could not be opened (missing file, revoked grant). */
+    const val LOAD_ERROR_OPEN_FAILED = -1
+
+    /**
+     * Tests whether [uri] is a playable module without keeping it loaded.
+     * Never throws: an unreadable URI (deleted file, revoked SAF grant) is reported as `false`.
+     * The native side takes ownership of the detached fd and closes it.
+     */
     fun testFromFd(context: Context, uri: Uri, modInfo: ModInfo = ModInfo()): Boolean {
         Log.d(TAG, "Testing: $uri")
-        return context.contentResolver.openFileDescriptor(uri, "r")?.use { pfd ->
-            testModuleFd(pfd.detachFd(), modInfo).also { success ->
-                if (success) Log.i(TAG, "Test Success: ${modInfo.name} | ${modInfo.type}")
-            }
-        } ?: false
+        val fd = openFd(context, uri) ?: return false
+        return testModuleFd(fd, modInfo).also { success ->
+            if (success) Log.i(TAG, "Test Success: ${modInfo.name} | ${modInfo.type}")
+        }
     }
 
+    /**
+     * Loads [uri] into the active backend.
+     * Never throws: an unreadable URI yields [LOAD_ERROR_OPEN_FAILED].
+     * The native side takes ownership of the detached fd and closes it.
+     */
     fun loadFromFd(context: Context, uri: Uri, modInfo: ModInfo = ModInfo()): Int {
         Log.d(TAG, "Loading: $uri")
-        return context.contentResolver.openFileDescriptor(uri, "r")?.use { pfd ->
-            loadModuleFd(pfd.detachFd(), modInfo).also { result ->
-                when (result) {
-                    0 -> Log.i(TAG, "Loaded: ${modInfo.name} | ${modInfo.type}")
-                    -2 -> Log.w(TAG, "Test failed for $uri")
-                    else -> Log.e(TAG, "Load failed: $result for $uri")
-                }
+        val fd = openFd(context, uri) ?: return LOAD_ERROR_OPEN_FAILED
+        return loadModuleFd(fd, modInfo).also { result ->
+            when (result) {
+                0 -> Log.i(TAG, "Loaded: ${modInfo.name} | ${modInfo.type}")
+                -2 -> Log.w(TAG, "Test failed for $uri")
+                else -> Log.e(TAG, "Load failed: $result for $uri")
             }
-        } ?: -1
+        }
+    }
+
+    /** Opens [uri] and detaches the raw fd, or returns null (logged) if the provider refuses. */
+    private fun openFd(context: Context, uri: Uri): Int? = try {
+        context.contentResolver.openFileDescriptor(uri, "r")?.use { it.detachFd() }
+    } catch (e: Exception) {
+        // FileNotFoundException, SecurityException (expired grant), IllegalArgumentException...
+        Log.w(TAG, "Cannot open $uri: $e")
+        null
     }
 }

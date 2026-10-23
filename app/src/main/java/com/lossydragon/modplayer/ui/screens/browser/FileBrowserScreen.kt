@@ -64,6 +64,7 @@ fun FileBrowserScreen(
 
     val browserState by browserViewModel.state.collectAsStateWithLifecycle()
     val playerState by playerViewModel.state.collectAsStateWithLifecycle()
+    val frameInfo by playerViewModel.frameInfo.collectAsStateWithLifecycle()
     val playlists by browserViewModel.playlists.collectAsStateWithLifecycle()
 
     // Pending "add to playlist" target: a single file, or null meaning the current folder.
@@ -113,10 +114,11 @@ fun FileBrowserScreen(
         snackbarHostState = snackbarHostState,
         browserState = browserState,
         playerState = playerState,
+        frameInfo = frameInfo,
         onRefresh = browserViewModel::onRefresh,
         onFilter = browserViewModel::setFilter,
         onShuffle = browserViewModel::setShuffle,
-        onRepeatMode = browserViewModel::setRepeatMode,
+        onRepeatMode = playerViewModel::toggleLoop,
         onFolderPick = { folderPicker.launch(null) },
         onSortOrder = browserViewModel::setSortOrder,
         onBreadcrumb = browserViewModel::navigateToBreadcrumb,
@@ -128,7 +130,6 @@ fun FileBrowserScreen(
                         files = files,
                         startAt = if (browserState.isShuffle) files.indices.random() else 0,
                         isShuffle = browserState.isShuffle,
-                        repeatMode = browserState.repeatMode,
                     )
                     onNavigateToPlayer()
                 } else {
@@ -143,7 +144,6 @@ fun FileBrowserScreen(
                 files = browserState.files,
                 startAt = if (index >= 0) index else 0,
                 isShuffle = browserState.isShuffle,
-                repeatMode = browserState.repeatMode,
             )
             onNavigateToPlayer()
         },
@@ -165,10 +165,11 @@ private fun FileBrowserScreenContent(
     snackbarHostState: SnackbarHostState,
     browserState: BrowserUiState,
     playerState: PlayerUiState,
+    frameInfo: FrameInfo,
     onRefresh: () -> Unit,
     onFilter: (String) -> Unit,
     onShuffle: () -> Unit,
-    onRepeatMode: (Int) -> Unit,
+    onRepeatMode: () -> Unit,
     onFolderPick: () -> Unit,
     onSortOrder: (BrowserSortOrder) -> Unit,
     onBreadcrumb: (Int) -> Unit,
@@ -284,23 +285,16 @@ private fun FileBrowserScreenContent(
                         )
 
                         IconButton(
-                            onClick = {
-                                val next = when (browserState.repeatMode) {
-                                    Player.REPEAT_MODE_OFF -> Player.REPEAT_MODE_ONE
-                                    Player.REPEAT_MODE_ONE -> Player.REPEAT_MODE_ALL
-                                    else -> Player.REPEAT_MODE_OFF
-                                }
-                                onRepeatMode(next)
-                            },
+                            onClick = onRepeatMode,
                             content = {
                                 Icon(
-                                    imageVector = when (browserState.repeatMode) {
+                                    imageVector = when (playerState.repeatMode) {
                                         Player.REPEAT_MODE_ONE -> Icons.Default.RepeatOneOn
                                         Player.REPEAT_MODE_ALL -> Icons.Default.RepeatOn
                                         else -> Icons.Default.Repeat
                                     },
-                                    contentDescription = "Repeat",
-                                    tint = if (browserState.repeatMode !=
+                                    contentDescription = stringResource(R.string.desc_repeat),
+                                    tint = if (playerState.repeatMode !=
                                         Player.REPEAT_MODE_OFF
                                     ) {
                                         MaterialTheme.colorScheme.primary
@@ -322,6 +316,7 @@ private fun FileBrowserScreenContent(
             ) {
                 MiniPlayerBar(
                     state = playerState,
+                    frameInfo = frameInfo,
                     onTap = onMiniPlayerTap,
                     onPlayPause = onMiniPlayerToggle,
                     onNext = onMiniPlayerNext,
@@ -427,7 +422,7 @@ private fun PlaylistPickerDialog(
         },
         confirmButton = {},
         dismissButton = {
-            TextButton(onClick = onDismiss) { Text(text = "Cancel") }
+            TextButton(onClick = onDismiss) { Text(text = stringResource(R.string.cancel)) }
         },
     )
 }
@@ -493,10 +488,6 @@ private class BrowserPreviewParameter : PreviewParameterProvider<BrowserPreviewS
             name = "Beneath the Fallen Stars",
             type = "Impulse Tracker",
         ),
-        frameInfo = FrameInfo(
-            time = 47_000,
-            totalTime = 237_000,
-        ),
     )
 
     private val baseBrowserState = BrowserUiState(
@@ -514,11 +505,8 @@ private class BrowserPreviewParameter : PreviewParameterProvider<BrowserPreviewS
         // Normal browsing, no playback
         BrowserPreviewState(
             description = "Browsing - idle",
-            browserState = baseBrowserState.copy(
-                isShuffle = true,
-                repeatMode = Player.REPEAT_MODE_ONE
-            ),
-            playerState = PlayerUiState(),
+            browserState = baseBrowserState.copy(isShuffle = true),
+            playerState = PlayerUiState(repeatMode = Player.REPEAT_MODE_ONE),
         ),
         // Browsing with mini player visible
         BrowserPreviewState(
@@ -585,6 +573,7 @@ private fun Preview(
             snackbarHostState = SnackbarHostState(),
             browserState = params.browserState,
             playerState = params.playerState,
+            frameInfo = FrameInfo(time = 47_000, totalTime = 237_000),
             onRefresh = {},
             onFilter = {},
             onShuffle = {},

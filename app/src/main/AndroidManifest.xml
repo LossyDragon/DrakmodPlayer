@@ -42,7 +42,11 @@
                 <category android:name="android.intent.category.LAUNCHER" />
             </intent-filter>
 
-            <!-- From providers (FileProvider, file managers, etc.) -->
+            <!--
+                From providers (FileProvider, file managers, etc.). Most module files are
+                served as application/octet-stream, hence that catch-all. file:// URIs can't
+                be handed to other apps since API 24, so there is no file-scheme filter.
+            -->
             <intent-filter>
                 <action android:name="android.intent.action.VIEW" />
                 <category android:name="android.intent.category.DEFAULT" />
@@ -52,26 +56,6 @@
                 <data android:scheme="content" android:mimeType="audio/x-it" />
                 <data android:scheme="content" android:mimeType="audio/x-med" />
                 <data android:scheme="content" android:mimeType="application/octet-stream" />
-            </intent-filter>
-
-            <!-- Legacy file managers, matched by extension -->
-            <intent-filter>
-                <action android:name="android.intent.action.VIEW" />
-                <category android:name="android.intent.category.DEFAULT" />
-                <data android:scheme="file" android:host="*" android:pathSuffix=".mod" />
-                <data android:scheme="file" android:host="*" android:pathSuffix=".xm" />
-                <data android:scheme="file" android:host="*" android:pathSuffix=".it" />
-                <data android:scheme="file" android:host="*" android:pathSuffix=".s3m" />
-                <data android:scheme="file" android:host="*" android:pathSuffix=".med" />
-                <data android:scheme="file" android:host="*" android:pathSuffix=".mtm" />
-                <data android:scheme="file" android:host="*" android:pathSuffix=".stm" />
-                <data android:scheme="file" android:host="*" android:pathSuffix=".669" />
-                <data android:scheme="file" android:host="*" android:pathSuffix=".far" />
-                <data android:scheme="file" android:host="*" android:pathSuffix=".dbm" />
-                <data android:scheme="file" android:host="*" android:pathSuffix=".imf" />
-                <data android:scheme="file" android:host="*" android:pathSuffix=".ptm" />
-                <data android:scheme="file" android:host="*" android:pathSuffix=".okt" />
-                <data android:scheme="file" android:host="*" android:pathSuffix=".umx" />
             </intent-filter>
         </activity>
 

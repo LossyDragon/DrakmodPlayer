@@ -1,0 +1,71 @@
+name: CI
+
+# Builds, lints and unit-tests every push and pull request. The signed release build
+# lives in release-build.yml and only runs on versionCode bumps.
+on:
+  push:
+    branches: [ master ]
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  build:
+    name: Build, lint and test (debug)
+    runs-on: ubuntu-latest
+    timeout-minutes: 40
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          submodules: recursive
+
+      - name: Validate Gradle wrapper
+        uses: gradle/actions/wrapper-validation@v4
+
+      - name: Set up JDK 21
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: 21
+
+      - name: Set up Gradle
+        uses: gradle/actions/setup-gradle@v4
+        with:
+          cache-read-only: ${{ github.ref != 'refs/heads/master' }}
+
+      - name: Cache CMake build outputs
+        uses: actions/cache@v4
+        with:
+          path: renderer/.cxx
+          key: cmake-${{ runner.os }}-${{ hashFiles('renderer/src/main/cpp/**', 'renderer/build.gradle.kts') }}
+          restore-keys: cmake-${{ runner.os }}-
+
+      - name: Make gradlew executable
+        run: chmod +x ./gradlew
+
+      - name: Kotlin style (kotlinter)
+        run: ./gradlew :app:lintKotlin --build-cache
+
+      - name: Unit tests
+        run: ./gradlew :app:testDebugUnitTest --build-cache
+
+      - name: Assemble debug APK
+        run: ./gradlew :app:assembleDebug --build-cache
+
+      - name: Android Lint
+        run: ./gradlew :app:lintDebug --build-cache
+
+      - name: Upload lint report
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: lint-report
+          path: app/build/reports/lint-results-debug.html
+          if-no-files-found: ignore

@@ -5,9 +5,8 @@ import android.content.Context
 import android.os.Build
 import android.os.Environment
 import android.provider.MediaStore
+import com.lossydragon.modplayer.core.Constants
 import java.io.File
-
-private const val DOWNLOADS_FOLDER = "DragonPlayer"
 
 fun Context.writeToDownloads(fileName: String, content: String) {
     if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
@@ -16,7 +15,7 @@ fun Context.writeToDownloads(fileName: String, content: String) {
             put(MediaStore.Downloads.MIME_TYPE, "text/plain")
             put(
                 MediaStore.Downloads.RELATIVE_PATH,
-                "${Environment.DIRECTORY_DOWNLOADS}/$DOWNLOADS_FOLDER"
+                "${Environment.DIRECTORY_DOWNLOADS}/${Constants.DOWNLOADS_FOLDER}"
             )
             put(MediaStore.Downloads.IS_PENDING, 1)
         }
@@ -31,7 +30,7 @@ fun Context.writeToDownloads(fileName: String, content: String) {
     } else {
         val dir = File(
             Environment.getExternalStoragePublicDirectory(Environment.DIRECTORY_DOWNLOADS),
-            DOWNLOADS_FOLDER
+            Constants.DOWNLOADS_FOLDER
         ).apply { mkdirs() }
         File(dir, fileName).writeText(content)
     }

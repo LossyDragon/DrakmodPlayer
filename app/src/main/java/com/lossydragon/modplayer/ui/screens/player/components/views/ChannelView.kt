@@ -90,19 +90,15 @@ fun ChannelView(
     val view = LocalView.current
 
     val ci = remember(numChannels) { ChannelInfo() }
+    val drawCi = remember(numChannels) { ChannelInfo() }
+    // Filled on Dispatchers.Default, then copied into drawWave on the main thread so the Canvas
+    // never reads a half-written buffer.
     val liveWave = remember(numChannels) { Array(numChannels) { ByteArray(WAVEFORM_SAMPLES) } }
+    val drawWave = remember(numChannels) { Array(numChannels) { ByteArray(WAVEFORM_SAMPLES) } }
     val prevKey = remember(numChannels) { IntArray(numChannels) }
     val prevInstrument = remember(numChannels) { IntArray(numChannels) { -1 } }
 
-    val muteArr = remember(numChannels) {
-        IntArray(numChannels) { i ->
-            if (!view.isInEditMode) {
-                Player.mute(i, -1)
-            } else {
-                0
-            }
-        }
-    }
+    val muteArr = remember(numChannels) { IntArray(numChannels) }
     var muteVersion by remember { mutableIntStateOf(0) }
     var drawTick by remember { mutableIntStateOf(0) }
     var soloChannel by remember { mutableIntStateOf(-1) }
@@ -120,6 +116,12 @@ fun ChannelView(
         soloChannel = -1
 
         if (numChannels == 0) return@LaunchedEffect
+
+        if (!view.isInEditMode) {
+            withContext(Dispatchers.Default) {
+                for (i in 0 until numChannels) muteArr[i] = Player.mute(i, -1)
+            }
+        }
 
         while (isActive) {
             if (isPlayingState.value) {
@@ -149,6 +151,12 @@ fun ChannelView(
                         )
                     }
                 }
+                for (i in 0 until numChannels) liveWave[i].copyInto(drawWave[i])
+                ci.periods.copyInto(drawCi.periods)
+                ci.volumes.copyInto(drawCi.volumes)
+                ci.finalVols.copyInto(drawCi.finalVols)
+                ci.pans.copyInto(drawCi.pans)
+                ci.instruments.copyInto(drawCi.instruments)
                 drawTick++
             }
             delay(20.milliseconds)
@@ -301,11 +309,11 @@ fun ChannelView(
 
                 val muted = muteArr[ch] == 1
                 val alpha = if (muted) 0.3f else 1f
-                val period = ci.periods[ch]
-                val volume = ci.volumes[ch]
-                val finalVol = ci.finalVols[ch]
-                val pan = ci.pans[ch]
-                val instrument = ci.instruments[ch]
+                val period = drawCi.periods[ch]
+                val volume = drawCi.volumes[ch]
+                val finalVol = drawCi.finalVols[ch]
+                val pan = drawCi.pans[ch]
+                val instrument = drawCi.instruments[ch]
 
                 // row separator
                 if (ch > 0) {
@@ -353,8 +361,8 @@ fun ChannelView(
                 )
 
                 // waveform
-                if (period > 0 && ch < liveWave.size) {
-                    val buf = liveWave[ch]
+                if (period > 0 && ch < drawWave.size) {
+                    val buf = drawWave[ch]
                     val halfH = (waveH / 2f) * 0.88f * (finalVol / 64f).coerceIn(0f, 1f)
                     val xStep = (waveWidth - 2f) / WAVEFORM_SAMPLES.toFloat()
                     waveformPath.reset()

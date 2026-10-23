@@ -33,6 +33,7 @@ import kotlinx.coroutines.launch
 @Composable
 fun MiniPlayerBar(
     state: PlayerUiState,
+    frameInfo: FrameInfo,
     onTap: () -> Unit,
     onPlayPause: () -> Unit,
     onNext: () -> Unit,
@@ -41,8 +42,8 @@ fun MiniPlayerBar(
 ) {
     val haptic = LocalHapticFeedback.current
     val scope = rememberCoroutineScope()
-    val duration = state.frameInfo.totalTime.toFloat().coerceAtLeast(1f)
-    val progress = (state.frameInfo.time.toFloat() / duration).coerceIn(0f, 1f)
+    val duration = frameInfo.totalTime.toFloat().coerceAtLeast(1f)
+    val progress = (frameInfo.time.toFloat() / duration).coerceIn(0f, 1f)
     val isPlaying = state.status == PlaybackStatus.PLAYING
 
     var componentWidth by remember { mutableFloatStateOf(0f) }
@@ -227,7 +228,8 @@ fun MiniPlayerBar(
 
 private data class MiniPlayerPreviewState(
     val description: String,
-    val state: PlayerUiState
+    val state: PlayerUiState,
+    val frameInfo: FrameInfo
 )
 
 private class MiniPlayerPreviewParameter : PreviewParameterProvider<MiniPlayerPreviewState> {
@@ -268,8 +270,8 @@ private class MiniPlayerPreviewParameter : PreviewParameterProvider<MiniPlayerPr
                 currentQueueIndex = 1,
                 queue = sampleFiles,
                 modVars = itModVars,
-                frameInfo = baseFrameInfo,
             ),
+            frameInfo = baseFrameInfo,
         ),
         MiniPlayerPreviewState(
             description = "Paused - mid queue",
@@ -279,8 +281,8 @@ private class MiniPlayerPreviewParameter : PreviewParameterProvider<MiniPlayerPr
                 currentQueueIndex = 1,
                 queue = sampleFiles,
                 modVars = itModVars,
-                frameInfo = baseFrameInfo,
             ),
+            frameInfo = baseFrameInfo,
         ),
         MiniPlayerPreviewState(
             description = "Playing - first track (no prev)",
@@ -290,8 +292,8 @@ private class MiniPlayerPreviewParameter : PreviewParameterProvider<MiniPlayerPr
                 currentQueueIndex = 0,
                 queue = sampleFiles,
                 modVars = itModVars,
-                frameInfo = baseFrameInfo.copy(time = 12_000),
             ),
+            frameInfo = baseFrameInfo.copy(time = 12_000),
         ),
         MiniPlayerPreviewState(
             description = "Playing - last track (no next)",
@@ -301,8 +303,8 @@ private class MiniPlayerPreviewParameter : PreviewParameterProvider<MiniPlayerPr
                 currentQueueIndex = 3,
                 queue = sampleFiles,
                 modVars = itModVars,
-                frameInfo = baseFrameInfo.copy(time = 190_000),
             ),
+            frameInfo = baseFrameInfo.copy(time = 190_000),
         ),
         MiniPlayerPreviewState(
             description = "Playing - repeat all",
@@ -313,8 +315,8 @@ private class MiniPlayerPreviewParameter : PreviewParameterProvider<MiniPlayerPr
                 queue = sampleFiles,
                 repeatMode = Player.REPEAT_MODE_ALL,
                 modVars = itModVars,
-                frameInfo = baseFrameInfo,
             ),
+            frameInfo = baseFrameInfo,
         ),
     )
 
@@ -331,6 +333,7 @@ private fun Preview(
     AppTheme {
         MiniPlayerBar(
             state = params.state,
+            frameInfo = params.frameInfo,
             onTap = {},
             onPlayPause = {},
             onNext = {},

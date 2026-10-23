@@ -1,29 +1,32 @@
 [versions]
 java = "17"
-about-libs = "15.1.1" # https://mvnrepository.com/artifact/com.mikepenz.aboutlibraries.plugin.android/com.mikepenz.aboutlibraries.plugin.android.gradle.plugin
+about-libs = "15.3.0" # https://mvnrepository.com/artifact/com.mikepenz.aboutlibraries.plugin.android/com.mikepenz.aboutlibraries.plugin.android.gradle.plugin
 activityCompose = "1.13.0" # https://mvnrepository.com/artifact/androidx.activity/activity-compose
-androidGradlePlugin = "9.3.2" # https://mvnrepository.com/artifact/com.android.application/com.android.application.gradle.plugin
-colorpickerCompose = "1.2.0" # https://mvnrepository.com/artifact/com.github.skydoves/colorpicker-compose
-composeBom = "2026.08.00" # https://mvnrepository.com/artifact/androidx.compose/compose-bom
-composeSettings = "3.1.0" # https://mvnrepository.com/artifact/com.github.alorma.compose-settings/ui-tiles-expressive/versions
-dataStore = "1.2.1" # https://mvnrepository.com/artifact/androidx.datastore/datastore-preferences
-dep-analysis = "3.19.1" # https://mvnrepository.com/artifact/com.autonomousapps.dependency-analysis
+androidGradlePlugin = "9.4.1" # https://mvnrepository.com/artifact/com.android.application/com.android.application.gradle.plugin
+colorpickerCompose = "1.3.0" # https://mvnrepository.com/artifact/com.github.skydoves/colorpicker-compose
+composeBom = "2026.09.00" # https://mvnrepository.com/artifact/androidx.compose/compose-bom
+composeSettings = "3.3.0" # https://mvnrepository.com/artifact/com.github.alorma.compose-settings/ui-tiles-expressive/versions
+dataStore = "1.3.0" # https://mvnrepository.com/artifact/androidx.datastore/datastore-preferences
+dep-analysis = "3.19.2" # https://mvnrepository.com/artifact/com.autonomousapps.dependency-analysis
+junit = "4.13.2" # https://mvnrepository.com/artifact/junit/junit
 koin-bom = "4.2.2" # https://mvnrepository.com/artifact/io.insert-koin/koin-core
-kotlin = "2.4.10" # https://mvnrepository.com/artifact/org.jetbrains.kotlin.android/org.jetbrains.kotlin.android.gradle.plugin
-kotlinXImmutable = "0.5.1" # https://mvnrepository.com/artifact/org.jetbrains.kotlinx/kotlinx-collections-immutable
+kotlin = "2.4.21" # https://mvnrepository.com/artifact/org.jetbrains.kotlin.android/org.jetbrains.kotlin.android.gradle.plugin
+kotlinXImmutable = "0.5.2" # https://mvnrepository.com/artifact/org.jetbrains.kotlinx/kotlinx-collections-immutable
 kotlinterGradle = "5.7.0" # // https://github.com/jeremymailen/kotlinter-gradle
-kotlinxSerialization = "1.11.0" # https://mvnrepository.com/artifact/org.jetbrains.kotlinx/kotlinx-serialization-json
-ksp = "2.3.11" # https://mvnrepository.com/artifact/com.google.devtools.ksp/symbol-processing-api
-ktor = "3.5.2" # https://mvnrepository.com/artifact/io.ktor/ktor-client-core
+kotlinxSerialization = "1.12.0" # https://mvnrepository.com/artifact/org.jetbrains.kotlinx/kotlinx-serialization-json
+ksp = "2.3.12" # https://mvnrepository.com/artifact/com.google.devtools.ksp/symbol-processing-api
+ktor = "3.6.0" # https://mvnrepository.com/artifact/io.ktor/ktor-client-core
 lifecycleViewmodel = "2.11.0" # https://mvnrepository.com/artifact/androidx.lifecycle/lifecycle-viewmodel-navigation3
 materialKolor = "5.0.1" # https://mvnrepository.com/artifact/com.materialkolor/material-kolor
-media3 = "1.11.0" # https://mvnrepository.com/artifact/androidx.media3/media3-common/
-navigation3 = "1.1.7" # https://mvnrepository.com/artifact/androidx.navigation3/navigation3-runtime
-oboe = "1.10.0" # https://mvnrepository.com/artifact/com.google.oboe/oboe
-paging = "3.5.1" # https://mvnrepository.com/artifact/androidx.paging/paging-compose
+media3 = "1.11.1" # https://mvnrepository.com/artifact/androidx.media3/media3-common/
+navigation3 = "1.2.0" # https://mvnrepository.com/artifact/androidx.navigation3/navigation3-runtime
+oboe = "1.11.0" # https://mvnrepository.com/artifact/com.google.oboe/oboe
+paging = "3.5.3" # https://mvnrepository.com/artifact/androidx.paging/paging-compose
+robolectric = "4.17" # https://mvnrepository.com/artifact/org.robolectric/robolectric
 reorderable = "3.1.0" # https://mvnrepository.com/artifact/sh.calvin.reorderable/reorderable
-room = "2.8.4" # https://mvnrepository.com/artifact/androidx.room/room-runtime
-stability = "0.13.0" # https://mvnrepository.com/artifact/com.github.skydoves.compose.stability.analyzer/com.github.skydoves.compose.stability.analyzer.gradle.plugin
+room = "2.8.5" # https://mvnrepository.com/artifact/androidx.room/room-runtime
+sqlite = "2.7.1" # https://mvnrepository.com/artifact/androidx.sqlite/sqlite (keep in step with Room)
+stability = "0.15.0" # https://mvnrepository.com/artifact/com.github.skydoves.compose.stability.analyzer/com.github.skydoves.compose.stability.analyzer.gradle.plugin
 timber = "5.0.1" # https://mvnrepository.com/artifact/com.jakewharton.timber/timber
 
 [libraries]
@@ -34,7 +37,7 @@ compose-bom = { module = "androidx.compose:compose-bom", version.ref = "composeB
 compose-foundation = { module = "androidx.compose.foundation:foundation" }
 compose-material-icons-core = { module = "androidx.compose.material:material-icons-core" }
 compose-material-icons-extended = { module = "androidx.compose.material:material-icons-extended" }
-compose-material3 = { module = "androidx.compose.material3:material3", version = "1.5.0-alpha22" }
+compose-material3 = { module = "androidx.compose.material3:material3", version = "1.5.0-alpha28" }
 compose-runtime = { module = "androidx.compose.runtime:runtime" }
 compose-ui-tooling = { module = "androidx.compose.ui:ui-tooling" }
 compose-ui-tooling-preview = { module = "androidx.compose.ui:ui-tooling-preview" }
@@ -62,7 +65,12 @@ paging-compose = { module = "androidx.paging:paging-compose", version.ref = "pag
 reorderable = { module = "sh.calvin.reorderable:reorderable", version.ref = "reorderable" }
 room-compiler = { module = "androidx.room:room-compiler", version.ref = "room" }
 room-runtime = { module = "androidx.room:room-runtime", version.ref = "room" }
+sqlite = { module = "androidx.sqlite:sqlite", version.ref = "sqlite" }
 timber = { module = "com.jakewharton.timber:timber", version.ref = "timber" }
+
+# Testing
+junit = { module = "junit:junit", version.ref = "junit" }
+robolectric = { module = "org.robolectric:robolectric", version.ref = "robolectric" }
 
 [bundles]
 compose = [
@@ -84,6 +92,7 @@ media3 = [
 ]
 room = [
     "room-runtime",
+    "sqlite",
 ]
 serialization = [
     "kotlinx-immutable",

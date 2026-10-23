@@ -4,6 +4,7 @@ import com.lossydragon.modplayer.db.dao.PlaylistDao
 import com.lossydragon.modplayer.db.entity.ModuleEntity
 import com.lossydragon.modplayer.db.entity.PlaylistEntity
 import com.lossydragon.modplayer.db.entity.PlaylistEntryEntity
+import com.lossydragon.modplayer.db.entity.toModuleEntity
 import kotlinx.coroutines.flow.Flow
 
 class PlaylistRepository(private val dao: PlaylistDao) {
@@ -44,14 +45,7 @@ class PlaylistRepository(private val dao: PlaylistDao) {
     }
 
     suspend fun getPlaylistFiles(playlistId: Long): List<ModuleEntity> =
-        dao.getEntries(playlistId).map {
-            ModuleEntity(
-                filename = it.name,
-                fileExtension = it.extension,
-                filePath = it.uri,
-                fileSize = 0L,
-            )
-        }
+        dao.getEntries(playlistId).map { it.toModuleEntity() }
 
     suspend fun deletePlaylist(id: Long) {
         dao.clearEntries(id)

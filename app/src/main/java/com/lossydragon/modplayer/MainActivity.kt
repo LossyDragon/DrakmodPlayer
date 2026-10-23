@@ -13,6 +13,7 @@ import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.*
+import androidx.compose.ui.res.stringResource
 import androidx.lifecycle.viewmodel.navigation3.rememberViewModelStoreNavEntryDecorator
 import androidx.media3.session.MediaController
 import androidx.media3.session.SessionToken
@@ -31,6 +32,7 @@ import com.lossydragon.modplayer.ui.theme.AppTheme
 import com.lossydragon.modplayer.util.requestNotificationPermission
 import com.lossydragon.modplayer.util.requestWriteStoragePermission
 import com.lossydragon.modplayer.util.setEdgeToEdgeConfig
+import com.lossydragon.modplayer.util.takeReadPermission
 import com.lossydragon.modplayer.util.toModuleEntity
 import com.lossydragon.native.RenderingBackend
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -62,6 +64,12 @@ class MainActivity : ComponentActivity() {
         callback = { /* No-Op */ }
     )
 
+    /**
+     * The UI drives [com.lossydragon.modplayer.player.ModPlayer] directly (it is a Koin
+     * singleton in this process), so this controller is never used for commands. It exists
+     * only to keep [PlayerService] bound — and therefore alive — while the activity is
+     * visible, which is what lets the session/notification come up before playback starts.
+     */
     override fun onStart() {
         super.onStart()
         if (controllerFuture != null) return
@@ -91,6 +99,16 @@ class MainActivity : ComponentActivity() {
         if (intent.action != Intent.ACTION_VIEW) return
         val uri = intent.data ?: return
         Timber.d("Handle Intent Uri: $uri")
+        // The grant that comes with ACTION_VIEW is usually temporary, but the module ends up in
+        // the persisted queue. Persist the grant when the sender allows it so restoring the
+        // queue after a restart doesn't hit a SecurityException.
+        if (intent.flags and Intent.FLAG_GRANT_PERSISTABLE_URI_PERMISSION != 0) {
+            try {
+                takeReadPermission(uri)
+            } catch (e: SecurityException) {
+                Timber.w(e, "Could not persist grant for $uri")
+            }
+        }
         val module = uri.toModuleEntity(this) ?: return
         pendingPlayerModule.value = module
     }
@@ -121,19 +139,14 @@ class MainActivity : ComponentActivity() {
                 if (needsBackendSetup) {
                     AlertDialog(
                         onDismissRequest = {},
-                        title = { Text(text = "Choose Rendering Engine") },
-                        text = {
-                            Text(
-                                text = "Select the engine to use for mod tracker playback. " +
-                                    "You can change this later in Settings."
-                            )
-                        },
+                        title = { Text(text = stringResource(R.string.backend_dialog_title)) },
+                        text = { Text(text = stringResource(R.string.backend_dialog_text)) },
                         confirmButton = {
                             TextButton(
                                 onClick = {
                                     playerViewModel.selectBackend(RenderingBackend.LIBXMP)
                                 },
-                                content = { Text(text = "libxmp") }
+                                content = { Text(text = stringResource(R.string.backend_libxmp)) }
                             )
                         },
                         dismissButton = {
@@ -141,7 +154,9 @@ class MainActivity : ComponentActivity() {
                                 onClick = {
                                     playerViewModel.selectBackend(RenderingBackend.OPENMPT)
                                 },
-                                content = { Text(text = "libopenmpt") }
+                                content = {
+                                    Text(text = stringResource(R.string.backend_libopenmpt))
+                                }
                             )
                         }
                     )
