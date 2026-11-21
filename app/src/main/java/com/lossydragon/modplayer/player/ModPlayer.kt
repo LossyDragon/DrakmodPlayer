@@ -112,9 +112,7 @@ class ModPlayer(
             engine.events.collect { event ->
                 when (event) {
                     EngineEvent.Ended -> onEnded()
-
                     EngineEvent.Disconnected -> onDisconnected()
-
                     is EngineEvent.Error -> failPlayback(event.message)
                 }
             }
