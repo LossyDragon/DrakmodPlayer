@@ -23,27 +23,38 @@ import com.lossydragon.modplayer.ui.screens.downloads.DownloadsViewModel
 import com.lossydragon.modplayer.ui.screens.downloads.ModuleResultState
 import com.lossydragon.modplayer.ui.screens.downloads.components.ModuleDetailLayout
 import com.lossydragon.modplayer.ui.theme.AppTheme
+import com.lossydragon.modplayer.util.UiText
+import com.lossydragon.modplayer.util.asString
 import com.lossydragon.modplayer.util.shareLink
-import org.koin.androidx.compose.koinViewModel
 
 @Composable
 internal fun DownloadModuleScreen(
+    viewModel: DownloadsViewModel,
+    snackbarHostState: SnackbarHostState,
     moduleId: Int,
     onBack: () -> Unit,
     modifier: Modifier = Modifier,
     onPlay: (Module) -> Unit
 ) {
-    val viewModel = koinViewModel<DownloadsViewModel>()
-
+    val context = LocalContext.current
     val state by viewModel.moduleResultState.collectAsStateWithLifecycle()
 
     var showDeleteDialog by remember { mutableStateOf(false) }
 
-    LaunchedEffect(Unit) {
+    LaunchedEffect(moduleId) {
         // Only fetch if we don't already have a module loaded
         // or if the requested ID differs from what's currently loaded
         if (state.result == null || (moduleId >= 0 && state.result?.module?.id != moduleId)) {
             viewModel.getModuleById(moduleId)
+        }
+    }
+
+    LaunchedEffect(state.downloadStatus) {
+        val status = state.downloadStatus
+        if (status is DownloadStatus.Error) {
+            snackbarHostState.showSnackbar(
+                status.message.asString(context)
+            )
         }
     }
 
@@ -122,7 +133,7 @@ private fun DownloadModuleContent(
                             content = {
                                 Icon(
                                     imageVector = Icons.Default.Delete,
-                                    contentDescription = null
+                                    contentDescription = stringResource(R.string.delete)
                                 )
                             }
                         )
@@ -144,7 +155,7 @@ private fun DownloadModuleContent(
                                 content = {
                                     Icon(
                                         imageVector = Icons.Default.Share,
-                                        contentDescription = null
+                                        contentDescription = stringResource(R.string.desc_share)
                                     )
                                 }
                             )
@@ -227,11 +238,12 @@ private fun DownloadModuleContent(
                     .fillMaxSize(),
                 contentAlignment = Alignment.Center,
                 content = {
-                    if (state.isLoading) ProgressbarIndicator()
+                    val result = state.result
+                    when {
+                        state.isLoading -> ProgressbarIndicator()
 
-                    state.softError?.let {
-                        MessageBox(
-                            text = it,
+                        state.softError != null -> MessageBox(
+                            text = state.softError,
                             actions = {
                                 TextButton(
                                     onClick = onBack,
@@ -241,10 +253,8 @@ private fun DownloadModuleContent(
                                 )
                             }
                         )
-                    }
 
-                    state.result?.let { result ->
-                        ModuleDetailLayout(
+                        result != null -> ModuleDetailLayout(
                             modifier = Modifier
                                 .fillMaxSize()
                                 .padding(horizontal = 16.dp),
@@ -276,6 +286,10 @@ private class DownloadModulePreviewParameter : PreviewParameterProvider<ModuleRe
         ModuleResultState(result = sampleModule, downloadStatus = DownloadStatus.Loading),
         ModuleResultState(result = sampleModule, downloadStatus = DownloadStatus.Progress(66f)),
         ModuleResultState(result = sampleModule, downloadStatus = DownloadStatus.Success),
+        ModuleResultState(
+            result = sampleModule,
+            downloadStatus = DownloadStatus.Error(UiText.Raw("Download failed")),
+        ),
         ModuleResultState(softError = "Could not fetch module."),
     )
 }

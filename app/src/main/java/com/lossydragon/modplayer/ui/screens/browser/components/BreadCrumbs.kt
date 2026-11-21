@@ -60,7 +60,7 @@ internal fun BreadCrumbs(
                             onClick = { onCrumbClick(index) },
                             label = {
                                 Text(
-                                    text = crumb,
+                                    text = crumb.ifBlank { stringResource(R.string.root_folder) },
                                     style = MaterialTheme.typography.labelMedium
                                 )
                             },

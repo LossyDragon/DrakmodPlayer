@@ -2,7 +2,6 @@ package com.lossydragon.modplayer.model
 
 import androidx.compose.runtime.*
 import com.lossydragon.modplayer.core.Constants
-import com.lossydragon.modplayer.util.fromHtml
 import kotlinx.serialization.SerialName
 import kotlinx.serialization.Serializable
 import kotlinx.serialization.Transient
@@ -102,18 +101,12 @@ data class Module(
         get() = format.lowercase() !in Constants.UNSUPPORTED_EXTENSIONS
     val downloadUrl: String
         get() = url.trim()
-    val sizeKb: Int
-        get() = bytes / 1024
     val artist: String
         get() = artistInfo.artist.firstOrNull()
             ?.alias
             ?.trim()
             ?: artistInfo.guessedArtistList.firstOrNull()?.trim()
             ?: Constants.UNKNOWN_ARTIST
-    val formattedComment: String
-        get() = comment.lineSequence().joinToString("\n") { it.fromHtml() }
-    val formattedInstruments: String
-        get() = instruments.lineSequence().joinToString("\n") { it.fromHtml() }
 }
 
 @Suppress("PropertyName")

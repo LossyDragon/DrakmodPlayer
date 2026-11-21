@@ -1,7 +1,6 @@
 package com.lossydragon.modplayer.db
 
 import android.content.Context
-import androidx.compose.ui.graphics.*
 import androidx.datastore.core.DataStore
 import androidx.datastore.core.handlers.ReplaceFileCorruptionHandler
 import androidx.datastore.preferences.core.Preferences
@@ -12,11 +11,10 @@ import androidx.datastore.preferences.core.intPreferencesKey
 import androidx.datastore.preferences.core.longPreferencesKey
 import androidx.datastore.preferences.core.stringPreferencesKey
 import androidx.datastore.preferences.preferencesDataStore
-import com.lossydragon.modplayer.ui.theme.seed
 import com.lossydragon.native.Player
 import com.lossydragon.native.RenderingBackend
-import com.materialkolor.PaletteStyle
 import kotlinx.coroutines.flow.Flow
+import kotlinx.coroutines.flow.distinctUntilChanged
 import kotlinx.coroutines.flow.firstOrNull
 import kotlinx.coroutines.flow.map
 import timber.log.Timber
@@ -46,16 +44,31 @@ private val Context.dataStore by preferencesDataStore(
     }
 )
 
+/** materialkolor PaletteStyle names in the enum order older builds persisted as an ordinal. */
+private val LEGACY_PALETTE_STYLES = listOf(
+    "TonalSpot", "Neutral", "Vibrant", "Expressive", "Rainbow",
+    "FruitSalad", "Monochrome", "Fidelity", "Content",
+)
+
+/** Maps a legacy PaletteStyle ordinal to its name, or [AppPreferences.DEFAULT_THEME_STYLE]. */
+fun legacyPaletteStyleName(ordinal: Int?): String =
+    ordinal?.let { LEGACY_PALETTE_STYLES.getOrNull(it) } ?: AppPreferences.DEFAULT_THEME_STYLE
+
 // Open so tests can substitute in-memory behaviour for the methods [ModPlayer] depends on.
 open class AppPreferences(context: Context) {
+
+    companion object {
+        const val DEFAULT_THEME_STYLE = "Vibrant"
+        const val DEFAULT_THEME_COLOR: Int = 0xFF660099.toInt()
+    }
 
     private val dataStore: DataStore<Preferences> = context.dataStore
 
     private fun <T> flow(key: Preferences.Key<T>, default: T): Flow<T> =
-        dataStore.data.map { it[key] ?: default }
+        dataStore.data.map { it[key] ?: default }.distinctUntilChanged()
 
     private fun <T> flowNullable(key: Preferences.Key<T>): Flow<T?> =
-        dataStore.data.map { it[key] }
+        dataStore.data.map { it[key] }.distinctUntilChanged()
 
     private suspend fun <T> get(key: Preferences.Key<T>, default: T): T =
         dataStore.data.map { it[key] ?: default }.firstOrNull() ?: default
@@ -75,13 +88,19 @@ open class AppPreferences(context: Context) {
     fun getAppThemeAmoledFlow() = flow(appThemeAmoled, false)
     suspend fun setAppThemeAmoled(v: Boolean) = set(appThemeAmoled, v)
 
-    private val appThemeStyle = intPreferencesKey("app_theme_style")
-    fun getAppThemeStyleFlow() = flow(appThemeStyle, PaletteStyle.Vibrant.ordinal)
-    suspend fun setAppThemeStyle(v: Int) = set(appThemeStyle, v)
+    private val legacyAppThemeStyle = intPreferencesKey("app_theme_style")
+    private val appThemeStyle = stringPreferencesKey("app_theme_style_name")
+
+    /** PaletteStyle name; falls back to the ordinal older builds stored. */
+    fun getAppThemeStyleFlow(): Flow<String> = dataStore.data
+        .map { it[appThemeStyle] ?: legacyPaletteStyleName(it[legacyAppThemeStyle]) }
+        .distinctUntilChanged()
+
+    suspend fun setAppThemeStyle(name: String) = set(appThemeStyle, name)
 
     private val appThemeColor = intPreferencesKey("app_theme_color")
-    fun getThemeColorFlow() = flow(appThemeColor, seed.toArgb())
-    suspend fun setThemeColor(v: Int) = set(appThemeColor, v)
+    fun getThemeColorFlow(): Flow<Int> = flow(appThemeColor, DEFAULT_THEME_COLOR)
+    suspend fun setThemeColor(argb: Int) = set(appThemeColor, argb)
 
     /* File Browser */
     private val lastDirectoryUri = stringPreferencesKey("last_directory_uri")

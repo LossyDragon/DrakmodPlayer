@@ -5,9 +5,11 @@ import com.lossydragon.modplayer.model.ArtistResult
 import com.lossydragon.modplayer.model.ModuleResult
 import com.lossydragon.modplayer.model.SearchListResult
 import io.ktor.client.HttpClient
+import io.ktor.client.request.accept
 import io.ktor.client.request.get
 import io.ktor.client.request.parameter
 import io.ktor.client.statement.bodyAsText
+import io.ktor.http.ContentType
 import nl.adaptivity.xmlutil.serialization.*
 import timber.log.Timber
 
@@ -18,6 +20,7 @@ class ModArchiveService(private val client: HttpClient) {
         additionalParams: Map<String, Any?> = emptyMap()
     ): Result<T> = runCatching {
         val httpResponse = client.get("/xml-tools.php") {
+            accept(ContentType.Application.Xml)
             parameter("key", BuildConfig.API_KEY)
             parameter("request", request)
             additionalParams.forEach { (key, value) ->

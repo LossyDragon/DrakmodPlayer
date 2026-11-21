@@ -6,8 +6,10 @@ import android.media.AudioFocusRequest
 import android.media.AudioManager
 import timber.log.Timber
 
+enum class FocusResult { GRANTED, DELAYED, FAILED }
+
 /**
- * Wraps Android's [AudioFocusRequest] lifecycle.
+ * Wraps Android's [AudioFocusRequest] lifecycle. All callbacks arrive on the main thread.
  */
 class AudioFocusHandler(context: Context) {
 
@@ -20,13 +22,18 @@ class AudioFocusHandler(context: Context) {
 
     /**
      * Requests [AudioManager.AUDIOFOCUS_GAIN] if not already held.
-     * @param onGain Invoked when focus is (re)granted after a transient loss.
-     * @param onLoss Invoked when focus is lost permanently or transiently.
-     * @param onDuck Invoked with true while another app wants us quieter, false when it is done.
+     * @param onGain Focus (re)granted, including after [FocusResult.DELAYED].
+     * @param onLoss Focus lost; `transient` is true when a GAIN will follow once the other
+     *   app is done. A permanent loss is never followed by GAIN: the user pressing play,
+     *   which re-requests focus, is what gets playback back.
+     * @param onDuck True while another app wants us quieter, false when it is done.
      */
-    fun request(onGain: () -> Unit, onLoss: () -> Unit, onDuck: (Boolean) -> Unit) {
-        if (hasFocus) return
-        // Abandon any previous request so its listener doesn't fire alongside the new one.
+    fun request(
+        onGain: () -> Unit,
+        onLoss: (transient: Boolean) -> Unit,
+        onDuck: (Boolean) -> Unit
+    ): FocusResult {
+        if (hasFocus) return FocusResult.GRANTED
         focusRequest?.let { audioManager.abandonAudioFocusRequest(it) }
         focusRequest = null
 
@@ -49,14 +56,17 @@ class AudioFocusHandler(context: Context) {
 
                     AudioManager.AUDIOFOCUS_LOSS_TRANSIENT_CAN_DUCK -> onDuck(true)
 
-                    // LOSS_TRANSIENT is followed by GAIN once the other app is done.
-                    // LOSS (permanent, e.g. the car radio taking over) is not: Android never
-                    // sends GAIN after it. Staying paused until the user presses play, which
-                    // re-requests focus, is the intended behaviour — not a stuck player.
-                    AudioManager.AUDIOFOCUS_LOSS,
+                    // A duck ends here too: a later synchronous grant sends no GAIN.
                     AudioManager.AUDIOFOCUS_LOSS_TRANSIENT -> {
                         hasFocus = false
-                        onLoss()
+                        onDuck(false)
+                        onLoss(true)
+                    }
+
+                    AudioManager.AUDIOFOCUS_LOSS -> {
+                        hasFocus = false
+                        onDuck(false)
+                        onLoss(false)
                     }
                 }
             }
@@ -65,8 +75,14 @@ class AudioFocusHandler(context: Context) {
         focusRequest = request
 
         val result = audioManager.requestAudioFocus(request)
-        hasFocus = result == AudioManager.AUDIOFOCUS_REQUEST_GRANTED
         Timber.d("Audio focus result=$result")
+        hasFocus = result == AudioManager.AUDIOFOCUS_REQUEST_GRANTED
+        if (hasFocus) onDuck(false)
+        return when (result) {
+            AudioManager.AUDIOFOCUS_REQUEST_GRANTED -> FocusResult.GRANTED
+            AudioManager.AUDIOFOCUS_REQUEST_DELAYED -> FocusResult.DELAYED
+            else -> FocusResult.FAILED
+        }
     }
 
     /** Releases audio focus. Call from the service's onDestroy. */

@@ -11,6 +11,7 @@ import androidx.compose.ui.text.font.*
 import androidx.compose.ui.text.style.*
 import androidx.compose.ui.tooling.preview.*
 import androidx.compose.ui.unit.*
+import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.lossydragon.modplayer.player.PlaybackStatus
 import com.lossydragon.modplayer.player.PlayerUiState
 import com.lossydragon.modplayer.ui.theme.AppTheme
@@ -21,6 +22,8 @@ import com.lossydragon.native.model.ModVars
 import kotlin.time.Duration.Companion.milliseconds
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.delay
+import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.isActive
 import kotlinx.coroutines.withContext
 
@@ -34,11 +37,12 @@ private fun noteStr(note: Int): String = when {
     else -> "${NOTE_NAMES[note % 12]}${note / 12}"
 }
 
+/** Developer view; labels are intentionally not localised. */
 @Composable
 fun DebugView(
     modifier: Modifier = Modifier,
     state: PlayerUiState,
-    frameInfo: FrameInfo,
+    frameInfo: StateFlow<FrameInfo>,
     isPlaying: Boolean
 ) {
     Column {
@@ -157,8 +161,10 @@ private fun ChannelInfo(
     }
 }
 
+/** Collects the 50 Hz flow here so only this card recomposes per frame. */
 @Composable
-private fun FrameInfo(fi: FrameInfo) {
+private fun FrameInfo(frameInfo: StateFlow<FrameInfo>) {
+    val fi by frameInfo.collectAsStateWithLifecycle()
     Column(verticalArrangement = Arrangement.spacedBy(1.dp)) {
         DebugHeader("FrameInfo")
         DebugRow("Pos/Pat/Row", "${fi.pos} / ${fi.pattern} / ${fi.row}")
@@ -183,6 +189,8 @@ private fun PlaybackInfo(state: PlayerUiState) {
         DebugRow("Repeat", state.repeatMode.toString())
         DebugRow("Shuffle", state.isShuffle.toString())
         DebugRow("All seqs", state.playAllSequences.toString())
+        DebugRow("Next/Prev", "${state.hasNext} / ${state.hasPrevious}")
+        state.errorMessage?.let { DebugRow("Error", it) }
     }
 }
 
@@ -270,12 +278,14 @@ private fun Preview() {
         DebugView(
             modifier = Modifier.fillMaxSize(),
             state = state,
-            frameInfo = FrameInfo(
-                pos = 2, pattern = 3, row = 6,
-                speed = 6, bpm = 125,
-                time = 32450, totalTime = 186000,
-                loopCount = 0, sequence = 0,
-                virtChannels = 8, virtUsed = 3,
+            frameInfo = MutableStateFlow(
+                FrameInfo(
+                    pos = 2, pattern = 3, row = 6,
+                    speed = 6, bpm = 125,
+                    time = 32450, totalTime = 186000,
+                    loopCount = 0, sequence = 0,
+                    virtChannels = 8, virtUsed = 3,
+                )
             ),
             isPlaying = true,
         )

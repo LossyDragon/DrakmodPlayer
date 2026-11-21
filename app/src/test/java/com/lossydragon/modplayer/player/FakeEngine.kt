@@ -6,89 +6,99 @@ import com.lossydragon.native.model.AudioStats
 import com.lossydragon.native.model.FrameInfo
 import com.lossydragon.native.model.ModVars
 import java.util.Collections
+import java.util.concurrent.Executors
+import kotlinx.coroutines.flow.MutableSharedFlow
 import kotlinx.coroutines.flow.MutableStateFlow
 
 /**
- * In-memory [Engine]: records every call, can fail specific files, can be slowed down,
- * and lets a test simulate a natural end of module or an audio disconnect.
+ * In-memory [Engine] with its own single thread, like the real one: records every call,
+ * can fail specific files, can be slowed down, and lets a test raise engine events.
  */
 class FakeEngine : Engine {
     override val frameInfoFlow = MutableStateFlow(FrameInfo())
-    override val isPlaying = MutableStateFlow(false)
+    override val playingFlow = MutableStateFlow(false)
     override val positionMs = MutableStateFlow(0L)
     override val currentSequenceFlow = MutableStateFlow(0)
     override val modVarsFlow = MutableStateFlow(ModVars())
-    override val audioDisconnectedFlow = MutableStateFlow(false)
+    override val events = MutableSharedFlow<EngineEvent>(extraBufferCapacity = 16)
 
+    @Volatile
     override var playAllSequences = false
 
-    @Volatile
-    override var paused = false
+    private val executor = Executors.newSingleThreadExecutor()
 
-    @Volatile
-    override var initialized = false
-
-    @Volatile
-    override var endedNaturally = false
-
-    /** Every engine call, in order, e.g. `load:content://a`, `start`, `seek:5000`. */
+    /** Every engine command, in order, e.g. `load:content://a`, `play`, `seek:5000`. */
     val calls: MutableList<String> = Collections.synchronizedList(mutableListOf())
 
-    /** File paths whose [loadNext] should fail. */
+    /** File paths whose [load] should fail. */
     @Volatile
     var failPaths: Set<String> = emptySet()
+
+    /** The audio stream cannot be opened: every [load] reports [LoadResult.NO_AUDIO]. */
+    @Volatile
+    var noAudio = false
+
+    /** The stream opens but will not start: [play] reports a disconnect. */
+    @Volatile
+    var failStart = false
 
     /** Artificial load time, to provoke overlapping requests. */
     @Volatile
     var loadDelayMs = 0L
 
     @Volatile
-    var repeatOne = false
+    var loaded = false
+
+    @Volatile
+    var repeatOneRequested = false
 
     @Volatile
     var duckRequested = false
 
-    fun calls(prefix: String) = calls.filter { it.startsWith(prefix) }
+    fun calls(prefix: String) = synchronized(calls) { calls.filter { it.startsWith(prefix) } }
 
     /** Simulates the render loop reaching the end of the module. */
     fun endModule() {
-        endedNaturally = true
-        isPlaying.value = false
+        playingFlow.value = false
+        events.tryEmit(EngineEvent.Ended)
     }
 
-    override fun isRepeatingOne(value: Boolean) {
-        repeatOne = value
+    /** Simulates the audio route dying. */
+    fun disconnect() {
+        playingFlow.value = false
+        events.tryEmit(EngineEvent.Disconnected)
     }
 
-    override fun setSequence(index: Int): Boolean = false
+    override fun post(block: () -> Unit) {
+        executor.execute(block)
+    }
 
-    override fun loadNext(file: ModuleEntity): Boolean {
+    override fun load(file: ModuleEntity): LoadResult {
         calls += "load:${file.filePath}"
         if (loadDelayMs > 0) Thread.sleep(loadDelayMs)
-        isPlaying.value = false
-        endedNaturally = false
-        paused = false
-        initialized = true
-        return file.filePath !in failPaths
+        playingFlow.value = false
+        if (noAudio) {
+            loaded = false
+            return LoadResult.NO_AUDIO
+        }
+        loaded = file.filePath !in failPaths
+        return if (loaded) LoadResult.OK else LoadResult.UNPLAYABLE
     }
 
-    override fun start() {
-        calls += "start"
-        paused = false
-        endedNaturally = false
-        isPlaying.value = true
+    override fun play(): Boolean {
+        if (!loaded) return false
+        if (failStart) {
+            events.tryEmit(EngineEvent.Disconnected)
+            return false
+        }
+        calls += "play"
+        playingFlow.value = true
+        return true
     }
 
     override fun pause() {
         calls += "pause"
-        paused = true
-        isPlaying.value = false
-    }
-
-    override fun resume() {
-        calls += "resume"
-        paused = false
-        isPlaying.value = true
+        playingFlow.value = false
     }
 
     override fun seek(posMs: Int) {
@@ -98,26 +108,33 @@ class FakeEngine : Engine {
 
     override fun stop() {
         calls += "stop"
-        endedNaturally = false
-        isPlaying.value = false
+        loaded = false
+        playingFlow.value = false
     }
 
-    override fun handleAudioDisconnect() {
-        calls += "handleAudioDisconnect"
-        initialized = false
-        audioDisconnectedFlow.value = false
+    override fun recoverFromDisconnect() {
+        calls += "recover"
+        loaded = false
+        playingFlow.value = false
     }
 
     override fun release() {
         calls += "release"
-        initialized = false
+        loaded = false
+        playingFlow.value = false
+    }
+
+    override fun setSequence(index: Int): Boolean = false
+
+    override fun setRepeatOne(value: Boolean) {
+        repeatOneRequested = value
+    }
+
+    override fun setDucked(value: Boolean) {
+        duckRequested = value
     }
 
     override fun getPatternData(patternIndex: Int) = PatternData()
 
     override fun getAudioStats(stats: AudioStats) = Unit
-
-    override fun setDucked(value: Boolean) {
-        duckRequested = value
-    }
 }

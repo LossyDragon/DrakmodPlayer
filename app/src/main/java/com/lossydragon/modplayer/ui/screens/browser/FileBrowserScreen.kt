@@ -1,8 +1,6 @@
 package com.lossydragon.modplayer.ui.screens.browser
 
-import androidx.activity.ComponentActivity
 import androidx.activity.compose.BackHandler
-import androidx.activity.compose.LocalActivity
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.animation.*
@@ -28,24 +26,22 @@ import androidx.media3.common.Player
 import com.lossydragon.modplayer.R
 import com.lossydragon.modplayer.db.entity.ModuleEntity
 import com.lossydragon.modplayer.db.entity.PlaylistEntity
-import com.lossydragon.modplayer.player.PlaybackStatus
-import com.lossydragon.modplayer.player.PlayerUiState
 import com.lossydragon.modplayer.player.PlayerViewModel
+import com.lossydragon.modplayer.ui.activityViewModel
 import com.lossydragon.modplayer.ui.components.MessageBox
 import com.lossydragon.modplayer.ui.components.ProgressbarIndicator
 import com.lossydragon.modplayer.ui.screens.browser.components.BreadCrumbs
 import com.lossydragon.modplayer.ui.screens.browser.components.BrowserInputField
+import com.lossydragon.modplayer.ui.screens.browser.components.BrowserListItem
 import com.lossydragon.modplayer.ui.screens.browser.components.ModuleList
-import com.lossydragon.modplayer.ui.screens.player.components.MiniPlayerBar
 import com.lossydragon.modplayer.ui.theme.AppTheme
-import com.lossydragon.modplayer.util.takeReadWritePermission
-import com.lossydragon.native.model.FrameInfo
-import com.lossydragon.native.model.ModVars
+import com.lossydragon.modplayer.util.asString
 import kotlinx.collections.immutable.ImmutableList
 import kotlinx.collections.immutable.persistentListOf
 import kotlinx.collections.immutable.toImmutableList
+import kotlinx.coroutines.flow.distinctUntilChanged
+import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.launch
-import org.koin.androidx.compose.koinViewModel
 
 @Composable
 fun FileBrowserScreen(
@@ -56,30 +52,49 @@ fun FileBrowserScreen(
 ) {
     val context = LocalContext.current
     val resources = LocalResources.current
-    val browserViewModel = koinViewModel<FileBrowserViewModel>()
-    val playerViewModel = koinViewModel<PlayerViewModel>(
-        viewModelStoreOwner = LocalActivity.current as ComponentActivity
-    )
+    val browserViewModel = activityViewModel<FileBrowserViewModel>()
+    val playerViewModel = activityViewModel<PlayerViewModel>()
     val scope = rememberCoroutineScope()
 
     val browserState by browserViewModel.state.collectAsStateWithLifecycle()
-    val playerState by playerViewModel.state.collectAsStateWithLifecycle()
-    val frameInfo by playerViewModel.frameInfo.collectAsStateWithLifecycle()
+    val repeatMode by remember(playerViewModel) {
+        playerViewModel.state.map { it.repeatMode }.distinctUntilChanged()
+    }.collectAsStateWithLifecycle(playerViewModel.state.value.repeatMode)
     val playlists by browserViewModel.playlists.collectAsStateWithLifecycle()
 
     // Pending "add to playlist" target: a single file, or null meaning the current folder.
     var pendingAdd by remember { mutableStateOf<ModuleEntity?>(null) }
     var pendingFolderAdd by remember { mutableStateOf<FileItem?>(null) }
 
+    // setRootFolder persists the grant itself.
     val folderPicker = rememberLauncherForActivityResult(
         contract = ActivityResultContracts.OpenDocumentTree(),
-        onResult = { uri ->
-            uri?.let {
-                context.takeReadWritePermission(it)
-                browserViewModel.onRootFolderPicked(it)
-            }
-        }
+        onResult = { uri -> uri?.let(browserViewModel::onRootFolderPicked) }
     )
+
+    LaunchedEffect(browserViewModel) {
+        browserViewModel.events.collect { event ->
+            val text = when (event) {
+                is BrowserEvent.AddedToPlaylist -> if (event.skipped > 0) {
+                    resources.getString(
+                        R.string.snack_added_to_playlist_skipped,
+                        event.added,
+                        event.playlist.name,
+                        event.skipped,
+                    )
+                } else {
+                    resources.getString(
+                        R.string.snack_added_to_playlist,
+                        event.added,
+                        event.playlist.name,
+                    )
+                }
+
+                is BrowserEvent.Error -> event.message.asString(context)
+            }
+            snackbarHostState.showSnackbar(text)
+        }
+    }
 
     BackHandler {
         if (!browserViewModel.navigateUp()) {
@@ -111,10 +126,8 @@ fun FileBrowserScreen(
 
     FileBrowserScreenContent(
         modifier = modifier,
-        snackbarHostState = snackbarHostState,
         browserState = browserState,
-        playerState = playerState,
-        frameInfo = frameInfo,
+        repeatMode = repeatMode,
         onRefresh = browserViewModel::onRefresh,
         onFilter = browserViewModel::setFilter,
         onShuffle = browserViewModel::setShuffle,
@@ -147,14 +160,13 @@ fun FileBrowserScreen(
             )
             onNavigateToPlayer()
         },
+        onPlaySingle = { file ->
+            playerViewModel.play(file)
+            onNavigateToPlayer()
+        },
         onDir = browserViewModel::navigateInto,
         onAddToPlaylist = { pendingAdd = it },
         onAddFolderToPlaylist = { pendingFolderAdd = it },
-        onMiniPlayerTap = onNavigateToPlayer,
-        onMiniPlayerToggle = playerViewModel::togglePlayPause,
-        onMiniPlayerNext = playerViewModel::next,
-        onMiniPlayerPrev = playerViewModel::previous,
-        onMiniPlayerStop = playerViewModel::stop,
     )
 }
 
@@ -162,10 +174,8 @@ fun FileBrowserScreen(
 @Composable
 private fun FileBrowserScreenContent(
     modifier: Modifier = Modifier,
-    snackbarHostState: SnackbarHostState,
     browserState: BrowserUiState,
-    playerState: PlayerUiState,
-    frameInfo: FrameInfo,
+    repeatMode: Int,
     onRefresh: () -> Unit,
     onFilter: (String) -> Unit,
     onShuffle: () -> Unit,
@@ -175,15 +185,12 @@ private fun FileBrowserScreenContent(
     onBreadcrumb: (Int) -> Unit,
     onPlayAll: () -> Unit,
     onSelect: (ModuleEntity) -> Unit,
+    onPlaySingle: (ModuleEntity) -> Unit,
     onDir: (FileItem) -> Unit,
     onAddToPlaylist: (ModuleEntity) -> Unit,
-    onAddFolderToPlaylist: (FileItem) -> Unit,
-    onMiniPlayerTap: () -> Unit,
-    onMiniPlayerToggle: () -> Unit,
-    onMiniPlayerNext: () -> Unit,
-    onMiniPlayerPrev: () -> Unit,
-    onMiniPlayerStop: () -> Unit
+    onAddFolderToPlaylist: (FileItem) -> Unit
 ) {
+    val scope = rememberCoroutineScope()
     val searchBarState = rememberSearchBarWithGapState()
     val textFieldState = rememberTextFieldState()
     val scrollBehavior = SearchBarDefaults.enterAlwaysSearchBarScrollBehavior()
@@ -192,8 +199,9 @@ private fun FileBrowserScreenContent(
         scrolledAppBarContainerColor = Color.Unspecified,
     )
     val listState = rememberLazyListState()
-    val hasModule = playerState.currentModule != null // Its fine not being wrapped in remember.
     val layoutDirection = LocalLayoutDirection.current
+    // A refresh keeps the list on screen behind the pull indicator; other loads replace it.
+    val isRefreshing = browserState.isLoading && browserState.loadingReason == R.string.reindexing
 
     LaunchedEffect(textFieldState) {
         snapshotFlow { textFieldState.text.toString() }
@@ -214,7 +222,6 @@ private fun FileBrowserScreenContent(
 
     Scaffold(
         modifier = modifier.nestedScroll(scrollBehavior.nestedScrollConnection),
-        snackbarHost = { SnackbarHost(hostState = snackbarHostState) },
         topBar = {
             Column {
                 AppBarWithSearch(
@@ -224,11 +231,45 @@ private fun FileBrowserScreenContent(
                     inputField = inputField,
                     shape = MaterialTheme.shapes.small,
                 )
+                // Quick-pick: the filtered files, where a tap plays just that file.
                 ExpandedDockedSearchBarWithGap(
                     state = searchBarState,
                     inputField = inputField,
                     shape = MaterialTheme.shapes.small,
-                    content = { /* TODO maybe add this, for single plays */ }
+                    content = {
+                        when {
+                            browserState.filterQuery.isBlank() -> QuickPickHint(
+                                text = stringResource(R.string.search_quick_play_hint)
+                            )
+
+                            browserState.files.isEmpty() -> QuickPickHint(
+                                text = stringResource(R.string.message_no_modules)
+                            )
+
+                            else -> LazyColumn(
+                                modifier = Modifier.heightIn(max = 320.dp),
+                                content = {
+                                    items(
+                                        items = browserState.files,
+                                        key = { it.filePath },
+                                        itemContent = { file ->
+                                            BrowserListItem(
+                                                title = file.name,
+                                                comment = file.type,
+                                                leadingIcon = Icons.Default.AudioFile,
+                                                onClick = {
+                                                    scope.launch {
+                                                        searchBarState.animateToCollapsed()
+                                                    }
+                                                    onPlaySingle(file)
+                                                },
+                                            )
+                                        }
+                                    )
+                                }
+                            )
+                        }
+                    }
                 )
                 if (browserState.breadcrumbs.isNotEmpty()) {
                     Surface(color = MaterialTheme.colorScheme.surface) {
@@ -243,7 +284,7 @@ private fun FileBrowserScreenContent(
         },
         floatingActionButton = {
             AnimatedVisibility(
-                visible = !hasModule && browserState.hasStorageAccess,
+                visible = browserState.hasStorageAccess,
                 enter = scaleIn() + fadeIn(),
                 exit = scaleOut() + fadeOut(),
             ) {
@@ -258,7 +299,7 @@ private fun FileBrowserScreenContent(
                             content = {
                                 Icon(
                                     imageVector = Icons.Default.PlayArrow,
-                                    contentDescription = null
+                                    contentDescription = stringResource(R.string.fab_play_all)
                                 )
                             }
                         )
@@ -274,7 +315,7 @@ private fun FileBrowserScreenContent(
                                 }
                                 Icon(
                                     imageVector = icon,
-                                    contentDescription = null,
+                                    contentDescription = stringResource(R.string.desc_shuffle),
                                     tint = if (browserState.isShuffle) {
                                         MaterialTheme.colorScheme.primary
                                     } else {
@@ -288,15 +329,13 @@ private fun FileBrowserScreenContent(
                             onClick = onRepeatMode,
                             content = {
                                 Icon(
-                                    imageVector = when (playerState.repeatMode) {
+                                    imageVector = when (repeatMode) {
                                         Player.REPEAT_MODE_ONE -> Icons.Default.RepeatOneOn
                                         Player.REPEAT_MODE_ALL -> Icons.Default.RepeatOn
                                         else -> Icons.Default.Repeat
                                     },
                                     contentDescription = stringResource(R.string.desc_repeat),
-                                    tint = if (playerState.repeatMode !=
-                                        Player.REPEAT_MODE_OFF
-                                    ) {
+                                    tint = if (repeatMode != Player.REPEAT_MODE_OFF) {
                                         MaterialTheme.colorScheme.primary
                                     } else {
                                         MaterialTheme.colorScheme.onSurfaceVariant
@@ -308,36 +347,19 @@ private fun FileBrowserScreenContent(
                 )
             }
         },
-        bottomBar = {
-            AnimatedVisibility(
-                visible = hasModule,
-                enter = slideInVertically(initialOffsetY = { it }) + fadeIn(),
-                exit = slideOutVertically(targetOffsetY = { it }) + fadeOut(),
-            ) {
-                MiniPlayerBar(
-                    state = playerState,
-                    frameInfo = frameInfo,
-                    onTap = onMiniPlayerTap,
-                    onPlayPause = onMiniPlayerToggle,
-                    onNext = onMiniPlayerNext,
-                    onPrevious = onMiniPlayerPrev,
-                    onDismiss = onMiniPlayerStop,
-                )
-            }
-        },
         content = { padding ->
             val state = rememberPullToRefreshState()
 
             PullToRefreshBox(
                 state = state,
-                isRefreshing = browserState.isLoading,
+                isRefreshing = isRefreshing,
                 onRefresh = onRefresh,
                 modifier = Modifier
                     .fillMaxSize()
                     .padding(top = padding.calculateTopPadding()),
             ) {
                 when {
-                    browserState.isLoading -> ProgressbarIndicator(
+                    browserState.isLoading && !isRefreshing -> ProgressbarIndicator(
                         modifier = Modifier.fillMaxSize(),
                         text = browserState.loadingReason?.let { stringResource(it) }
                     )
@@ -355,10 +377,22 @@ private fun FileBrowserScreenContent(
                         }
                     )
 
+                    browserState.error != null -> MessageBox(
+                        modifier = Modifier.fillMaxSize(),
+                        icon = Icons.Default.ErrorOutline,
+                        text = browserState.error,
+                        actions = {
+                            TextButton(
+                                onClick = onRefresh,
+                                content = { Text(text = stringResource(R.string.retry)) }
+                            )
+                        }
+                    )
+
                     browserState.files.isEmpty() &&
                         browserState.directories.isEmpty() -> MessageBox(
                         modifier = Modifier.fillMaxSize(),
-                        text = "No module files found in this folder.",
+                        text = stringResource(R.string.message_no_modules_in_folder),
                     )
 
                     else -> ModuleList(
@@ -377,6 +411,18 @@ private fun FileBrowserScreenContent(
                 }
             }
         }
+    )
+}
+
+@Composable
+private fun QuickPickHint(text: String) {
+    Text(
+        modifier = Modifier
+            .fillMaxWidth()
+            .padding(16.dp),
+        text = text,
+        style = MaterialTheme.typography.bodyMedium,
+        color = MaterialTheme.colorScheme.onSurfaceVariant,
     )
 }
 
@@ -433,7 +479,7 @@ private fun PlaylistPickerDialog(
 
 private data class BrowserPreviewState(
     val browserState: BrowserUiState,
-    val playerState: PlayerUiState,
+    val repeatMode: Int,
     val description: String
 )
 
@@ -479,17 +525,6 @@ private class BrowserPreviewParameter : PreviewParameterProvider<BrowserPreviewS
         FileItem(name = "Demos", uri = "2".toUri(), isDirectory = true, size = 0L),
     )
 
-    private val playingState = PlayerUiState(
-        status = PlaybackStatus.PLAYING,
-        currentModule = sampleFiles[1],
-        currentQueueIndex = 1,
-        queue = sampleFiles,
-        modVars = ModVars(
-            name = "Beneath the Fallen Stars",
-            type = "Impulse Tracker",
-        ),
-    )
-
     private val baseBrowserState = BrowserUiState(
         currentPath = "primary:Xmp/Modules",
         hasStorageAccess = true,
@@ -502,31 +537,43 @@ private class BrowserPreviewParameter : PreviewParameterProvider<BrowserPreviewS
     )
 
     override val values = sequenceOf(
-        // Normal browsing, no playback
         BrowserPreviewState(
-            description = "Browsing - idle",
+            description = "Browsing - shuffle, repeat one",
             browserState = baseBrowserState.copy(isShuffle = true),
-            playerState = PlayerUiState(repeatMode = Player.REPEAT_MODE_ONE),
+            repeatMode = Player.REPEAT_MODE_ONE,
         ),
-        // Browsing with mini player visible
         BrowserPreviewState(
-            description = "Browsing - playing",
+            description = "Browsing",
             browserState = baseBrowserState,
-            playerState = playingState,
+            repeatMode = Player.REPEAT_MODE_OFF,
         ),
-        // No storage access yet
         BrowserPreviewState(
             description = "No storage access",
             browserState = BrowserUiState(hasStorageAccess = false, isLoading = false),
-            playerState = PlayerUiState(),
+            repeatMode = Player.REPEAT_MODE_OFF,
         ),
-        // Loading state
         BrowserPreviewState(
             description = "Loading",
-            browserState = BrowserUiState(hasStorageAccess = true, isLoading = true),
-            playerState = PlayerUiState(),
+            browserState = BrowserUiState(
+                hasStorageAccess = true,
+                isLoading = true,
+                loadingReason = R.string.indexing,
+            ),
+            repeatMode = Player.REPEAT_MODE_OFF,
         ),
-        // Empty directory
+        BrowserPreviewState(
+            description = "Refreshing",
+            browserState = baseBrowserState.copy(
+                isLoading = true,
+                loadingReason = R.string.reindexing,
+            ),
+            repeatMode = Player.REPEAT_MODE_OFF,
+        ),
+        BrowserPreviewState(
+            description = "Error",
+            browserState = baseBrowserState.copy(error = "Permission denied"),
+            repeatMode = Player.REPEAT_MODE_OFF,
+        ),
         BrowserPreviewState(
             description = "Empty directory",
             browserState = baseBrowserState.copy(
@@ -534,9 +581,8 @@ private class BrowserPreviewParameter : PreviewParameterProvider<BrowserPreviewS
                 directories = persistentListOf(),
                 breadcrumbs = persistentListOf("Xmp", "Empty"),
             ),
-            playerState = PlayerUiState(),
+            repeatMode = Player.REPEAT_MODE_OFF,
         ),
-        // Filtered results
         BrowserPreviewState(
             description = "Filtered - 'mod'",
             browserState = baseBrowserState.copy(
@@ -544,9 +590,8 @@ private class BrowserPreviewParameter : PreviewParameterProvider<BrowserPreviewS
                 files = persistentListOf(sampleFiles[2], sampleFiles[3]),
                 directories = persistentListOf(),
             ),
-            playerState = playingState,
+            repeatMode = Player.REPEAT_MODE_ALL,
         ),
-        // Sorted by size
         BrowserPreviewState(
             description = "Sorted by size",
             browserState = baseBrowserState.copy(
@@ -558,9 +603,11 @@ private class BrowserPreviewParameter : PreviewParameterProvider<BrowserPreviewS
                     sampleFiles[1], // 1.8MB
                 ),
             ),
-            playerState = PlayerUiState(),
+            repeatMode = Player.REPEAT_MODE_OFF,
         ),
     )
+
+    override fun getDisplayName(index: Int): String = values.toList()[index].description
 }
 
 @Preview(showBackground = true)
@@ -570,10 +617,8 @@ private fun Preview(
 ) {
     AppTheme {
         FileBrowserScreenContent(
-            snackbarHostState = SnackbarHostState(),
             browserState = params.browserState,
-            playerState = params.playerState,
-            frameInfo = FrameInfo(time = 47_000, totalTime = 237_000),
+            repeatMode = params.repeatMode,
             onRefresh = {},
             onFilter = {},
             onShuffle = {},
@@ -583,14 +628,10 @@ private fun Preview(
             onBreadcrumb = {},
             onPlayAll = {},
             onSelect = {},
+            onPlaySingle = {},
             onDir = {},
             onAddToPlaylist = {},
             onAddFolderToPlaylist = {},
-            onMiniPlayerTap = {},
-            onMiniPlayerToggle = {},
-            onMiniPlayerNext = {},
-            onMiniPlayerPrev = {},
-            onMiniPlayerStop = {},
         )
     }
 }

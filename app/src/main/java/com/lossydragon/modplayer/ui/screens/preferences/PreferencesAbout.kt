@@ -56,14 +56,17 @@ fun PreferencesAbout(
                             fontWeight = FontWeight.Bold,
                         )
                         Text(
-                            text = "Version ${BuildConfig.VERSION_NAME}" +
-                                " (${BuildConfig.VERSION_CODE})",
+                            text = stringResource(
+                                R.string.about_version,
+                                BuildConfig.VERSION_NAME,
+                                BuildConfig.VERSION_CODE.toString(),
+                            ),
                             style = MaterialTheme.typography.bodyMedium,
                             color = MaterialTheme.colorScheme.onSurfaceVariant,
                         )
                         Text(
                             text = annotatedLinkString(
-                                text = "Project Repo (Github)",
+                                text = stringResource(R.string.about_repo),
                                 url = "https://github.com/LossyDragon/DrakmodPlayer",
                             ),
                             style = MaterialTheme.typography.bodyMedium,

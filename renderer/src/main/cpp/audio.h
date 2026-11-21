@@ -20,13 +20,14 @@ struct AudioStats {
   const char* audio_format;
 };
 
+// Runs on the audio thread: no locks, no allocation, no logging. Return < 0 to signal end of module.
 typedef int (*AudioRenderCallback)(void* audioData, int32_t numFrames, int32_t numChannels, int32_t bytesPerSample);
 
 int get_audio_stats(struct AudioStats* stats);
 
 void note_underrun(void); // render callback could not produce audio in time (app-side glitch)
 
-int get_effective_format_flags(void);
+int get_effective_format_flags(void); // XMP_FORMAT_* flags reconciled with the opened stream
 
 int open_audio(int, int, int, int, int, int);
 
@@ -40,19 +41,19 @@ void close_audio(void);
 
 int has_audio_disconnected(void); // returns 1 after ErrorDisconnected from Oboe
 
-void clear_audio_disconnected(void);
+int has_module_ended(void); // returns 1 once a render callback reported end of module
 
-int has_module_ended(void); // returns 1 when xmp_play_buffer signals XMP_END
+void clear_module_ended(void);
 
-void reset_render_callback(void);
+void set_render_callback(AudioRenderCallback callback); // nullptr = silence
 
-void set_render_callback(AudioRenderCallback callback);
+void set_playing(int val); // 0 = silence+drain in-flight callback, 1 = play (clears module_ended)
 
-void set_loop_mode(int loop_flag); // 0 = loop forever (repeat-one), 1 = play once
+int is_playing(void);
 
-void set_playing(int val); // 0 = silence+sync, 1 = play; waits for in-flight callback on stop
+int pause_render(void); // silence + drain; returns previous playing state for resume_render
 
-void set_xmp_context(void* ctx); // must be called after init(), before startPlayer()
+void resume_render(int was_playing); // restores playing without touching module_ended
 
 #ifdef __cplusplus
 }

@@ -25,6 +25,7 @@ import com.lossydragon.modplayer.ui.screens.preferences.components.PreferenceIte
 import com.lossydragon.modplayer.ui.screens.preferences.components.PreferenceSection
 import com.lossydragon.modplayer.ui.screens.preferences.components.SingleChoiceAlertDialog
 import com.lossydragon.modplayer.ui.theme.AppTheme
+import com.lossydragon.modplayer.ui.theme.paletteStyleOf
 import com.lossydragon.modplayer.ui.theme.seed
 import com.materialkolor.PaletteStyle
 import com.materialkolor.ktx.toHex
@@ -94,9 +95,7 @@ fun PreferenceInterface(
     }
 
     val style by remember(prefs) {
-        prefs.getAppThemeStyleFlow().map {
-            PaletteStyle.entries.getOrElse(it) { PaletteStyle.Vibrant }
-        }
+        prefs.getAppThemeStyleFlow().map(::paletteStyleOf)
     }.collectAsStateWithLifecycle(PaletteStyle.Vibrant)
 
     val amoled by prefs.getAppThemeAmoledFlow().collectAsStateWithLifecycle(false)
@@ -112,7 +111,7 @@ fun PreferenceInterface(
             items = styleItems,
             onItemSelected = { key ->
                 key?.let {
-                    scope.launch { prefs.setAppThemeStyle(PaletteStyle.valueOf(it).ordinal) }
+                    scope.launch { prefs.setAppThemeStyle(it) }
                 }
                 isThemeStyleShowing = false
             },

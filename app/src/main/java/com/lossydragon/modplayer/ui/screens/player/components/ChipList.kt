@@ -1,5 +1,6 @@
 package com.lossydragon.modplayer.ui.screens.player.components
 
+import androidx.annotation.StringRes
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.*
 import androidx.compose.material.icons.*
@@ -10,13 +11,19 @@ import androidx.compose.runtime.*
 import androidx.compose.ui.*
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.vector.ImageVector
+import androidx.compose.ui.res.*
 import androidx.compose.ui.tooling.preview.*
 import androidx.compose.ui.unit.*
 import androidx.media3.common.Player
+import com.lossydragon.modplayer.R
 import com.lossydragon.modplayer.ui.theme.AppTheme
 import kotlinx.collections.immutable.persistentListOf
 
-private data class ChipItem(val label: String, val icon: ImageVector, val onClick: () -> Unit)
+private data class ChipItem(
+    @param:StringRes val label: Int,
+    val icon: ImageVector,
+    val onClick: () -> Unit
+)
 
 @Composable
 internal fun ChipList(
@@ -34,27 +41,27 @@ internal fun ChipList(
 ) {
     val assistChips = persistentListOf(
         ChipItem(
-            label = "Show Subsongs",
+            label = R.string.chip_show_subsongs,
             icon = Icons.Default.FormatListNumbered,
             onClick = onShowDurations
         ),
         ChipItem(
-            label = "Mod Info",
+            label = R.string.chip_mod_info,
             icon = Icons.Default.Info,
             onClick = onModInfo
         ),
         ChipItem(
-            label = "Mod Instruments",
+            label = R.string.chip_mod_instruments,
             icon = Icons.AutoMirrored.Filled.List,
             onClick = onShowSongInstruments
         ),
         ChipItem(
-            label = "Song Message",
+            label = R.string.chip_song_message,
             icon = Icons.AutoMirrored.Filled.Comment,
             onClick = onShowSongMessage
         ),
         ChipItem(
-            label = "Audio Info (Oboe)",
+            label = R.string.chip_audio_info,
             icon = Icons.Default.BugReport,
             onClick = onAudioInfo
         ),
@@ -73,8 +80,12 @@ internal fun ChipList(
                     selected = isShuffle,
                     onClick = onShuffle,
                     label = {
-                        val shuffleText = if (isShuffle) "Shuffle On" else "Shuffle Off"
-                        Text(text = shuffleText)
+                        val label = if (isShuffle) {
+                            R.string.chip_shuffle_on
+                        } else {
+                            R.string.chip_shuffle_off
+                        }
+                        Text(text = stringResource(label))
                     },
                     colors = FilterChipDefaults.filterChipColors(
                         selectedContainerColor = MaterialTheme.colorScheme.tertiaryContainer
@@ -90,16 +101,15 @@ internal fun ChipList(
             }
             item {
                 FilterChip(
-                    selected = repeatMode != 0,
+                    selected = repeatMode != Player.REPEAT_MODE_OFF,
                     onClick = onLoop,
                     label = {
-                        val loopText = when (repeatMode) {
-                            Player.REPEAT_MODE_ONE -> "Repeating One"
-                            Player.REPEAT_MODE_ALL -> "Repeating All"
-                            Player.REPEAT_MODE_OFF -> "Repeat Off"
-                            else -> throw IllegalArgumentException("Invalid Repeat Mode")
+                        val label = when (repeatMode) {
+                            Player.REPEAT_MODE_ONE -> R.string.chip_repeat_one
+                            Player.REPEAT_MODE_ALL -> R.string.chip_repeat_all
+                            else -> R.string.chip_repeat_off
                         }
-                        Text(text = loopText)
+                        Text(text = stringResource(label))
                     },
                     colors = FilterChipDefaults.filterChipColors(
                         selectedContainerColor = MaterialTheme.colorScheme.tertiaryContainer
@@ -108,8 +118,7 @@ internal fun ChipList(
                         val loopIcon = when (repeatMode) {
                             Player.REPEAT_MODE_ONE -> Icons.Default.RepeatOne
                             Player.REPEAT_MODE_ALL -> Icons.Default.RepeatOn
-                            Player.REPEAT_MODE_OFF -> Icons.Default.Repeat
-                            else -> throw IllegalArgumentException("Invalid Repeat Mode")
+                            else -> Icons.Default.Repeat
                         }
 
                         Icon(
@@ -125,8 +134,12 @@ internal fun ChipList(
                     selected = isSubSongs,
                     onClick = onPlaySubSongs,
                     label = {
-                        val shuffleText = if (isSubSongs) "Subsongs On" else "Subsongs Off"
-                        Text(text = shuffleText)
+                        val label = if (isSubSongs) {
+                            R.string.chip_subsongs_on
+                        } else {
+                            R.string.chip_subsongs_off
+                        }
+                        Text(text = stringResource(label))
                     },
                     colors = FilterChipDefaults.filterChipColors(
                         selectedContainerColor = MaterialTheme.colorScheme.tertiaryContainer
@@ -144,12 +157,12 @@ internal fun ChipList(
             items(assistChips) { chip ->
                 AssistChip(
                     onClick = chip.onClick,
-                    label = { Text(chip.label) },
+                    label = { Text(text = stringResource(chip.label)) },
                     leadingIcon = {
                         Icon(
-                            chip.icon,
-                            null,
-                            Modifier.size(AssistChipDefaults.IconSize)
+                            imageVector = chip.icon,
+                            contentDescription = null,
+                            modifier = Modifier.size(AssistChipDefaults.IconSize)
                         )
                     }
                 )
@@ -165,7 +178,7 @@ private fun Preview() {
         Box(modifier = Modifier.fillMaxWidth()) {
             ChipList(
                 isShuffle = false,
-                repeatMode = 1,
+                repeatMode = Player.REPEAT_MODE_ONE,
                 isSubSongs = false,
                 onShuffle = {},
                 onLoop = {},

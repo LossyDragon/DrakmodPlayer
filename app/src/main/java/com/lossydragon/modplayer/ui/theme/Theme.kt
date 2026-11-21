@@ -1,5 +1,6 @@
 package com.lossydragon.modplayer.ui.theme
 
+import androidx.compose.foundation.isSystemInDarkTheme
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.graphics.*
@@ -11,11 +12,15 @@ import com.materialkolor.PaletteStyle
 import com.materialkolor.rememberDynamicColorScheme
 import org.koin.compose.koinInject
 
-val seed = Color(0xFF660099)
+val seed = Color(AppPreferences.DEFAULT_THEME_COLOR)
+
+/** Resolves a persisted PaletteStyle name, falling back to the default for unknown names. */
+fun paletteStyleOf(name: String): PaletteStyle =
+    PaletteStyle.entries.firstOrNull { it.name == name } ?: PaletteStyle.Vibrant
 
 @Composable
 fun AppTheme(
-    darkTheme: Boolean = true,
+    darkTheme: Boolean = isSystemInDarkTheme(),
     content: @Composable () -> Unit
 ) {
     val prefs = if (LocalView.current.isInEditMode) {
@@ -24,21 +29,20 @@ fun AppTheme(
         koinInject<AppPreferences>()
     }
 
-    val styleValue by prefs.getAppThemeStyleFlow()
-        .collectAsStateWithLifecycle(PaletteStyle.Vibrant.ordinal)
-    val style = remember(styleValue) {
-        PaletteStyle.entries.getOrElse(styleValue) { PaletteStyle.Vibrant }
-    }
+    val styleName by prefs.getAppThemeStyleFlow()
+        .collectAsStateWithLifecycle(AppPreferences.DEFAULT_THEME_STYLE)
+    val style = remember(styleName) { paletteStyleOf(styleName) }
 
-    val amoledValue by prefs.getAppThemeAmoledFlow().collectAsStateWithLifecycle(false)
-    val amoled by remember(amoledValue) { mutableStateOf(amoledValue) }
+    val amoled by prefs.getAppThemeAmoledFlow().collectAsStateWithLifecycle(false)
 
-    val prefColor by prefs.getThemeColorFlow().collectAsStateWithLifecycle(seed.toArgb())
+    val prefColor by prefs.getThemeColorFlow()
+        .collectAsStateWithLifecycle(AppPreferences.DEFAULT_THEME_COLOR)
     val color = remember(prefColor) { Color(prefColor) }
 
+    // AMOLED is the only pref that forces dark; otherwise follow the system.
     val colorScheme = rememberDynamicColorScheme(
         seedColor = color,
-        isDark = darkTheme,
+        isDark = darkTheme || amoled,
         isAmoled = amoled,
         style = style,
     )

@@ -6,7 +6,6 @@ import android.content.ComponentName
 import android.content.Intent
 import android.os.Bundle
 import androidx.activity.ComponentActivity
-import androidx.activity.compose.LocalActivity
 import androidx.activity.compose.setContent
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.material3.AlertDialog
@@ -14,6 +13,8 @@ import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.*
 import androidx.compose.ui.res.stringResource
+import androidx.lifecycle.compose.collectAsStateWithLifecycle
+import androidx.lifecycle.lifecycleScope
 import androidx.lifecycle.viewmodel.navigation3.rememberViewModelStoreNavEntryDecorator
 import androidx.media3.session.MediaController
 import androidx.media3.session.SessionToken
@@ -23,21 +24,26 @@ import androidx.navigation3.runtime.rememberNavBackStack
 import androidx.navigation3.runtime.rememberSaveableStateHolderNavEntryDecorator
 import androidx.navigation3.ui.NavDisplay
 import com.google.common.util.concurrent.ListenableFuture
+import com.lossydragon.modplayer.data.SafDataSource
 import com.lossydragon.modplayer.db.entity.ModuleEntity
 import com.lossydragon.modplayer.player.PlayerService
 import com.lossydragon.modplayer.player.PlayerViewModel
 import com.lossydragon.modplayer.ui.MainNavigation
+import com.lossydragon.modplayer.ui.activityViewModel
 import com.lossydragon.modplayer.ui.screens.player.PlayerScreen
 import com.lossydragon.modplayer.ui.theme.AppTheme
 import com.lossydragon.modplayer.util.requestNotificationPermission
 import com.lossydragon.modplayer.util.requestWriteStoragePermission
 import com.lossydragon.modplayer.util.setEdgeToEdgeConfig
-import com.lossydragon.modplayer.util.takeReadPermission
 import com.lossydragon.modplayer.util.toModuleEntity
+import com.lossydragon.native.Player
 import com.lossydragon.native.RenderingBackend
+import com.lossydragon.native.model.ModInfo
+import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.launch
 import kotlinx.serialization.Serializable
-import org.koin.compose.viewmodel.koinViewModel
+import org.koin.android.ext.android.inject
 import timber.log.Timber
 
 private sealed class NavKeyRoot : NavKey {
@@ -51,6 +57,8 @@ private sealed class NavKeyRoot : NavKey {
 class MainActivity : ComponentActivity() {
 
     private val pendingPlayerModule = MutableStateFlow<ModuleEntity?>(null)
+
+    private val saf: SafDataSource by inject()
 
     private var controllerFuture: ListenableFuture<MediaController>? = null
 
@@ -93,24 +101,36 @@ class MainActivity : ComponentActivity() {
 
     /**
      * Handles an [Intent.ACTION_VIEW] intent from an external app (e.g. a file manager).
-     * Converts the URI to a [ModuleEntity] and queues it for navigation to the player screen.
+     * Resolves and probes the URI off the main thread; only real modules reach the player.
      */
     private fun handleViewIntent(intent: Intent) {
         if (intent.action != Intent.ACTION_VIEW) return
         val uri = intent.data ?: return
         Timber.d("Handle Intent Uri: $uri")
-        // The grant that comes with ACTION_VIEW is usually temporary, but the module ends up in
-        // the persisted queue. Persist the grant when the sender allows it so restoring the
-        // queue after a restart doesn't hit a SecurityException.
-        if (intent.flags and Intent.FLAG_GRANT_PERSISTABLE_URI_PERMISSION != 0) {
-            try {
-                takeReadPermission(uri)
-            } catch (e: SecurityException) {
-                Timber.w(e, "Could not persist grant for $uri")
+        val persistable = intent.flags and Intent.FLAG_GRANT_PERSISTABLE_URI_PERMISSION != 0
+        lifecycleScope.launch(Dispatchers.IO) {
+            // The module ends up in the persisted queue; keep the grant so a restart can reload it.
+            if (persistable) {
+                try {
+                    saf.persistFileGrant(uri)
+                } catch (e: SecurityException) {
+                    Timber.w(e, "Could not persist grant for $uri")
+                }
             }
+            val module = runCatching { uri.toModuleEntity(applicationContext) }
+                .onFailure { Timber.w(it, "Could not resolve $uri") }
+                .getOrNull() ?: return@launch
+            val info = ModInfo()
+            if (!Player.testFromFd(applicationContext, uri, info)) {
+                Timber.w("Not a playable module: $uri")
+                return@launch
+            }
+            pendingPlayerModule.value = module.copy(
+                isValidModule = true,
+                moduleName = info.name.trim(),
+                moduleType = info.type.trim(),
+            )
         }
-        val module = uri.toModuleEntity(this) ?: return
-        pendingPlayerModule.value = module
     }
 
     override fun onCreate(savedInstanceState: Bundle?) {
@@ -131,11 +151,10 @@ class MainActivity : ComponentActivity() {
             AppTheme {
                 val backStack = rememberNavBackStack(NavKeyRoot.Main)
 
-                val playerViewModel = koinViewModel<PlayerViewModel>(
-                    viewModelStoreOwner = LocalActivity.current as ComponentActivity
-                )
+                val playerViewModel = activityViewModel<PlayerViewModel>()
 
-                val needsBackendSetup by playerViewModel.needsBackendSetup.collectAsState()
+                val needsBackendSetup by playerViewModel.needsBackendSetup
+                    .collectAsStateWithLifecycle()
                 if (needsBackendSetup) {
                     AlertDialog(
                         onDismissRequest = {},

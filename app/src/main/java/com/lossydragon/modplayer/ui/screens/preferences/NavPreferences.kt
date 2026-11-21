@@ -1,6 +1,5 @@
 package com.lossydragon.modplayer.ui.screens.preferences
 
-import androidx.activity.compose.BackHandler
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.*
@@ -35,10 +34,6 @@ fun NavPreferences(
     onBack: () -> Unit
 ) {
     val backStack = rememberNavBackStack(NavKeyPreferences.Preferences)
-
-    BackHandler(enabled = backStack.size > 1) {
-        backStack.removeLastOrNull()
-    }
 
     NavDisplay(
         backStack = backStack,
@@ -75,7 +70,6 @@ fun NavPreferences(
                 }
                 PreferencesFormats(
                     modifier = modifier,
-                    snackbarHostState = snackbarHostState,
                     onBack = backStack::removeLastOrNull,
                     formatList = formats.toPersistentList(),
                     onClick = context::shareLink

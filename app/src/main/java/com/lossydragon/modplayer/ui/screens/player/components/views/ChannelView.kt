@@ -14,20 +14,21 @@ import androidx.compose.ui.graphics.drawscope.*
 import androidx.compose.ui.input.pointer.*
 import androidx.compose.ui.input.pointer.util.*
 import androidx.compose.ui.platform.*
+import androidx.compose.ui.semantics.*
 import androidx.compose.ui.text.*
 import androidx.compose.ui.text.font.*
 import androidx.compose.ui.tooling.preview.*
 import androidx.compose.ui.tooling.preview.datasource.*
 import androidx.compose.ui.unit.*
+import com.lossydragon.modplayer.R
 import com.lossydragon.modplayer.ui.theme.AppTheme
 import com.lossydragon.native.Player
 import com.lossydragon.native.model.ChannelInfo
-import com.materialkolor.ktx.darken
-import com.materialkolor.ktx.lighten
 import kotlin.time.Duration.Companion.milliseconds
 import kotlinx.collections.immutable.ImmutableList
 import kotlinx.collections.immutable.toPersistentList
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.Job
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.isActive
 import kotlinx.coroutines.launch
@@ -50,6 +51,7 @@ data class ChannelViewColors(
     val waveformBaseline: Color,
     val waveformLine: Color,
     val instrumentText: Color,
+    val mutedText: Color,
     val volumeBarTrack: Color,
     val volumeBar: Color,
     val finalVolumeBar: Color,
@@ -62,21 +64,26 @@ fun rememberDefaultChannelViewColors(): ChannelViewColors {
     val scheme = MaterialTheme.colorScheme
     return remember(scheme) {
         ChannelViewColors(
-            background = Color.Black.lighten(1.0f),
-            channelNumber = Color.White,
-            rowSeparator = Color(0xFF1A2030),
-            waveformBackground = Color(0xFF0C1018),
-            waveformBorder = Color(0xFF303848),
-            waveformBaseline = Color(0xFF1E2830),
-            waveformLine = Color(0xFF40C878),
-            instrumentText = Color(0xFF60D0A0),
-            volumeBarTrack = Color.DarkGray.darken(1.5f),
-            volumeBar = Color.Blue.lighten(1.1f),
-            finalVolumeBar = Color.Gray,
-            panRail = Color(0xFF2E3848),
-            panCursor = Color(0xFF8898AA),
+            background = scheme.surface,
+            channelNumber = scheme.onSurface,
+            rowSeparator = scheme.outlineVariant,
+            waveformBackground = scheme.surfaceContainerLow,
+            waveformBorder = scheme.outline,
+            waveformBaseline = scheme.outlineVariant,
+            waveformLine = scheme.primary,
+            instrumentText = scheme.secondary,
+            mutedText = scheme.error,
+            volumeBarTrack = scheme.surfaceContainerHighest,
+            volumeBar = scheme.primary,
+            finalVolumeBar = scheme.onSurfaceVariant,
+            panRail = scheme.outline,
+            panCursor = scheme.tertiary,
         )
     }
+}
+
+private class FlingJob {
+    var job: Job? = null
 }
 
 @Composable
@@ -88,6 +95,7 @@ fun ChannelView(
     colors: ChannelViewColors = rememberDefaultChannelViewColors()
 ) {
     val view = LocalView.current
+    val resources = LocalResources.current
 
     val ci = remember(numChannels) { ChannelInfo() }
     val drawCi = remember(numChannels) { ChannelInfo() }
@@ -105,14 +113,38 @@ fun ChannelView(
 
     val isPlayingState = rememberUpdatedState(isPlaying)
     var zoom by remember { mutableFloatStateOf(1f) }
-    val scrollYAnim = remember { Animatable(0f) }
-    val scrollY = scrollYAnim.value
+    // Drag writes this directly; only a fling runs a coroutine. Read in the draw pass only.
+    val scrollY = remember { mutableFloatStateOf(0f) }
+    val fling = remember { FlingJob() }
     val decay = remember { exponentialDecay<Float>() }
     val coroutineScope = rememberCoroutineScope()
 
+    fun toggleMute(ch: Int) {
+        muteArr[ch] = if (muteArr[ch] == 0) 1 else 0
+        Player.mute(ch, muteArr[ch])
+        muteVersion++
+    }
+
+    fun toggleSolo(ch: Int) {
+        if (soloChannel < 0) {
+            for (i in 0 until numChannels) {
+                muteArr[i] = if (i != ch) 1 else 0
+                Player.mute(i, muteArr[i])
+            }
+            soloChannel = ch
+        } else {
+            for (i in 0 until numChannels) {
+                muteArr[i] = 0
+                Player.mute(i, 0)
+            }
+            soloChannel = -1
+        }
+        muteVersion++
+    }
+
     LaunchedEffect(numChannels) {
         zoom = 1f
-        scrollYAnim.snapTo(0f)
+        scrollY.floatValue = 0f
         soloChannel = -1
 
         if (numChannels == 0) return@LaunchedEffect
@@ -180,18 +212,42 @@ fun ChannelView(
     }
     val fontSizeBits = remember(fontSize) { fontSize.value.toBits() }
 
-    val contentHeightRef = remember { mutableFloatStateOf(0f) }
-    val scrollYRef = remember { mutableFloatStateOf(0f) }
-    val chNumWidthRef = remember { mutableFloatStateOf(0f) }
-    val waveWidthRef = remember { mutableFloatStateOf(0f) }
-    val rowHeightRef = remember { mutableFloatStateOf(0f) }
-    scrollYRef.floatValue = scrollY
-
     val rowHeight = baseRowHeight * zoom
-    contentHeightRef.floatValue = rowHeight * numChannels
-    chNumWidthRef.floatValue = baseChNumWidth * zoom
-    waveWidthRef.floatValue = baseWaveWidth * zoom
-    rowHeightRef.floatValue = rowHeight
+    val accessibilityActions = remember(numChannels, muteVersion, soloChannel) {
+        buildList {
+            for (ch in 0 until numChannels) {
+                val label = if (muteArr[ch] == 1) {
+                    resources.getString(R.string.desc_unmute_channel, ch + 1)
+                } else {
+                    resources.getString(R.string.desc_mute_channel, ch + 1)
+                }
+                add(
+                    CustomAccessibilityAction(label) {
+                        toggleMute(ch)
+                        true
+                    }
+                )
+            }
+            if (soloChannel >= 0) {
+                add(
+                    CustomAccessibilityAction(resources.getString(R.string.desc_unsolo)) {
+                        toggleSolo(soloChannel)
+                        true
+                    }
+                )
+            } else {
+                for (ch in 0 until numChannels) {
+                    val label = resources.getString(R.string.desc_solo_channel, ch + 1)
+                    add(
+                        CustomAccessibilityAction(label) {
+                            toggleSolo(ch)
+                            true
+                        }
+                    )
+                }
+            }
+        }
+    }
 
     val waveformPath = remember { Path() }
 
@@ -199,11 +255,14 @@ fun ChannelView(
         modifier = modifier
             .fillMaxSize()
             .clipToBounds()
+            .semantics { customActions = accessibilityActions }
             .pointerInput(numChannels) {
+                val rowH = 52.dp.toPx()
+                fun maxScroll() = (rowH * zoom * numChannels - size.height).coerceAtLeast(0f)
                 val vt = VelocityTracker()
                 awaitEachGesture {
                     awaitFirstDown(requireUnconsumed = false)
-                    coroutineScope.launch { scrollYAnim.stop() }
+                    fling.job?.cancel()
                     vt.resetTracking()
                     var singleFinger = false
                     while (true) {
@@ -211,13 +270,17 @@ fun ChannelView(
                         val active = event.changes.filter { it.pressed }
                         if (active.isEmpty()) {
                             if (singleFinger) {
-                                val vel = vt.calculateVelocity()
-                                coroutineScope.launch {
-                                    val max = (contentHeightRef.floatValue - size.height)
-                                        .coerceAtLeast(0f)
-                                    scrollYAnim.updateBounds(0f, max)
-                                    scrollYAnim.animateDecay(-vel.y, decay)
-                                    scrollYAnim.updateBounds(null, null)
+                                val velocity = -vt.calculateVelocity().y
+                                fling.job = coroutineScope.launch {
+                                    val max = maxScroll()
+                                    AnimationState(
+                                        initialValue = scrollY.floatValue,
+                                        initialVelocity = velocity,
+                                    ).animateDecay(decay) {
+                                        val clamped = value.coerceIn(0f, max)
+                                        scrollY.floatValue = clamped
+                                        if (clamped != value) cancelAnimation()
+                                    }
                                 }
                             }
                             break
@@ -227,22 +290,16 @@ fun ChannelView(
                             vt.addPointerInputChange(change)
                             val dy = change.position.y - change.previousPosition.y
                             if (dy != 0f) {
-                                coroutineScope.launch {
-                                    val max = (contentHeightRef.floatValue - size.height)
-                                        .coerceAtLeast(0f)
-                                    scrollYAnim.snapTo((scrollYAnim.value - dy).coerceIn(0f, max))
-                                }
+                                scrollY.floatValue =
+                                    (scrollY.floatValue - dy).coerceIn(0f, maxScroll())
                                 change.consume()
                             }
                             singleFinger = true
                         } else {
                             zoom = (zoom * event.calculateZoom()).coerceIn(0.5f, 3f)
                             val pan = event.calculatePan()
-                            coroutineScope.launch {
-                                val max = (contentHeightRef.floatValue - size.height)
-                                    .coerceAtLeast(0f)
-                                scrollYAnim.snapTo((scrollYAnim.value - pan.y).coerceIn(0f, max))
-                            }
+                            scrollY.floatValue =
+                                (scrollY.floatValue - pan.y).coerceIn(0f, maxScroll())
                             event.changes.forEach { it.consume() }
                             singleFinger = false
                             vt.resetTracking()
@@ -251,43 +308,26 @@ fun ChannelView(
                 }
             }
             .pointerInput(numChannels) {
+                val rowH = 52.dp.toPx()
+                val chNumW = 26.dp.toPx()
+                val waveW = 96.dp.toPx()
+                fun channelAt(offset: Offset): Int {
+                    val ch = ((offset.y + scrollY.floatValue) / (rowH * zoom)).toInt()
+                    val waveRange = (chNumW * zoom)..((chNumW + waveW) * zoom)
+                    return if (ch in 0 until numChannels && offset.x in waveRange) ch else -1
+                }
                 detectTapGestures(
                     onTap = { offset ->
-                        // Good formatting
-                        val ch = ((offset.y + scrollYRef.floatValue) / rowHeightRef.floatValue)
-                            .toInt()
-                        val chnNumRef = chNumWidthRef.floatValue
-                        val values = chnNumRef..(chnNumRef + waveWidthRef.floatValue)
-                        if (ch in 0 until numChannels && offset.x in values) {
-                            muteArr[ch] = if (muteArr[ch] == 0) 1 else 0
-                            Player.mute(ch, muteArr[ch])
-                            muteVersion++
-                        }
+                        val ch = channelAt(offset)
+                        if (ch >= 0) toggleMute(ch)
                     },
                     onLongPress = { offset ->
-                        // Good formatting
-                        val ch = ((offset.y + scrollYRef.floatValue) / rowHeightRef.floatValue)
-                            .toInt()
-                        val chnNumRef = chNumWidthRef.floatValue
-                        val values = chnNumRef..(chnNumRef + waveWidthRef.floatValue)
-                        if (ch in 0 until numChannels && offset.x in values) {
-                            if (soloChannel < 0) {
-                                for (i in 0 until numChannels) {
-                                    muteArr[i] = if (i != ch) 1 else 0
-                                    Player.mute(i, muteArr[i])
-                                }
-                                soloChannel = ch
-                            } else {
-                                for (i in 0 until numChannels) {
-                                    muteArr[i] = 0
-                                    Player.mute(i, 0)
-                                }
-                                soloChannel = -1
-                            }
-                            muteVersion++
+                        val ch = channelAt(offset)
+                        if (ch >= 0) {
+                            toggleSolo(ch)
                         } else {
                             zoom = 1f
-                            coroutineScope.launch { scrollYAnim.snapTo(0f) }
+                            scrollY.floatValue = 0f
                         }
                     },
                 )
@@ -295,6 +335,7 @@ fun ChannelView(
     ) {
         if ((drawTick == 0 && !view.isInEditMode) || numChannels == 0) return@Canvas
 
+        val scroll = scrollY.floatValue
         val pad = basePad * zoom
         val chNumWidth = baseChNumWidth * zoom
         val waveWidth = baseWaveWidth * zoom
@@ -304,7 +345,7 @@ fun ChannelView(
 
         clipRect(left = 0f, top = 0f, right = size.width, bottom = size.height) {
             for (ch in 0 until numChannels) {
-                val rowTop = ch * rowHeight - scrollY
+                val rowTop = ch * rowHeight - scroll
                 if (rowTop + rowHeight < 0f || rowTop > size.height) continue
 
                 val muted = muteArr[ch] == 1
@@ -391,7 +432,7 @@ fun ChannelView(
                 }
                 drawText(
                     textLayoutResult = insLayout,
-                    color = if (muted) Color.Red else colors.instrumentText,
+                    color = if (muted) colors.mutedText else colors.instrumentText,
                     topLeft = Offset(infoX, rowTop + (lineH - insLayout.size.height) / 2f)
                 )
 

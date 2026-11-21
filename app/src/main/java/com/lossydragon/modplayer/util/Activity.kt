@@ -16,8 +16,14 @@ import androidx.activity.enableEdgeToEdge
  */
 fun ComponentActivity.setEdgeToEdgeConfig() {
     enableEdgeToEdge(
-        statusBarStyle = SystemBarStyle.dark(android.graphics.Color.TRANSPARENT),
-        navigationBarStyle = SystemBarStyle.dark(android.graphics.Color.TRANSPARENT)
+        statusBarStyle = SystemBarStyle.auto(
+            android.graphics.Color.TRANSPARENT,
+            android.graphics.Color.TRANSPARENT,
+        ),
+        navigationBarStyle = SystemBarStyle.auto(
+            android.graphics.Color.TRANSPARENT,
+            android.graphics.Color.TRANSPARENT,
+        )
     )
     if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
         // Force the 3-button navigation bar to be transparent

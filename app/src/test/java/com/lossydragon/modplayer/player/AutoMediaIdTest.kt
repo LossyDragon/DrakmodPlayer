@@ -1,10 +1,10 @@
 package com.lossydragon.modplayer.player
 
-import org.junit.Assert.assertEquals
-import org.junit.Assert.assertFalse
-import org.junit.Assert.assertNull
-import org.junit.Assert.assertTrue
-import org.junit.Test
+import org.junit.jupiter.api.Assertions.assertEquals
+import org.junit.jupiter.api.Assertions.assertFalse
+import org.junit.jupiter.api.Assertions.assertNull
+import org.junit.jupiter.api.Assertions.assertTrue
+import org.junit.jupiter.api.Test
 
 class AutoMediaIdTest {
 
@@ -61,10 +61,10 @@ class AutoMediaIdTest {
             AutoMediaId.PLAYLISTS_EMPTY,
         )
         static.forEach { id ->
-            assertFalse(id, AutoMediaId.isFile(id))
-            assertFalse(id, AutoMediaId.isDir(id))
-            assertFalse(id, AutoMediaId.isPlaylist(id))
-            assertFalse(id, AutoMediaId.isPlaylistEntry(id))
+            assertFalse(AutoMediaId.isFile(id), id)
+            assertFalse(AutoMediaId.isDir(id), id)
+            assertFalse(AutoMediaId.isPlaylist(id), id)
+            assertFalse(AutoMediaId.isPlaylistEntry(id), id)
         }
         assertEquals(static.size, static.toSet().size)
     }

@@ -15,12 +15,14 @@ import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.hapticfeedback.*
 import androidx.compose.ui.layout.*
 import androidx.compose.ui.platform.*
+import androidx.compose.ui.res.stringResource
+import androidx.compose.ui.semantics.*
 import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.*
+import com.lossydragon.modplayer.R
 import com.lossydragon.modplayer.db.entity.ModuleEntity
 import com.lossydragon.modplayer.ui.theme.AppTheme
 import kotlin.math.abs
-import kotlinx.coroutines.launch
 import sh.calvin.reorderable.DragGestureDetector
 import sh.calvin.reorderable.ReorderableCollectionItemScope
 
@@ -33,7 +35,7 @@ internal fun ReorderableCollectionItemScope.PlaylistEntryItem(
     onRemove: () -> Unit
 ) {
     val hapticFeedback = LocalHapticFeedback.current
-    val scope = rememberCoroutineScope()
+    val removeLabel = stringResource(R.string.desc_remove_from_playlist)
     var componentWidth by remember { mutableFloatStateOf(0f) }
     var swipeOffset by remember { mutableFloatStateOf(0f) }
 
@@ -52,21 +54,19 @@ internal fun ReorderableCollectionItemScope.PlaylistEntryItem(
                     swipeOffset = (swipeOffset + delta).coerceIn(-componentWidth, 0f)
                 },
                 onDragStopped = {
-                    scope.launch {
-                        if (componentWidth > 0f && abs(swipeOffset) / componentWidth >= 0.4f) {
-                            animate(
-                                initialValue = swipeOffset,
-                                targetValue = -componentWidth,
-                            ) { v, _ -> swipeOffset = v }
-                            hapticFeedback.performHapticFeedback(HapticFeedbackType.Confirm)
-                            onRemove()
-                        } else {
-                            animate(
-                                initialValue = swipeOffset,
-                                targetValue = 0f,
-                                animationSpec = spring(),
-                            ) { v, _ -> swipeOffset = v }
-                        }
+                    if (componentWidth > 0f && abs(swipeOffset) / componentWidth >= 0.4f) {
+                        animate(
+                            initialValue = swipeOffset,
+                            targetValue = -componentWidth,
+                        ) { v, _ -> swipeOffset = v }
+                        hapticFeedback.performHapticFeedback(HapticFeedbackType.Confirm)
+                        onRemove()
+                    } else {
+                        animate(
+                            initialValue = swipeOffset,
+                            targetValue = 0f,
+                            animationSpec = spring(),
+                        ) { v, _ -> swipeOffset = v }
                     }
                 }
             )
@@ -89,6 +89,14 @@ internal fun ReorderableCollectionItemScope.PlaylistEntryItem(
         }
         Box(modifier = Modifier.offset { IntOffset(swipeOffset.toInt(), 0) }) {
             ListItem(
+                modifier = Modifier.semantics {
+                    customActions = listOf(
+                        CustomAccessibilityAction(removeLabel) {
+                            onRemove()
+                            true
+                        }
+                    )
+                },
                 onClick = onPlay,
                 shapes = ListItemDefaults.shapes(
                     shape = MaterialTheme.shapes.small,
@@ -126,7 +134,7 @@ internal fun ReorderableCollectionItemScope.PlaylistEntryItem(
                         content = {
                             Icon(
                                 imageVector = Icons.Rounded.DragHandle,
-                                contentDescription = null,
+                                contentDescription = stringResource(R.string.desc_drag_handle),
                             )
                         }
                     )

@@ -1,7 +1,5 @@
 package com.lossydragon.modplayer.player
 
-import android.content.Context
-import android.content.Intent
 import androidx.annotation.OptIn
 import androidx.compose.runtime.*
 import androidx.lifecycle.ViewModel
@@ -10,49 +8,55 @@ import androidx.media3.common.Player
 import androidx.media3.common.util.UnstableApi
 import com.lossydragon.modplayer.db.AppPreferences
 import com.lossydragon.modplayer.db.entity.ModuleEntity
-import com.lossydragon.native.Player as NativePlayer
 import com.lossydragon.native.RenderingBackend
 import com.lossydragon.native.model.AudioStats
 import com.lossydragon.native.model.FrameInfo
 import com.lossydragon.native.model.ModVars
+import com.lossydragon.native.model.Sequence
 import kotlinx.collections.immutable.ImmutableList
 import kotlinx.collections.immutable.persistentListOf
 import kotlinx.collections.immutable.toImmutableList
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
-import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.launchIn
 import kotlinx.coroutines.flow.onEach
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
 
-/** UI state and domain models for the module player. */
-
 enum class PlaybackStatus { IDLE, LOADING, PLAYING, PAUSED }
 
-private const val SCREEN_COUNT = 3
+/** The three player visualisations; persisted by ordinal. */
+enum class PlayerView { PATTERN, CHANNELS, DEBUG }
 
 @Immutable
 data class PlayerUiState(
     val currentModule: ModuleEntity? = null,
-    val errorMessage: String? = null,
     val playAllSequences: Boolean = false,
     val queue: ImmutableList<ModuleEntity> = persistentListOf(),
     val showRowNumbers: Boolean = false,
     val status: PlaybackStatus = PlaybackStatus.IDLE,
-    val playerView: Int = 0,
+    val playerView: PlayerView = PlayerView.PATTERN,
     val modVars: ModVars = ModVars(),
+    val instruments: ImmutableList<String> = persistentListOf(),
+    val sequences: ImmutableList<Sequence> = persistentListOf(),
     val currentSequence: Int = 0,
     val repeatMode: Int = Player.REPEAT_MODE_OFF,
     val currentQueueIndex: Int = 0,
-    val isShuffle: Boolean = false
+    val isShuffle: Boolean = false,
+    val hasNext: Boolean = false,
+    val hasPrevious: Boolean = false,
+    val errorMessage: String? = null
 )
 
-/** Bridges [Player] state to the UI via [PlayerUiState]. */
+/**
+ * Bridges [ModPlayer] to the UI. Playback/queue state comes from the Media3 [Player]
+ * surface via a listener; visualisation data (frame info, patterns, stats) straight from
+ * the [Engine].
+ */
 @OptIn(UnstableApi::class)
 class PlayerViewModel(
-    private val appContext: Context,
     private val player: ModPlayer,
+    private val engine: Engine,
     private val prefs: AppPreferences
 ) : ViewModel() {
 
@@ -60,34 +64,21 @@ class PlayerViewModel(
         field = MutableStateFlow(PlayerUiState())
 
     /**
-     * Per-render-frame snapshot (~50 Hz). Kept out of [state] on purpose so that only the
-     * progress / pattern / channel composables recompose at that rate, not the whole screen.
+     * Per-render-frame snapshot (~50 Hz). Kept out of [state] so only the progress /
+     * pattern / channel composables recompose at that rate.
      */
-    val frameInfo: StateFlow<FrameInfo> by player::frameInfoFlow
+    val frameInfo: StateFlow<FrameInfo> by engine::frameInfoFlow
 
     val needsBackendSetup: StateFlow<Boolean>
         field = MutableStateFlow(false)
 
-    /**
-     * Mirrors shuffle / repeat from the player. These can change without the UI asking
-     * (queue restore on service start, notification or Android Auto toggles), so the
-     * local copies in [state] must follow the player rather than the other way round.
-     */
     private val playerListener = object : Player.Listener {
-        override fun onShuffleModeEnabledChanged(shuffleModeEnabled: Boolean) {
-            state.update { it.copy(isShuffle = shuffleModeEnabled) }
-        }
-
-        override fun onRepeatModeChanged(repeatMode: Int) {
-            state.update { it.copy(repeatMode = repeatMode) }
-        }
+        override fun onEvents(player: Player, events: Player.Events) = syncFromPlayer()
     }
 
     init {
         player.addListener(playerListener)
-        state.update {
-            it.copy(isShuffle = player.shuffleModeEnabled, repeatMode = player.repeatMode)
-        }
+        syncFromPlayer()
 
         prefs.getRenderingBackendFlow().onEach { backend ->
             needsBackendSetup.value = backend == RenderingBackend.INVALID
@@ -98,88 +89,64 @@ class PlayerViewModel(
         }.launchIn(viewModelScope)
 
         prefs.getPlayerViewFlow().onEach { view ->
-            state.update { it.copy(playerView = view) }
-        }.launchIn(viewModelScope)
-
-        player.modVarsFlow.onEach { mv ->
-            state.update { it.copy(modVars = mv) }
-        }.launchIn(viewModelScope)
-
-        player.currentSequenceFlow.onEach { seq ->
-            state.update { it.copy(currentSequence = seq) }
-        }.launchIn(viewModelScope)
-
-        player.isPlaying.onEach { playing ->
-            state.update {
-                it.copy(
-                    status = when {
-                        playing -> PlaybackStatus.PLAYING
-                        it.currentModule != null -> PlaybackStatus.PAUSED
-                        else -> PlaybackStatus.IDLE
-                    }
-                )
-            }
-        }.launchIn(viewModelScope)
-
-        player.queueFlow.onEach { queue ->
-            val empty = queue.isEmpty()
-            state.update {
-                it.copy(
-                    queue = queue.toImmutableList(),
-                    currentModule = if (empty) null else it.currentModule,
-                    status = if (empty) PlaybackStatus.IDLE else it.status,
-                )
-            }
-        }.launchIn(viewModelScope)
-
-        player.currentIndexFlow.onEach { index ->
-            val file = player.queueFlow.value.getOrNull(index) ?: return@onEach
-            state.update {
-                it.copy(
-                    currentModule = file,
-                    currentQueueIndex = index,
-                    currentSequence = if (player.isReordering) it.currentSequence else 0,
-                )
-            }
-        }.launchIn(viewModelScope)
-
-        player.moduleLoadedFlow.onEach {
-            state.update { it.copy(currentSequence = 0) }
+            val playerView = PlayerView.entries.getOrElse(view) { PlayerView.PATTERN }
+            state.update { it.copy(playerView = playerView) }
         }.launchIn(viewModelScope)
 
         prefs.getGlobalSubSongsFlow().onEach { subsongs ->
             state.update { it.copy(playAllSequences = subsongs) }
         }.launchIn(viewModelScope)
 
-        viewModelScope.launch {
-            state.update { it.copy(playerView = prefs.getPlayerViewFlow().first()) }
+        player.modVarsFlow.onEach { mv ->
+            state.update {
+                it.copy(
+                    modVars = mv,
+                    instruments = mv.instruments.toImmutableList(),
+                    sequences = mv.seqData.toImmutableList(),
+                )
+            }
+        }.launchIn(viewModelScope)
+
+        player.currentSequenceFlow.onEach { seq ->
+            state.update { it.copy(currentSequence = seq) }
+        }.launchIn(viewModelScope)
+
+        player.queueFlow.onEach { syncFromPlayer() }.launchIn(viewModelScope)
+    }
+
+    /** Recomputes everything the Media3 surface knows about; cheap and idempotent. */
+    private fun syncFromPlayer() {
+        val queue = player.queueFlow.value
+        val index = player.currentMediaItemIndex
+        val status = when {
+            queue.isEmpty() -> PlaybackStatus.IDLE
+            player.isPlaying -> PlaybackStatus.PLAYING
+            player.playbackState == Player.STATE_BUFFERING -> PlaybackStatus.LOADING
+            else -> PlaybackStatus.PAUSED
+        }
+        val repeat = player.repeatMode
+        state.update {
+            it.copy(
+                queue = queue.toImmutableList(),
+                currentModule = queue.getOrNull(index),
+                currentQueueIndex = index.coerceAtLeast(0),
+                status = status,
+                isShuffle = player.shuffleModeEnabled,
+                repeatMode = repeat,
+                hasNext =
+                    queue.isNotEmpty() &&
+                        (repeat != Player.REPEAT_MODE_OFF || index < queue.lastIndex),
+                hasPrevious = queue.isNotEmpty() && (repeat != Player.REPEAT_MODE_OFF || index > 0),
+                errorMessage = player.playerError?.message,
+            )
         }
     }
 
-    /** Returns a formatted string of current Oboe audio stream statistics. */
-    fun getAudioStats(): String {
-        val stats = AudioStats()
-        player.getAudioStats(stats)
-        return """
-            Audio API: ${stats.audioApi}
-            Audio Format: ${stats.audioFormat}
-            Audio Glitches: ${stats.xrunCount} (system), ${stats.underrunCount} (app)
-            Buffer: ${stats.bufferSize} / ${stats.bufferCapacity} frames
-            Frames Per Burst: ${stats.framesPerBurst}
-            Performance Mode: ${stats.perfMode}
-            Sample Rate: ${stats.sampleRate} Hz
-            Sharing Mode: ${stats.sharingMode}
-        """.trimIndent()
-    }
+    /** Current Oboe stream statistics; the UI formats them. */
+    fun getAudioStats(): AudioStats = AudioStats().also(engine::getAudioStats)
 
-    /** Loads [file] as a single-item queue and starts playback. */
-    fun play(file: ModuleEntity) {
-        state.update { it.copy(status = PlaybackStatus.LOADING, currentModule = file) }
-        ensureServiceRunning()
-        player.loadQueue(listOf(file), startAt = 0)
-    }
+    fun play(file: ModuleEntity) = player.loadQueue(listOf(file), startAt = 0)
 
-    /** Loads [files] as a queue, optionally shuffled, and starts playback at [startAt]. */
     fun playAll(
         files: ImmutableList<ModuleEntity>,
         startAt: Int,
@@ -187,18 +154,12 @@ class PlayerViewModel(
         repeatMode: Int = state.value.repeatMode
     ) {
         if (files.isEmpty()) return
-        val startIndex = startAt.coerceIn(0, files.lastIndex)
-
-        state.update {
-            it.copy(
-                status = PlaybackStatus.LOADING,
-                currentModule = files[startIndex],
-                isShuffle = isShuffle,
-                repeatMode = repeatMode,
-            )
-        }
-        ensureServiceRunning()
-        player.loadQueue(files.toList(), startIndex, isShuffle, repeatMode)
+        player.loadQueue(
+            files.toList(),
+            startAt.coerceIn(0, files.lastIndex),
+            isShuffle,
+            repeatMode
+        )
     }
 
     fun togglePlayPause() =
@@ -210,16 +171,18 @@ class PlayerViewModel(
 
     fun previous() = player.previous()
 
-    fun stop() = player.stop()
+    /** The UI's stop also drops the queue; a controller/notification stop keeps it. */
+    fun stop() {
+        player.stop()
+        player.clearMediaItems()
+    }
 
     fun playAtIndex(index: Int) = player.jumpToIndex(index)
 
-    /** [playerListener] updates [state] once the player has applied the change. */
     fun toggleShuffle() {
         player.shuffleModeEnabled = !state.value.isShuffle
     }
 
-    /** [playerListener] updates [state] once the player has applied the change. */
     fun toggleLoop() {
         player.repeatMode = when (state.value.repeatMode) {
             Player.REPEAT_MODE_OFF -> Player.REPEAT_MODE_ONE
@@ -230,31 +193,24 @@ class PlayerViewModel(
 
     fun setSequence(index: Int) = player.setSequence(index)
 
+    /** The pref flow feeds both the engine and [state]. */
     fun toggleAllSequences() {
-        val playAllSequences = !state.value.playAllSequences
-        player.setPlayAllSequences(playAllSequences)
-        viewModelScope.launch { prefs.setGlobalSubSongs(playAllSequences) }
-        state.update { it.copy(playAllSequences = playAllSequences) }
+        val value = !state.value.playAllSequences
+        viewModelScope.launch { prefs.setGlobalSubSongs(value) }
     }
 
     fun onPlayerView() {
-        val next = (state.value.playerView + 1) % SCREEN_COUNT
+        val next = (state.value.playerView.ordinal + 1) % PlayerView.entries.size
         viewModelScope.launch { prefs.setPlayerView(next) }
     }
 
-    fun getPatternData(patternIndex: Int) = player.getPatternData(patternIndex)
+    fun getPatternData(patternIndex: Int) = engine.getPatternData(patternIndex)
 
     suspend fun getLastDirectoryUri(): String? = prefs.getLastDirectoryUri()
 
+    /** Only the pref changes here; the engine switches backends before its next load. */
     fun selectBackend(backend: RenderingBackend) {
-        viewModelScope.launch {
-            prefs.setRenderingBackend(backend)
-            NativePlayer.switchBackend(backend)
-        }
-    }
-
-    private fun ensureServiceRunning() {
-        appContext.startService(Intent(appContext, PlayerService::class.java))
+        viewModelScope.launch { prefs.setRenderingBackend(backend) }
     }
 
     override fun onCleared() {

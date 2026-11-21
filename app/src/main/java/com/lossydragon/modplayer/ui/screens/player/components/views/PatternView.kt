@@ -20,12 +20,12 @@ import com.lossydragon.modplayer.db.entity.ModuleEntity
 import com.lossydragon.modplayer.player.model.NoteCell
 import com.lossydragon.modplayer.player.model.PatternData
 import com.lossydragon.modplayer.ui.theme.AppTheme
-import com.materialkolor.ktx.lighten
 import kotlinx.collections.immutable.toImmutableList
 
 data class PatternColors(
     val rowNumberBackground: Color,
     val rowNumber: Color,
+    val currentRowNumber: Color,
     val note: Color,
     val instrument: Color,
     val effectType: Color,
@@ -43,18 +43,19 @@ fun rememberDefaultPatternColors(): PatternColors {
     val scheme = MaterialTheme.colorScheme
     return remember(scheme) {
         PatternColors(
-            rowNumberBackground = Color(0xFF181C24),
-            rowNumber = Color(0xFF6080A0),
-            note = Color(0xFFE0E8F0),
-            instrument = Color(0xFF60D0A0),
-            effectType = Color(0xFFE08060),
-            effectParam = Color(0xFFC0A0E0),
-            empty = Color(0xFF303848),
-            beat = Color(0xFF1C2030).copy(alpha = 0.40f),
-            currentRow = Color(0xFF4060A0),
-            background = Color.Black.lighten(1.0f),
-            headerBackground = Color(0xFF20283A),
-            headerText = Color(0xFFA0C0E0),
+            rowNumberBackground = scheme.surfaceContainer,
+            rowNumber = scheme.onSurfaceVariant,
+            currentRowNumber = scheme.onPrimaryContainer,
+            note = scheme.onSurface,
+            instrument = scheme.primary,
+            effectType = scheme.tertiary,
+            effectParam = scheme.secondary,
+            empty = scheme.outlineVariant,
+            beat = scheme.onSurface.copy(alpha = 0.06f),
+            currentRow = scheme.primaryContainer,
+            background = scheme.surface,
+            headerBackground = scheme.surfaceContainerHigh,
+            headerText = scheme.onSurfaceVariant,
         )
     }
 }
@@ -73,14 +74,23 @@ private fun buildRenderState(pattern: PatternData) = PatternRenderState(
 
 private typealias TextCache = HashMap<String, TextLayoutResult>
 
+/** Lazily measured per index; recreated with the font size so no string keys are built per frame. */
+private class LayoutTable(size: Int) {
+    private val slots = arrayOfNulls<TextLayoutResult>(size)
+
+    fun get(index: Int, measure: () -> TextLayoutResult): TextLayoutResult =
+        slots[index] ?: measure().also { slots[index] = it }
+}
+
+/** [currentRow] is read inside the draw pass only, so a new row redraws without recomposing. */
 @Composable
 fun PatternView(
     module: ModuleEntity,
     pattern: PatternData,
-    currentRow: Int,
+    currentRow: () -> Int,
+    showRowNumbers: Boolean,
     modifier: Modifier = Modifier,
-    colors: PatternColors = rememberDefaultPatternColors(),
-    showRowNumbers: Boolean
+    colors: PatternColors = rememberDefaultPatternColors()
 ) {
     var zoom by remember { mutableFloatStateOf(1f) }
     var userOffset by remember { mutableStateOf(Offset.Zero) }
@@ -118,15 +128,17 @@ fun PatternView(
             fontWeight = FontWeight.Bold
         )
     }
+    val rowLayouts = remember(renderState, fontSize, showRowNumbers) {
+        LayoutTable(pattern.numRows)
+    }
+    val headerLayouts = remember(renderState, fontSize) { LayoutTable(pattern.numChannels) }
 
     val channelWidth = remember(fontSize, textMeasurer) {
         textMeasurer.measure("C-3 01 F00", baseStyle).size.width.toFloat() + columnGap
     }
 
-    val channelWidthRef = remember { mutableFloatStateOf(channelWidth) }
-    val rowNumWidthRef = remember { mutableFloatStateOf(scaledRowNumWidth) }
-    channelWidthRef.floatValue = channelWidth
-    rowNumWidthRef.floatValue = scaledRowNumWidth
+    val channelWidthState = rememberUpdatedState(channelWidth)
+    val rowNumWidthState = rememberUpdatedState(scaledRowNumWidth)
 
     Canvas(
         modifier = modifier
@@ -135,8 +147,8 @@ fun PatternView(
             .pointerInput(pattern.numChannels) {
                 detectTransformGestures { _, pan, gestureZoom, _ ->
                     zoom = (zoom * gestureZoom).coerceIn(0.5f, 3f)
-                    val cw = channelWidthRef.floatValue
-                    val rnw = rowNumWidthRef.floatValue
+                    val cw = channelWidthState.value
+                    val rnw = rowNumWidthState.value
                     val minX = ((size.width - rnw) - pattern.numChannels * cw)
                         .coerceAtMost(0f)
                     userOffset = Offset(
@@ -157,6 +169,8 @@ fun PatternView(
     ) {
         if (pattern.numRows == 0 || pattern.numChannels == 0) return@Canvas
 
+        val row = currentRow()
+
         drawRect(
             color = colors.background,
             size = size
@@ -172,7 +186,7 @@ fun PatternView(
             for (ch in 0 until pattern.numChannels) {
                 val cellX = scaledRowNumWidth + ch * channelWidth + userOffset.x
                 if (cellX + channelWidth < 0 || cellX > size.width) continue
-                val layout = textCache.getOrPut("hdr${renderState.headers[ch]}") {
+                val layout = headerLayouts.get(ch) {
                     textMeasurer.measure(renderState.headers[ch], headerStyle)
                 }
                 drawText(
@@ -187,7 +201,7 @@ fun PatternView(
         }
 
         val gridHeight = size.height - headerHeight
-        val scrollY = -(currentRow * rowHeight - gridHeight / 2f + rowHeight / 2f) +
+        val scrollY = -(row * rowHeight - gridHeight / 2f + rowHeight / 2f) +
             userOffset.y + headerHeight
 
         val firstRow = ((headerHeight - scrollY) / rowHeight).toInt()
@@ -204,11 +218,11 @@ fun PatternView(
 
         // Beat tints (every 4 rows)
         clipRect(scaledRowNumWidth, headerHeight, size.width, size.height) {
-            for (row in firstRow..lastRow) {
-                if (row % 4 == 0) {
+            for (r in firstRow..lastRow) {
+                if (r % 4 == 0) {
                     drawRect(
                         color = colors.beat,
-                        topLeft = Offset(scaledRowNumWidth, row * rowHeight + scrollY),
+                        topLeft = Offset(scaledRowNumWidth, r * rowHeight + scrollY),
                         size = Size(size.width - scaledRowNumWidth, rowHeight)
                     )
                 }
@@ -219,7 +233,7 @@ fun PatternView(
         clipRect(top = headerHeight) {
             drawRect(
                 color = colors.currentRow,
-                topLeft = Offset(0f, currentRow * rowHeight + scrollY),
+                topLeft = Offset(0f, row * rowHeight + scrollY),
                 size = Size(size.width, rowHeight)
             )
         }
@@ -227,14 +241,12 @@ fun PatternView(
         // Row numbers
         val rowTexts = if (showRowNumbers) renderState.rowTextsDec else renderState.rowTextsHex
         clipRect(0f, headerHeight, scaledRowNumWidth, size.height) {
-            for (row in firstRow..lastRow) {
-                val rowY = row * rowHeight + scrollY
-                val layout = textCache.getOrPut("rn${rowTexts[row]}") {
-                    textMeasurer.measure(rowTexts[row], baseStyle)
-                }
+            for (r in firstRow..lastRow) {
+                val rowY = r * rowHeight + scrollY
+                val layout = rowLayouts.get(r) { textMeasurer.measure(rowTexts[r], baseStyle) }
                 drawText(
                     textLayoutResult = layout,
-                    color = if (row == currentRow) Color.White else colors.rowNumber,
+                    color = if (r == row) colors.currentRowNumber else colors.rowNumber,
                     topLeft = Offset(
                         (scaledRowNumWidth - layout.size.width) / 2f,
                         rowY + (rowHeight - layout.size.height) / 2f
@@ -245,9 +257,9 @@ fun PatternView(
 
         // Cell data
         clipRect(scaledRowNumWidth, headerHeight, size.width, size.height) {
-            for (row in firstRow..lastRow) {
-                val rowY = row * rowHeight + scrollY
-                val rowCells = pattern.cells[row]
+            for (r in firstRow..lastRow) {
+                val rowY = r * rowHeight + scrollY
+                val rowCells = pattern.cells[r]
                 for (ch in 0 until pattern.numChannels) {
                     val cellX = scaledRowNumWidth + ch * channelWidth + userOffset.x
                     if (cellX + channelWidth < 0 || cellX > size.width) continue
@@ -321,6 +333,7 @@ private fun DrawScope.drawCell(
     }
 }
 
+/** Cell strings are precomputed on [NoteCell], so the key is the text itself. */
 private fun cached(
     measurer: TextMeasurer,
     cache: TextCache,
@@ -355,7 +368,7 @@ private fun PreviewPatternView() {
             PatternView(
                 module = ModuleEntity(),
                 pattern = sample,
-                currentRow = 12,
+                currentRow = { 12 },
                 showRowNumbers = true
             )
         }

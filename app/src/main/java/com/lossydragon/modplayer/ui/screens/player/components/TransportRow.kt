@@ -60,14 +60,17 @@ internal fun TransportRow(
         FloatingActionButton(
             onClick = onPlayPause,
             content = {
-                Icon(
-                    imageVector = if (status == PlaybackStatus.PLAYING) {
-                        Icons.Default.Pause
-                    } else {
-                        Icons.Default.PlayArrow
-                    },
-                    contentDescription = null,
-                )
+                if (status == PlaybackStatus.PLAYING) {
+                    Icon(
+                        imageVector = Icons.Default.Pause,
+                        contentDescription = stringResource(R.string.desc_pause),
+                    )
+                } else {
+                    Icon(
+                        imageVector = Icons.Default.PlayArrow,
+                        contentDescription = stringResource(R.string.play),
+                    )
+                }
             }
         )
 

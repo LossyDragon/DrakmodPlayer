@@ -1,11 +1,11 @@
 package com.lossydragon.modplayer.player
 
 import kotlin.random.Random
-import org.junit.Assert.assertEquals
-import org.junit.Assert.assertFalse
-import org.junit.Assert.assertNull
-import org.junit.Assert.assertTrue
-import org.junit.Test
+import org.junit.jupiter.api.Assertions.assertEquals
+import org.junit.jupiter.api.Assertions.assertFalse
+import org.junit.jupiter.api.Assertions.assertNull
+import org.junit.jupiter.api.Assertions.assertTrue
+import org.junit.jupiter.api.Test
 
 class QueueControllerTest {
 
@@ -100,6 +100,13 @@ class QueueControllerTest {
     }
 
     @Test
+    fun `duplicate items keep distinct original indices`() {
+        val q = loaded(listOf("x", "x", "y"), startAt = 1, shuffle = true)
+        assertEquals(1, q.currentOriginalIndex)
+        assertEquals(setOf(0, 1, 2), (0..2).map { q.originalIndexAt(it) }.toSet())
+    }
+
+    @Test
     fun `setShuffle on an empty queue is harmless`() {
         val q = QueueController<String>()
         q.setShuffle(true)
@@ -136,7 +143,8 @@ class QueueControllerTest {
     fun `previous walks back then restarts the first item`() {
         val q = loaded(startAt = 1)
         assertEquals(QueueStep.Play(0), q.previous())
-        assertEquals(QueueStep.Play(0), q.previous())
+        assertEquals(QueueStep.Restart, q.previous())
+        assertEquals(0, q.currentIndex)
     }
 
     @Test
@@ -181,11 +189,24 @@ class QueueControllerTest {
     }
 
     @Test
-    fun `a failed last item clears instead of parking`() {
+    fun `a failed first item while travelling backward skips forward instead`() {
+        val q = loaded(startAt = 1)
+        q.previous() // now at a
+        assertEquals(QueueStep.Play(1), q.onLoadFailed())
+    }
+
+    @Test
+    fun `a failed last item parks and keeps the queue`() {
         val q = loaded()
         q.jumpTo(2)
-        assertEquals(QueueStep.Clear, q.onLoadFailed())
-        assertTrue(q.isEmpty)
+        assertEquals(QueueStep.Park, q.onLoadFailed())
+        assertEquals(3, q.size)
+    }
+
+    @Test
+    fun `a failed item never replays itself under repeat one`() {
+        val q = loaded(startAt = 1, repeat = RepeatMode.ONE)
+        assertEquals(QueueStep.Play(2), q.onLoadFailed())
     }
 
     @Test
@@ -194,7 +215,6 @@ class QueueControllerTest {
         assertEquals(QueueStep.Play(1), q.onLoadFailed())
         assertEquals(QueueStep.Play(2), q.onLoadFailed())
         assertEquals(QueueStep.Clear, q.onLoadFailed())
-        assertTrue(q.isEmpty)
     }
 
     @Test
@@ -225,6 +245,78 @@ class QueueControllerTest {
     fun `a single unplayable item clears immediately`() {
         val q = loaded(listOf("only"))
         assertEquals(QueueStep.Clear, q.onLoadFailed())
+    }
+
+    // --- editing ------------------------------------------------------------------------
+
+    @Test
+    fun `add appends to the original order and inserts in playback order`() {
+        val q = loaded(startAt = 1)
+        q.add(0, listOf("x"))
+        assertEquals(listOf("x", "a", "b", "c"), q.items)
+        assertEquals(listOf("a", "b", "c", "x"), q.originalItems)
+        assertEquals("b", q.current)
+        assertEquals(2, q.currentIndex)
+    }
+
+    @Test
+    fun `add to an empty queue starts at the first item`() {
+        val q = QueueController<String>()
+        q.add(0, listOf("x", "y"))
+        assertEquals(0, q.currentIndex)
+        assertEquals("x", q.current)
+    }
+
+    @Test
+    fun `remove before the current item shifts the index`() {
+        val q = loaded(startAt = 2)
+        assertEquals(QueueStep.None, q.remove(0, 1))
+        assertEquals(listOf("b", "c"), q.items)
+        assertEquals(listOf("b", "c"), q.originalItems)
+        assertEquals(1, q.currentIndex)
+        assertEquals("c", q.current)
+    }
+
+    @Test
+    fun `remove of the current item plays what takes its place`() {
+        val q = loaded(startAt = 1)
+        assertEquals(QueueStep.Play(1), q.remove(1, 2))
+        assertEquals("c", q.current)
+    }
+
+    @Test
+    fun `remove of the current last item plays the new last item`() {
+        val q = loaded(startAt = 2)
+        assertEquals(QueueStep.Play(1), q.remove(2, 3))
+        assertEquals("b", q.current)
+    }
+
+    @Test
+    fun `remove of everything clears`() {
+        val q = loaded()
+        assertEquals(QueueStep.Clear, q.remove(0, 3))
+        assertTrue(q.isEmpty)
+    }
+
+    @Test
+    fun `remove under shuffle keeps original indices consistent`() {
+        val files = (1..8).map { "t$it" }
+        val q = loaded(files, startAt = 0, shuffle = true)
+        val current = q.current
+        q.remove(3, 5)
+        assertEquals(current, q.current)
+        assertEquals(q.items.toSet(), q.originalItems.toSet())
+        for (i in q.items.indices) assertEquals(q.items[i], q.originalItems[q.originalIndexAt(i)])
+    }
+
+    @Test
+    fun `move keeps the current item current`() {
+        val q = loaded(startAt = 0)
+        q.move(0, 1, 2)
+        assertEquals(listOf("b", "c", "a"), q.items)
+        assertEquals("a", q.current)
+        assertEquals(2, q.currentIndex)
+        assertEquals(abc, q.originalItems)
     }
 
     // --- clear --------------------------------------------------------------------------

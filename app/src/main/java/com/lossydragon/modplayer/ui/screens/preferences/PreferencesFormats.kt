@@ -19,7 +19,6 @@ import kotlinx.collections.immutable.toPersistentList
 @OptIn(ExperimentalMaterial3ExpressiveApi::class, ExperimentalMaterial3Api::class)
 @Composable
 internal fun PreferencesFormats(
-    snackbarHostState: SnackbarHostState,
     onBack: () -> Unit,
     formatList: ImmutableList<String>,
     modifier: Modifier = Modifier,
@@ -30,7 +29,6 @@ internal fun PreferencesFormats(
 
     Scaffold(
         modifier = modifier,
-        snackbarHost = { SnackbarHost(snackbarHostState) },
         topBar = {
             CenterAlignedTopAppBar(
                 title = {
@@ -75,7 +73,6 @@ internal fun PreferencesFormats(
 private fun Preview() {
     AppTheme {
         PreferencesFormats(
-            snackbarHostState = SnackbarHostState(),
             formatList = LoremIpsum(14).values.first().split(" ").toPersistentList(),
             onBack = {},
             onClick = {},

@@ -87,7 +87,6 @@ internal fun PreferencesScreen(
 
     Scaffold(
         modifier = modifier,
-        snackbarHost = { SnackbarHost(snackbarHostState) },
         topBar = {
             CenterAlignedTopAppBar(
                 title = { Text(text = stringResource(R.string.title_preferences)) },

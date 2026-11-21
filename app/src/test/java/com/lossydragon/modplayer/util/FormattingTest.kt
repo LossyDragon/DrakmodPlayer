@@ -1,13 +1,13 @@
 package com.lossydragon.modplayer.util
 
 import java.util.Locale
-import org.junit.Assert.assertEquals
-import org.junit.Before
-import org.junit.Test
+import org.junit.jupiter.api.Assertions.assertEquals
+import org.junit.jupiter.api.BeforeEach
+import org.junit.jupiter.api.Test
 
 class FormattingTest {
 
-    @Before
+    @BeforeEach
     fun pinLocale() {
         // formatSize uses the default locale's decimal separator on purpose (it's UI text).
         Locale.setDefault(Locale.US)

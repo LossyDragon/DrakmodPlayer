@@ -2,27 +2,28 @@
 java = "17"
 about-libs = "15.3.0" # https://mvnrepository.com/artifact/com.mikepenz.aboutlibraries.plugin.android/com.mikepenz.aboutlibraries.plugin.android.gradle.plugin
 activityCompose = "1.13.0" # https://mvnrepository.com/artifact/androidx.activity/activity-compose
-androidGradlePlugin = "9.4.1" # https://mvnrepository.com/artifact/com.android.application/com.android.application.gradle.plugin
+androidGradlePlugin = "9.5.2" # https://mvnrepository.com/artifact/com.android.application/com.android.application.gradle.plugin
 colorpickerCompose = "1.3.0" # https://mvnrepository.com/artifact/com.github.skydoves/colorpicker-compose
-composeBom = "2026.09.00" # https://mvnrepository.com/artifact/androidx.compose/compose-bom
-composeSettings = "3.3.0" # https://mvnrepository.com/artifact/com.github.alorma.compose-settings/ui-tiles-expressive/versions
+composeBom = "2026.11.01" # https://mvnrepository.com/artifact/androidx.compose/compose-bom
+composeSettings = "3.4.0" # https://mvnrepository.com/artifact/com.github.alorma.compose-settings/ui-tiles-expressive/versions
 dataStore = "1.3.0" # https://mvnrepository.com/artifact/androidx.datastore/datastore-preferences
-dep-analysis = "3.19.2" # https://mvnrepository.com/artifact/com.autonomousapps.dependency-analysis
-junit = "4.13.2" # https://mvnrepository.com/artifact/junit/junit
+dep-analysis = "3.20.4" # https://mvnrepository.com/artifact/com.autonomousapps.dependency-analysis
+junit = "6.1.3" # https://mvnrepository.com/artifact/org.junit.jupiter/junit-jupiter-api
+junit4 = "4.13.2" # https://mvnrepository.com/artifact/junit/junit (Robolectric tests only)
 koin-bom = "4.2.2" # https://mvnrepository.com/artifact/io.insert-koin/koin-core
 kotlin = "2.4.21" # https://mvnrepository.com/artifact/org.jetbrains.kotlin.android/org.jetbrains.kotlin.android.gradle.plugin
 kotlinXImmutable = "0.5.2" # https://mvnrepository.com/artifact/org.jetbrains.kotlinx/kotlinx-collections-immutable
 kotlinterGradle = "5.7.0" # // https://github.com/jeremymailen/kotlinter-gradle
-kotlinxSerialization = "1.12.0" # https://mvnrepository.com/artifact/org.jetbrains.kotlinx/kotlinx-serialization-json
-ksp = "2.3.12" # https://mvnrepository.com/artifact/com.google.devtools.ksp/symbol-processing-api
-ktor = "3.6.0" # https://mvnrepository.com/artifact/io.ktor/ktor-client-core
-lifecycleViewmodel = "2.11.0" # https://mvnrepository.com/artifact/androidx.lifecycle/lifecycle-viewmodel-navigation3
+kotlinxSerialization = "1.13.0" # https://mvnrepository.com/artifact/org.jetbrains.kotlinx/kotlinx-serialization-json
+ksp = "2.3.14" # https://mvnrepository.com/artifact/com.google.devtools.ksp/symbol-processing-api/versions?repo=central
+ktor = "3.6.1" # https://mvnrepository.com/artifact/io.ktor/ktor-client-core
+lifecycleViewmodel = "2.11.1" # https://mvnrepository.com/artifact/androidx.lifecycle/lifecycle-viewmodel-navigation3
 materialKolor = "5.0.1" # https://mvnrepository.com/artifact/com.materialkolor/material-kolor
 media3 = "1.11.1" # https://mvnrepository.com/artifact/androidx.media3/media3-common/
-navigation3 = "1.2.0" # https://mvnrepository.com/artifact/androidx.navigation3/navigation3-runtime
+navigation3 = "1.2.2" # https://mvnrepository.com/artifact/androidx.navigation3/navigation3-runtime
 oboe = "1.11.0" # https://mvnrepository.com/artifact/com.google.oboe/oboe
 paging = "3.5.3" # https://mvnrepository.com/artifact/androidx.paging/paging-compose
-robolectric = "4.17" # https://mvnrepository.com/artifact/org.robolectric/robolectric
+robolectric = "4.18.1" # https://mvnrepository.com/artifact/org.robolectric/robolectric
 reorderable = "3.1.0" # https://mvnrepository.com/artifact/sh.calvin.reorderable/reorderable
 room = "2.8.5" # https://mvnrepository.com/artifact/androidx.room/room-runtime
 sqlite = "2.7.1" # https://mvnrepository.com/artifact/androidx.sqlite/sqlite (keep in step with Room)
@@ -69,7 +70,11 @@ sqlite = { module = "androidx.sqlite:sqlite", version.ref = "sqlite" }
 timber = { module = "com.jakewharton.timber:timber", version.ref = "timber" }
 
 # Testing
-junit = { module = "junit:junit", version.ref = "junit" }
+junit-jupiter-api = { module = "org.junit.jupiter:junit-jupiter-api", version.ref = "junit" }
+junit-jupiter-engine = { module = "org.junit.jupiter:junit-jupiter-engine", version.ref = "junit" }
+junit-platform-launcher = { module = "org.junit.platform:junit-platform-launcher", version.ref = "junit" }
+junit-vintage-engine = { module = "org.junit.vintage:junit-vintage-engine", version.ref = "junit" }
+junit4 = { module = "junit:junit", version.ref = "junit4" }
 robolectric = { module = "org.robolectric:robolectric", version.ref = "robolectric" }
 
 [bundles]

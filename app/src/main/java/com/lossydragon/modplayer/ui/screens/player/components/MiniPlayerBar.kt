@@ -9,14 +9,15 @@ import androidx.compose.material.icons.filled.*
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.*
-import androidx.compose.ui.graphics.*
 import androidx.compose.ui.hapticfeedback.*
 import androidx.compose.ui.layout.*
 import androidx.compose.ui.platform.*
 import androidx.compose.ui.res.*
+import androidx.compose.ui.semantics.*
 import androidx.compose.ui.text.style.*
 import androidx.compose.ui.tooling.preview.*
 import androidx.compose.ui.unit.*
+import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.media3.common.Player
 import com.lossydragon.modplayer.R
 import com.lossydragon.modplayer.db.entity.ModuleEntity
@@ -27,13 +28,14 @@ import com.lossydragon.native.model.FrameInfo
 import com.lossydragon.native.model.ModVars
 import kotlin.math.abs
 import kotlinx.collections.immutable.persistentListOf
-import kotlinx.coroutines.launch
+import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.flow.StateFlow
 
 @OptIn(ExperimentalMaterial3ExpressiveApi::class)
 @Composable
 fun MiniPlayerBar(
     state: PlayerUiState,
-    frameInfo: FrameInfo,
+    frameInfo: StateFlow<FrameInfo>,
     onTap: () -> Unit,
     onPlayPause: () -> Unit,
     onNext: () -> Unit,
@@ -41,10 +43,10 @@ fun MiniPlayerBar(
     onDismiss: () -> Unit
 ) {
     val haptic = LocalHapticFeedback.current
-    val scope = rememberCoroutineScope()
-    val duration = frameInfo.totalTime.toFloat().coerceAtLeast(1f)
-    val progress = (frameInfo.time.toFloat() / duration).coerceIn(0f, 1f)
+    // Not delegated: only the progress lambda reads it, so the bar never recomposes per frame.
+    val frame = frameInfo.collectAsStateWithLifecycle()
     val isPlaying = state.status == PlaybackStatus.PLAYING
+    val stopLabel = stringResource(R.string.desc_stop_button)
 
     var componentWidth by remember { mutableFloatStateOf(0f) }
     var swipeOffset by remember { mutableFloatStateOf(0f) }
@@ -57,23 +59,6 @@ fun MiniPlayerBar(
                 else -> SwipeToDismissBoxValue.Settled
             }
         }
-    }
-
-    val hasNext = when {
-        state.queue.isEmpty() -> false
-
-        state.repeatMode == Player.REPEAT_MODE_ALL ||
-            state.repeatMode == Player.REPEAT_MODE_ONE -> true
-
-        else -> state.currentQueueIndex < state.queue.lastIndex
-    }
-    val hasPrev = when {
-        state.queue.isEmpty() -> false
-
-        state.repeatMode == Player.REPEAT_MODE_ALL ||
-            state.repeatMode == Player.REPEAT_MODE_ONE -> true
-
-        else -> state.currentQueueIndex > 0
     }
 
     LaunchedEffect(dismissDirection) {
@@ -97,21 +82,19 @@ fun MiniPlayerBar(
                     swipeOffset = (swipeOffset + delta).coerceIn(-componentWidth, componentWidth)
                 },
                 onDragStopped = {
-                    scope.launch {
-                        if (componentWidth > 0f && abs(swipeOffset) / componentWidth >= 0.75f) {
-                            val target = if (swipeOffset > 0f) componentWidth else -componentWidth
-                            animate(initialValue = swipeOffset, targetValue = target) { v, _ ->
-                                swipeOffset = v
-                            }
-                            haptic.performHapticFeedback(HapticFeedbackType.Confirm)
-                            onDismiss()
-                        } else {
-                            animate(
-                                initialValue = swipeOffset,
-                                targetValue = 0f,
-                                animationSpec = spring(),
-                            ) { v, _ -> swipeOffset = v }
+                    if (componentWidth > 0f && abs(swipeOffset) / componentWidth >= 0.75f) {
+                        val target = if (swipeOffset > 0f) componentWidth else -componentWidth
+                        animate(initialValue = swipeOffset, targetValue = target) { v, _ ->
+                            swipeOffset = v
                         }
+                        haptic.performHapticFeedback(HapticFeedbackType.Confirm)
+                        onDismiss()
+                    } else {
+                        animate(
+                            initialValue = swipeOffset,
+                            targetValue = 0f,
+                            animationSpec = spring(),
+                        ) { v, _ -> swipeOffset = v }
                     }
                 }
             )
@@ -135,7 +118,16 @@ fun MiniPlayerBar(
         }
         Box(modifier = Modifier.offset { IntOffset(swipeOffset.toInt(), 0) }) {
             ListItem(
-                modifier = Modifier.padding(6.dp),
+                modifier = Modifier
+                    .padding(6.dp)
+                    .semantics {
+                        customActions = listOf(
+                            CustomAccessibilityAction(stopLabel) {
+                                onDismiss()
+                                true
+                            }
+                        )
+                    },
                 shapes = ListItemDefaults.shapes(
                     shape = MaterialTheme.shapes.small,
                     focusedShape = MaterialTheme.shapes.small,
@@ -143,47 +135,50 @@ fun MiniPlayerBar(
                 ),
                 onClick = onTap,
                 colors = ListItemDefaults.colors(
-                    containerColor = MaterialTheme.colorScheme.onSecondary
+                    containerColor = MaterialTheme.colorScheme.surfaceContainerHigh
                 ),
                 leadingContent = {
                     Image(
                         painter = painterResource(R.drawable.ic_launcher_foreground),
                         contentDescription = null,
-                        modifier = Modifier
-                            .size(48.dp)
-                            .graphicsLayer { compositingStrategy = CompositingStrategy.Offscreen },
+                        modifier = Modifier.size(48.dp),
                     )
                 },
                 trailingContent = {
                     Row {
                         IconButton(
                             onClick = onPrevious,
-                            enabled = hasPrev,
+                            enabled = state.hasPrevious,
                             content = {
                                 Icon(
                                     imageVector = Icons.Default.SkipPrevious,
-                                    contentDescription = null
+                                    contentDescription = stringResource(R.string.desc_previous)
                                 )
                             }
                         )
                         IconButton(
                             onClick = onPlayPause,
                             content = {
-                                val icon = if (isPlaying) {
-                                    Icons.Default.Pause
+                                if (isPlaying) {
+                                    Icon(
+                                        imageVector = Icons.Default.Pause,
+                                        contentDescription = stringResource(R.string.desc_pause)
+                                    )
                                 } else {
-                                    Icons.Default.PlayArrow
+                                    Icon(
+                                        imageVector = Icons.Default.PlayArrow,
+                                        contentDescription = stringResource(R.string.play)
+                                    )
                                 }
-                                Icon(imageVector = icon, contentDescription = null)
                             }
                         )
                         IconButton(
                             onClick = onNext,
-                            enabled = hasNext,
+                            enabled = state.hasNext,
                             content = {
                                 Icon(
                                     imageVector = Icons.Default.SkipNext,
-                                    contentDescription = null
+                                    contentDescription = stringResource(R.string.desc_next)
                                 )
                             }
                         )
@@ -207,7 +202,11 @@ fun MiniPlayerBar(
                         )
                         Spacer(modifier = Modifier.height(2.dp))
                         LinearWavyProgressIndicator(
-                            progress = { progress },
+                            progress = {
+                                val fi = frame.value
+                                (fi.time.toFloat() / fi.totalTime.toFloat().coerceAtLeast(1f))
+                                    .coerceIn(0f, 1f)
+                            },
                             modifier = Modifier.fillMaxWidth(),
                             amplitude = if (isPlaying) {
                                 WavyProgressIndicatorDefaults.indicatorAmplitude
@@ -270,6 +269,8 @@ private class MiniPlayerPreviewParameter : PreviewParameterProvider<MiniPlayerPr
                 currentQueueIndex = 1,
                 queue = sampleFiles,
                 modVars = itModVars,
+                hasNext = true,
+                hasPrevious = true,
             ),
             frameInfo = baseFrameInfo,
         ),
@@ -281,6 +282,8 @@ private class MiniPlayerPreviewParameter : PreviewParameterProvider<MiniPlayerPr
                 currentQueueIndex = 1,
                 queue = sampleFiles,
                 modVars = itModVars,
+                hasNext = true,
+                hasPrevious = true,
             ),
             frameInfo = baseFrameInfo,
         ),
@@ -292,6 +295,7 @@ private class MiniPlayerPreviewParameter : PreviewParameterProvider<MiniPlayerPr
                 currentQueueIndex = 0,
                 queue = sampleFiles,
                 modVars = itModVars,
+                hasNext = true,
             ),
             frameInfo = baseFrameInfo.copy(time = 12_000),
         ),
@@ -303,6 +307,7 @@ private class MiniPlayerPreviewParameter : PreviewParameterProvider<MiniPlayerPr
                 currentQueueIndex = 3,
                 queue = sampleFiles,
                 modVars = itModVars,
+                hasPrevious = true,
             ),
             frameInfo = baseFrameInfo.copy(time = 190_000),
         ),
@@ -315,6 +320,8 @@ private class MiniPlayerPreviewParameter : PreviewParameterProvider<MiniPlayerPr
                 queue = sampleFiles,
                 repeatMode = Player.REPEAT_MODE_ALL,
                 modVars = itModVars,
+                hasNext = true,
+                hasPrevious = true,
             ),
             frameInfo = baseFrameInfo,
         ),
@@ -333,7 +340,7 @@ private fun Preview(
     AppTheme {
         MiniPlayerBar(
             state = params.state,
-            frameInfo = params.frameInfo,
+            frameInfo = MutableStateFlow(params.frameInfo),
             onTap = {},
             onPlayPause = {},
             onNext = {},

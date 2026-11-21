@@ -2,6 +2,7 @@ package com.lossydragon.modplayer.player
 
 import android.app.Application
 import android.os.Looper
+import androidx.media3.common.MediaItem
 import androidx.media3.common.Player
 import com.lossydragon.modplayer.db.entity.ModuleEntity
 import org.junit.After
@@ -21,7 +22,8 @@ import org.robolectric.annotation.Config
 /**
  * Drives [ModPlayer] through the Media3 [Player] API against a [FakeEngine], covering
  * the paths that produced real bugs: end-of-module advance, park/restart at the end,
- * seek routing, overlapping loads, unplayable files and audio-route loss.
+ * seek routing, overlapping loads, pause racing a load, unplayable files, stop vs clear,
+ * queue edits and audio-route loss.
  */
 @RunWith(RobolectricTestRunner::class)
 @Config(sdk = [34], application = Application::class)
@@ -69,18 +71,26 @@ class ModPlayerTest {
         fail("Timed out waiting for $what; engine calls = ${engine.calls}")
     }
 
+    /** Lets any in-flight engine work land, then idles the main looper. */
+    private fun settle() {
+        Thread.sleep(100)
+        idle()
+    }
+
     private fun awaitLoads(count: Int) = await("$count loads") {
         engine.calls("load:").size >= count
     }
 
-    private fun awaitStarts(count: Int) = await("$count starts") {
-        engine.calls("start").size >= count
+    private fun awaitPlays(count: Int) = await("$count plays") {
+        engine.calls("play").size >= count
     }
 
     private fun loadQueue(startAt: Int = 0, shuffle: Boolean = false) {
         player.loadQueue(files, startAt = startAt, shuffleMode = shuffle)
-        awaitStarts(1)
+        awaitPlays(1)
     }
+
+    private fun loadPath(i: Int) = engine.calls("load:")[i]
 
     // --- loading ------------------------------------------------------------------------
 
@@ -92,6 +102,18 @@ class ModPlayerTest {
         assertEquals(3, player.mediaItemCount)
         assertEquals(Player.STATE_READY, player.playbackState)
         assertTrue(player.playWhenReady)
+        assertTrue(player.isPlaying)
+    }
+
+    @Test
+    fun `loading reports BUFFERING with playWhenReady already true`() {
+        engine.loadDelayMs = 200L
+        player.loadQueue(files, startAt = 0)
+        idle()
+        assertEquals(Player.STATE_BUFFERING, player.playbackState)
+        assertTrue(player.playWhenReady)
+        awaitPlays(1)
+        assertEquals(Player.STATE_READY, player.playbackState)
     }
 
     @Test
@@ -108,6 +130,12 @@ class ModPlayerTest {
         assertEquals("XM", player.currentMediaItem?.mediaMetadata?.artist)
     }
 
+    @Test
+    fun `media ids use the Auto file scheme`() {
+        loadQueue()
+        assertEquals(AutoMediaId.file("content://mods/a"), player.currentMediaItem?.mediaId)
+    }
+
     // --- end of module ------------------------------------------------------------------
 
     @Test
@@ -115,8 +143,8 @@ class ModPlayerTest {
         loadQueue()
         engine.endModule()
         awaitLoads(2)
-        awaitStarts(2)
-        assertEquals("load:content://mods/b", engine.calls("load:")[1])
+        awaitPlays(2)
+        assertEquals("load:content://mods/b", loadPath(1))
         assertEquals(1, player.currentMediaItemIndex)
     }
 
@@ -128,6 +156,7 @@ class ModPlayerTest {
         assertEquals(2, player.currentMediaItemIndex)
         assertEquals(3, player.mediaItemCount)
         assertEquals(1, engine.calls("load:").size)
+        assertFalse(player.playWhenReady)
     }
 
     @Test
@@ -138,9 +167,26 @@ class ModPlayerTest {
 
         player.play()
         awaitLoads(2)
-        awaitStarts(2)
-        assertEquals("load:content://mods/a", engine.calls("load:")[1])
+        awaitPlays(2)
+        assertEquals("load:content://mods/a", loadPath(1))
         assertEquals(0, player.currentMediaItemIndex)
+    }
+
+    @Test
+    fun `seeking inside the ended item reloads it instead of jumping to the first`() {
+        loadQueue(startAt = 2)
+        engine.endModule()
+        await("ended") { player.playbackState == Player.STATE_ENDED }
+
+        player.seekTo(0L)
+        await("reload") { engine.calls("load:").size == 2 }
+        assertEquals("load:content://mods/c", loadPath(1))
+        assertEquals(2, player.currentMediaItemIndex)
+        assertEquals(Player.STATE_READY, player.playbackState)
+
+        player.play()
+        awaitPlays(2)
+        assertEquals(2, player.currentMediaItemIndex)
     }
 
     @Test
@@ -149,7 +195,7 @@ class ModPlayerTest {
         player.repeatMode = Player.REPEAT_MODE_ALL
         engine.endModule()
         awaitLoads(2)
-        assertEquals("load:content://mods/a", engine.calls("load:")[1])
+        assertEquals("load:content://mods/a", loadPath(1))
     }
 
     // --- seeking ------------------------------------------------------------------------
@@ -159,9 +205,8 @@ class ModPlayerTest {
         loadQueue()
         player.seekTo(2, 5_000L)
         awaitLoads(2)
-        awaitStarts(2)
-        assertEquals("load:content://mods/c", engine.calls("load:")[1])
-        assertTrue(engine.calls.contains("seek:5000"))
+        await("seek") { engine.calls.contains("seek:5000") }
+        assertEquals("load:content://mods/c", loadPath(1))
         assertEquals(2, player.currentMediaItemIndex)
     }
 
@@ -178,9 +223,20 @@ class ModPlayerTest {
     fun `seekTo within the current item seeks the engine`() {
         loadQueue()
         player.seekTo(7_500L)
-        idle()
+        await("seek") { engine.calls("seek:").isNotEmpty() }
         assertEquals(listOf("seek:7500"), engine.calls("seek:"))
         assertEquals(1, engine.calls("load:").size)
+    }
+
+    @Test
+    fun `seek position is reported until the engine applies it`() {
+        loadQueue()
+        engine.positionMs.value = 1_000L
+        player.seekTo(7_500L)
+        assertEquals(7_500L, player.currentPosition)
+        await("seek") { engine.calls("seek:").isNotEmpty() }
+        settle()
+        assertEquals(7_500L, player.currentPosition)
     }
 
     @Test
@@ -201,8 +257,18 @@ class ModPlayerTest {
         loadQueue(startAt = 1)
         engine.positionMs.value = 10_000L
         player.seekToPrevious()
-        idle()
+        await("seek") { engine.calls("seek:").isNotEmpty() }
         assertEquals(1, player.currentMediaItemIndex)
+        assertEquals(listOf("seek:0"), engine.calls("seek:"))
+        assertEquals(1, engine.calls("load:").size)
+    }
+
+    @Test
+    fun `previous on the first item with repeat off restarts it`() {
+        loadQueue()
+        engine.positionMs.value = 1_000L
+        player.seekToPrevious()
+        await("seek") { engine.calls("seek:").isNotEmpty() }
         assertEquals(listOf("seek:0"), engine.calls("seek:"))
         assertEquals(1, engine.calls("load:").size)
     }
@@ -214,18 +280,44 @@ class ModPlayerTest {
         loadQueue()
         engine.loadDelayMs = 150L
         player.seekToNext() // b (slow load in progress)
-        player.seekToNext() // c, parked as pending
+        player.seekToNext() // c, queued behind it
         idle()
 
         await("c loaded") { engine.calls.contains("load:content://mods/c") }
-        awaitStarts(2)
+        awaitPlays(2)
+        settle()
         assertEquals(2, player.currentMediaItemIndex)
         // b was loaded but never started; c is what plays.
         val expected = listOf("a", "b", "c").map { "load:content://mods/$it" }
         assertEquals(expected, engine.calls("load:"))
-        assertEquals(2, engine.calls("start").size)
-        val cLoadedAt = engine.calls.indexOf("load:content://mods/c")
-        assertTrue(cLoadedAt < engine.calls.lastIndexOf("start"))
+        assertEquals(2, engine.calls("play").size)
+        assertTrue(engine.calls.indexOf("load:content://mods/c") < engine.calls.lastIndexOf("play"))
+    }
+
+    @Test
+    fun `pause during a load is honoured when the load finishes`() {
+        loadQueue()
+        engine.loadDelayMs = 150L
+        player.seekToNext()
+        idle()
+        player.pause()
+        awaitLoads(2)
+        await("ready") { player.playbackState == Player.STATE_READY }
+        settle()
+        assertEquals(1, engine.calls("play").size)
+        assertFalse(player.playWhenReady)
+    }
+
+    @Test
+    fun `play pressed during a load starts it when the load finishes`() {
+        engine.loadDelayMs = 150L
+        player.loadQueue(files, startAt = 0)
+        idle()
+        player.pause()
+        idle()
+        player.play()
+        awaitPlays(1)
+        assertTrue(player.playWhenReady)
     }
 
     // --- unplayable files ---------------------------------------------------------------
@@ -236,8 +328,8 @@ class ModPlayerTest {
         loadQueue()
         player.seekToNext()
         awaitLoads(3)
-        awaitStarts(2)
-        assertEquals("load:content://mods/c", engine.calls("load:")[2])
+        awaitPlays(2)
+        assertEquals("load:content://mods/c", loadPath(2))
         assertEquals(2, player.currentMediaItemIndex)
     }
 
@@ -247,7 +339,77 @@ class ModPlayerTest {
         player.loadQueue(files, startAt = 0)
         await("cleared") { player.mediaItemCount == 0 }
         assertEquals(Player.STATE_IDLE, player.playbackState)
-        assertTrue(engine.calls("start").isEmpty())
+        assertTrue(engine.calls("play").isEmpty())
+    }
+
+    @Test
+    fun `an unplayable last item parks and keeps the queue`() {
+        engine.failPaths = setOf("content://mods/c")
+        loadQueue()
+        player.seekTo(2, 0L)
+        await("ended") { player.playbackState == Player.STATE_ENDED }
+        settle()
+        assertEquals(3, player.mediaItemCount)
+        assertEquals(0, prefs.clearCount)
+    }
+
+    @Test
+    fun `a stream that cannot be opened keeps the queue and reports an error`() {
+        engine.noAudio = true
+        player.loadQueue(files, startAt = 0)
+        await("error") { player.playerError != null }
+        settle()
+        assertEquals(1, engine.calls("load:").size)
+        assertEquals(3, player.mediaItemCount)
+        assertEquals(Player.STATE_IDLE, player.playbackState)
+        assertFalse(player.playWhenReady)
+        assertEquals(0, prefs.clearCount)
+    }
+
+    @Test
+    fun `a stream that will not start gives up after a retry`() {
+        engine.failStart = true
+        player.loadQueue(files, startAt = 0)
+        await("error") { player.playerError != null }
+        settle()
+        val loads = engine.calls("load:").size
+        assertTrue("loads=$loads", loads <= 3)
+        settle()
+        assertEquals(loads, engine.calls("load:").size)
+        assertFalse(player.playWhenReady)
+        assertEquals(3, player.mediaItemCount)
+    }
+
+    // --- pause / service teardown -------------------------------------------------------
+
+    @Test
+    fun `pause right after a posted start still pauses the engine`() {
+        loadQueue()
+        player.pause()
+        await("paused") { engine.calls("pause").size == 1 }
+        engine.post { Thread.sleep(200) } // holds the start below in the engine queue
+        player.play()
+        idle()
+        player.pause()
+        await("second pause") { engine.calls("pause").size == 2 }
+        settle()
+        assertFalse(engine.playingFlow.value)
+        assertFalse(player.isPlaying)
+    }
+
+    @Test
+    fun `play after the engine was released resumes at the paused position`() {
+        loadQueue()
+        player.pause()
+        await("paused") { engine.calls("pause").size == 1 }
+        engine.positionMs.value = 150_000L
+        player.releaseEngine()
+        await("release") { engine.calls.contains("release") }
+        assertEquals(150_000L, player.currentPosition)
+
+        player.play()
+        awaitLoads(2)
+        await("seek") { engine.calls.contains("seek:150000") }
     }
 
     // --- audio route loss ---------------------------------------------------------------
@@ -256,29 +418,108 @@ class ModPlayerTest {
     fun `audio disconnect reopens and resumes the current item at the same position`() {
         loadQueue(startAt = 1)
         engine.positionMs.value = 42_000L
-        engine.isPlaying.value = false
-        engine.audioDisconnectedFlow.value = true
+        engine.disconnect()
 
         await("reload") { engine.calls("load:").size == 2 }
-        awaitStarts(2)
-        assertTrue(engine.calls.contains("handleAudioDisconnect"))
-        assertEquals("load:content://mods/b", engine.calls("load:")[1])
-        assertTrue(engine.calls.contains("seek:42000"))
+        await("seek") { engine.calls.contains("seek:42000") }
+        assertTrue(engine.calls.contains("recover"))
+        assertEquals("load:content://mods/b", loadPath(1))
         assertEquals(1, player.currentMediaItemIndex)
     }
 
     @Test
-    fun `audio disconnect while paused reloads but does not resume`() {
+    fun `audio disconnect while paused waits for play, then resumes at the old position`() {
         loadQueue()
         player.pause()
         idle()
-        engine.audioDisconnectedFlow.value = true
-
-        await("reload") { engine.calls("load:").size == 2 }
-        Thread.sleep(100)
-        idle()
-        assertEquals(1, engine.calls("start").size)
+        engine.positionMs.value = 30_000L
+        engine.disconnect()
+        await("recover") { engine.calls.contains("recover") }
+        settle()
+        assertEquals(1, engine.calls("load:").size)
         assertFalse(player.playWhenReady)
+        assertEquals(30_000L, player.currentPosition)
+
+        player.play()
+        await("reload") { engine.calls("load:").size == 2 }
+        await("seek") { engine.calls.contains("seek:30000") }
+    }
+
+    // --- stop vs clear ------------------------------------------------------------------
+
+    @Test
+    fun `stop keeps the queue and goes idle`() {
+        loadQueue(startAt = 1)
+        player.stop()
+        await("stop") { engine.calls.contains("stop") }
+        assertEquals(3, player.mediaItemCount)
+        assertEquals(1, player.currentMediaItemIndex)
+        assertEquals(Player.STATE_IDLE, player.playbackState)
+        assertFalse(player.playWhenReady)
+        await("persist") { prefs.savedQueueJson != null }
+        assertEquals(0, prefs.clearCount)
+    }
+
+    @Test
+    fun `play after stop reloads the current item`() {
+        loadQueue(startAt = 1)
+        player.stop()
+        await("stop") { engine.calls.contains("stop") }
+        player.play()
+        awaitLoads(2)
+        awaitPlays(2)
+        assertEquals("load:content://mods/b", loadPath(1))
+    }
+
+    @Test
+    fun `clearMediaItems drops the queue and the persisted state`() {
+        loadQueue()
+        player.clearMediaItems()
+        await("cleared") { player.mediaItemCount == 0 && prefs.clearCount > 0 }
+        assertNull(prefs.savedQueueJson)
+        assertEquals(Player.STATE_IDLE, player.playbackState)
+    }
+
+    // --- queue edits --------------------------------------------------------------------
+
+    @Test
+    fun `removing a later item keeps playing the current one`() {
+        loadQueue(startAt = 0)
+        player.removeMediaItem(2)
+        idle()
+        assertEquals(2, player.mediaItemCount)
+        assertEquals(0, player.currentMediaItemIndex)
+        assertEquals(1, engine.calls("load:").size)
+    }
+
+    @Test
+    fun `removing the playing item moves on to the next`() {
+        loadQueue(startAt = 1)
+        player.removeMediaItem(1)
+        awaitLoads(2)
+        assertEquals("load:content://mods/c", loadPath(1))
+        assertEquals(1, player.currentMediaItemIndex)
+        assertEquals(2, player.mediaItemCount)
+    }
+
+    @Test
+    fun `moving items keeps the current item current`() {
+        loadQueue(startAt = 0)
+        player.moveMediaItem(0, 2)
+        idle()
+        assertEquals(2, player.currentMediaItemIndex)
+        assertEquals(AutoMediaId.file("content://mods/a"), player.currentMediaItem?.mediaId)
+        assertEquals(1, engine.calls("load:").size)
+    }
+
+    @Test
+    fun `replacing every item keeps the new items`() {
+        loadQueue()
+        player.replaceMediaItems(0, 3, listOf(MediaItem.fromUri("content://mods/x")))
+        awaitLoads(2)
+        assertEquals("load:content://mods/x", loadPath(1))
+        assertEquals(1, player.mediaItemCount)
+        assertEquals(0, prefs.clearCount)
     }
 
     // --- modes --------------------------------------------------------------------------
@@ -289,14 +530,14 @@ class ModPlayerTest {
         player.shuffleModeEnabled = true
         idle()
         assertTrue(player.shuffleModeEnabled)
-        assertEquals("content://mods/b", player.currentMediaItem?.mediaId)
+        assertEquals(AutoMediaId.file("content://mods/b"), player.currentMediaItem?.mediaId)
         assertEquals(0, player.currentMediaItemIndex)
         assertEquals(3, player.mediaItemCount)
         assertEquals(1, engine.calls("load:").size)
 
         player.shuffleModeEnabled = false
         idle()
-        assertEquals("content://mods/b", player.currentMediaItem?.mediaId)
+        assertEquals(AutoMediaId.file("content://mods/b"), player.currentMediaItem?.mediaId)
         assertEquals(1, player.currentMediaItemIndex)
     }
 
@@ -304,21 +545,38 @@ class ModPlayerTest {
     fun `repeat mode is reflected by the player and the engine`() {
         loadQueue()
         player.repeatMode = Player.REPEAT_MODE_ONE
-        idle()
+        await("repeat one") { engine.repeatOneRequested }
         assertEquals(Player.REPEAT_MODE_ONE, player.repeatMode)
-        assertTrue(engine.repeatOne)
 
         player.repeatMode = Player.REPEAT_MODE_OFF
-        idle()
-        assertFalse(engine.repeatOne)
+        await("repeat off") { !engine.repeatOneRequested }
     }
 
+    // --- restore ------------------------------------------------------------------------
+
     @Test
-    fun `stop clears the queue and the persisted state`() {
-        loadQueue()
-        player.stop()
-        await("cleared") { player.mediaItemCount == 0 && prefs.clearCount > 0 }
-        assertNull(prefs.savedQueueJson)
-        assertEquals(Player.STATE_IDLE, player.playbackState)
+    fun `restore without auto resume shows the queue but does not touch the engine`() {
+        loadQueue(startAt = 1)
+        await("persist") { prefs.savedQueueJson != null }
+        player.releaseEngine()
+        idle()
+
+        val fresh =
+            ModPlayer(RuntimeEnvironment.getApplication(), FakeEngine().also { engine = it }, prefs)
+        var restored = false
+        kotlinx.coroutines.runBlocking { restored = fresh.restoreQueue() }
+        idle()
+        assertTrue(restored)
+        assertEquals(3, fresh.mediaItemCount)
+        assertEquals(1, fresh.currentMediaItemIndex)
+        assertEquals(Player.STATE_IDLE, fresh.playbackState)
+        settle()
+        assertTrue(engine.calls("load:").isEmpty())
+
+        fresh.play()
+        awaitLoads(1)
+        awaitPlays(1)
+        assertEquals("load:content://mods/b", loadPath(0))
+        fresh.releaseEngine()
     }
 }

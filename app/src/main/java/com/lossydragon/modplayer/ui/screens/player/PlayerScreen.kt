@@ -1,7 +1,5 @@
 package com.lossydragon.modplayer.ui.screens.player
 
-import androidx.activity.ComponentActivity
-import androidx.activity.compose.LocalActivity
 import androidx.compose.foundation.*
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.*
@@ -25,8 +23,11 @@ import com.lossydragon.modplayer.R
 import com.lossydragon.modplayer.db.entity.ModuleEntity
 import com.lossydragon.modplayer.player.PlaybackStatus
 import com.lossydragon.modplayer.player.PlayerUiState
+import com.lossydragon.modplayer.player.PlayerView
 import com.lossydragon.modplayer.player.PlayerViewModel
 import com.lossydragon.modplayer.player.model.PatternData
+import com.lossydragon.modplayer.ui.activityViewModel
+import com.lossydragon.modplayer.ui.components.AppSnackbarHostState
 import com.lossydragon.modplayer.ui.components.BackButton
 import com.lossydragon.modplayer.ui.screens.player.components.ChipList
 import com.lossydragon.modplayer.ui.screens.player.components.DurationsSheet
@@ -39,6 +40,7 @@ import com.lossydragon.modplayer.ui.screens.player.components.views.ChannelView
 import com.lossydragon.modplayer.ui.screens.player.components.views.DebugView
 import com.lossydragon.modplayer.ui.screens.player.components.views.PatternView
 import com.lossydragon.modplayer.ui.theme.AppTheme
+import com.lossydragon.native.model.AudioStats
 import com.lossydragon.native.model.FrameInfo
 import com.lossydragon.native.model.ModVars
 import com.lossydragon.native.model.Sequence
@@ -46,10 +48,11 @@ import kotlin.time.Duration.Companion.seconds
 import kotlinx.collections.immutable.toPersistentList
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.delay
+import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.isActive
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
-import org.koin.compose.viewmodel.koinViewModel
 
 private sealed class PlayerAction {
     data class OnDurationClick(val int: Int) : PlayerAction()
@@ -76,15 +79,13 @@ private sealed class PlayerAction {
 @Composable
 fun PlayerScreen(
     modifier: Modifier = Modifier,
+    snackbarHostState: SnackbarHostState = AppSnackbarHostState,
     onBack: () -> Unit
 ) {
     val scope = rememberCoroutineScope()
     val resource = LocalResources.current
 
-    val snackBarHostState = remember { SnackbarHostState() }
-    val viewModel = koinViewModel<PlayerViewModel>(
-        viewModelStoreOwner = LocalActivity.current as ComponentActivity
-    )
+    val viewModel = activityViewModel<PlayerViewModel>()
     val state by viewModel.state.collectAsStateWithLifecycle()
     val queueSheetState = rememberBottomSheetState(
         initialValue = Hidden,
@@ -95,21 +96,23 @@ fun PlayerScreen(
         enabledValues = setOf(Hidden, Expanded)
     )
 
+    // The booleans are the single source of truth; ModalBottomSheet animates in on its own.
     var showQueue by remember { mutableStateOf(false) }
     var showDurations by remember { mutableStateOf(false) }
     var hasLoadedOnce by remember { mutableStateOf(false) }
     var showAudioInfo by remember { mutableStateOf(false) }
-    var audioInfoText by remember { mutableStateOf("") }
+    var audioStats by remember { mutableStateOf<AudioStats?>(null) }
     var showInstruments by remember { mutableStateOf(false) }
     var showModInfo by remember { mutableStateOf(false) }
     var showCommentInfo by remember { mutableStateOf(false) }
 
-    val frameInfo by viewModel.frameInfo.collectAsStateWithLifecycle()
+    // Only the pattern index is needed here; deriving it keeps the 50 Hz flow out of this scope.
+    val frame = viewModel.frameInfo.collectAsStateWithLifecycle()
+    val patternIndex by remember(frame) { derivedStateOf { frame.value.pattern } }
 
     // Pattern data is fetched over JNI (one call per row) and cached in the engine. Resolve it
     // off the composition path so a cache miss never blocks a frame; keyed on the module too,
     // since the same pattern index means something else after a queue change.
-    val patternIndex = frameInfo.pattern
     val channels = state.modVars.chn
     val patternData by produceState(PatternData(), patternIndex, channels, state.currentModule) {
         value = if (patternIndex < 0 || channels == 0) {
@@ -124,11 +127,19 @@ fun PlayerScreen(
         if (hasLoadedOnce && state.currentModule == null) onBack()
     }
 
+    LaunchedEffect(state.errorMessage) {
+        state.errorMessage?.let { snackbarHostState.showSnackbar(it) }
+    }
+
     LaunchedEffect(showAudioInfo) {
         while (isActive && showAudioInfo) {
-            audioInfoText = viewModel.getAudioStats()
+            audioStats = viewModel.getAudioStats()
             delay(3.seconds)
         }
+    }
+
+    fun closeSheet(sheet: SheetState, onHidden: () -> Unit) {
+        scope.launch { sheet.hide() }.invokeOnCompletion { onHidden() }
     }
 
     if (showModInfo) {
@@ -156,11 +167,11 @@ fun PlayerScreen(
             onDismissRequest = { showAudioInfo = false },
             icon = Icons.Default.Info,
             title = stringResource(R.string.dialog_title_audio_info),
-            content = { Text(text = audioInfoText) },
+            content = { audioStats?.let { Text(text = it.asText()) } },
         )
     }
 
-    if (showInstruments && state.modVars.instruments.isNotEmpty()) {
+    if (showInstruments && state.instruments.isNotEmpty()) {
         PlayerAlertDialog(
             onDismissRequest = { showInstruments = false },
             icon = Icons.AutoMirrored.Filled.List,
@@ -171,7 +182,7 @@ fun PlayerScreen(
                     state = listState,
                     content = {
                         items(
-                            items = state.modVars.instruments,
+                            items = state.instruments,
                             itemContent = { Text(text = it) }
                         )
                     }
@@ -197,9 +208,9 @@ fun PlayerScreen(
 
     PlayerScreenContent(
         modifier = modifier,
-        snackBarHostState = snackBarHostState,
+        snackBarHostState = snackbarHostState,
         state = state,
-        frameInfo = frameInfo,
+        frameInfo = viewModel.frameInfo,
         patternData = patternData,
         queueSheetState = queueSheetState,
         durationsSheetState = durationsSheetState,
@@ -224,10 +235,10 @@ fun PlayerScreen(
                 PlayerAction.OnAllSequences -> viewModel.toggleAllSequences()
 
                 PlayerAction.OnInstruments -> {
-                    if (state.modVars.instruments.isEmpty()) {
+                    if (state.instruments.isEmpty()) {
                         scope.launch {
                             val text = resource.getString(R.string.snack_no_instruments)
-                            snackBarHostState.showSnackbar(message = text)
+                            snackbarHostState.showSnackbar(message = text)
                         }
                     } else {
                         showInstruments = true
@@ -242,7 +253,7 @@ fun PlayerScreen(
                     if (state.modVars.miComment.isEmpty()) {
                         scope.launch {
                             val text = resource.getString(R.string.snack_no_song_message)
-                            snackBarHostState.showSnackbar(message = text)
+                            snackbarHostState.showSnackbar(message = text)
                         }
                     } else {
                         showCommentInfo = true
@@ -256,29 +267,23 @@ fun PlayerScreen(
                 is PlayerAction.OnQueueClick -> viewModel.playAtIndex(action.int)
 
                 is PlayerAction.OnQueueSheet -> {
-                    showQueue = action.open
-                    scope.launch {
-                        if (showQueue) {
-                            queueSheetState.expand()
-                        } else {
-                            queueSheetState.hide()
-                        }
+                    if (action.open) {
+                        showQueue = true
+                    } else {
+                        closeSheet(queueSheetState) { showQueue = false }
                     }
                 }
 
                 is PlayerAction.OnDurationClick -> {
                     viewModel.setSequence(action.int)
-                    scope.launch { durationsSheetState.hide() }
+                    closeSheet(durationsSheetState) { showDurations = false }
                 }
 
                 is PlayerAction.OnDurationSheet -> {
-                    showDurations = action.open
-                    scope.launch {
-                        if (showDurations) {
-                            durationsSheetState.expand()
-                        } else {
-                            durationsSheetState.hide()
-                        }
+                    if (action.open) {
+                        showDurations = true
+                    } else {
+                        closeSheet(durationsSheetState) { showDurations = false }
                     }
                 }
             }
@@ -286,12 +291,27 @@ fun PlayerScreen(
     )
 }
 
+@Composable
+private fun AudioStats.asText(): String = stringResource(
+    R.string.audio_stats_text,
+    audioApi,
+    sharingMode,
+    perfMode,
+    audioFormat,
+    sampleRate,
+    framesPerBurst,
+    bufferSize,
+    bufferCapacity,
+    xrunCount,
+    underrunCount,
+)
+
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 private fun PlayerScreenContent(
     snackBarHostState: SnackbarHostState,
     state: PlayerUiState,
-    frameInfo: FrameInfo,
+    frameInfo: StateFlow<FrameInfo>,
     patternData: PatternData,
     queueSheetState: SheetState,
     durationsSheetState: SheetState,
@@ -308,6 +328,9 @@ private fun PlayerScreenContent(
         )
         return
     }
+
+    // Not delegated: read only inside PatternView's draw lambda.
+    val frame = frameInfo.collectAsStateWithLifecycle()
 
     Scaffold(
         modifier = modifier,
@@ -326,7 +349,6 @@ private fun PlayerScreenContent(
                                 style = MaterialTheme.typography.headlineSmall.copy(
                                     fontWeight = FontWeight.Bold,
                                 ),
-                                color = MaterialTheme.colorScheme.onPrimaryContainer,
                                 maxLines = 1,
                                 overflow = TextOverflow.Ellipsis
                             )
@@ -336,7 +358,6 @@ private fun PlayerScreenContent(
                                 style = MaterialTheme.typography.labelLarge.copy(
                                     fontWeight = FontWeight.Bold,
                                 ),
-                                color = MaterialTheme.colorScheme.onSecondaryContainer,
                                 maxLines = 1,
                                 overflow = TextOverflow.Ellipsis
                             )
@@ -350,7 +371,7 @@ private fun PlayerScreenContent(
                         content = {
                             Icon(
                                 imageVector = Icons.Default.ViewCarousel,
-                                contentDescription = null
+                                contentDescription = stringResource(R.string.desc_player_view)
                             )
                         }
                     )
@@ -362,7 +383,7 @@ private fun PlayerScreenContent(
                 contentPadding = PaddingValues(bottom = 8.dp),
                 content = {
                     HorizontalDivider(modifier = Modifier.fillMaxWidth())
-                    PatternInfoRow(fi = frameInfo)
+                    PatternInfoRow(frameInfo = frameInfo)
                     PlaybackProgress(
                         frameInfo = frameInfo,
                         onSeek = { onAction(PlayerAction.OnSeek(it)) },
@@ -384,16 +405,8 @@ private fun PlayerScreenContent(
                     Spacer(modifier = Modifier.height(4.dp))
                     TransportRow(
                         status = state.status,
-                        hasNext = state.queue.isNotEmpty() && (
-                            state.repeatMode == Player.REPEAT_MODE_ALL ||
-                                state.repeatMode == Player.REPEAT_MODE_ONE ||
-                                state.currentQueueIndex < state.queue.lastIndex
-                            ),
-                        hasPrev = state.queue.isNotEmpty() && (
-                            state.repeatMode == Player.REPEAT_MODE_ALL ||
-                                state.repeatMode == Player.REPEAT_MODE_ONE ||
-                                state.currentQueueIndex > 0
-                            ),
+                        hasNext = state.hasNext,
+                        hasPrev = state.hasPrevious,
                         onStop = { onAction(PlayerAction.OnStop) },
                         onPrev = { onAction(PlayerAction.OnPrevious) },
                         onPlayPause = { onAction(PlayerAction.OnPlayPause) },
@@ -405,34 +418,35 @@ private fun PlayerScreenContent(
             )
         },
         content = { contentPadding ->
+            val isPlaying = state.status == PlaybackStatus.PLAYING &&
+                !queueSheetState.isVisible && !durationsSheetState.isVisible
+
             Box(
                 modifier = Modifier
                     .fillMaxSize()
                     .padding(contentPadding)
             ) {
                 when (state.playerView) {
-                    0 -> PatternView(
+                    PlayerView.PATTERN -> PatternView(
                         modifier = Modifier.fillMaxSize(),
                         module = state.currentModule,
                         pattern = patternData,
-                        currentRow = frameInfo.row,
+                        currentRow = { frame.value.row },
                         showRowNumbers = state.showRowNumbers,
                     )
 
-                    1 -> ChannelView(
+                    PlayerView.CHANNELS -> ChannelView(
                         modifier = Modifier.fillMaxSize(),
                         numChannels = state.modVars.chn,
-                        instrumentNames = state.modVars.instruments.toPersistentList(),
-                        isPlaying = (state.status == PlaybackStatus.PLAYING) &&
-                            !queueSheetState.isVisible && !durationsSheetState.isVisible
+                        instrumentNames = state.instruments,
+                        isPlaying = isPlaying,
                     )
 
-                    2 -> DebugView(
+                    PlayerView.DEBUG -> DebugView(
                         modifier = Modifier.fillMaxSize(),
                         state = state,
                         frameInfo = frameInfo,
-                        isPlaying = (state.status == PlaybackStatus.PLAYING) &&
-                            !queueSheetState.isVisible && !durationsSheetState.isVisible
+                        isPlaying = isPlaying,
                     )
                 }
             }
@@ -440,7 +454,7 @@ private fun PlayerScreenContent(
             if (showDurations) {
                 DurationsSheet(
                     sheetState = durationsSheetState,
-                    seqData = state.modVars.seqData.toPersistentList(),
+                    seqData = state.sequences,
                     currentSequence = state.currentSequence,
                     onItemClick = { onAction(PlayerAction.OnDurationClick(it)) },
                     onDismiss = { onAction(PlayerAction.OnDurationSheet(false)) },
@@ -497,23 +511,26 @@ private val previewQueue = Array(10) {
     )
 }.toPersistentList()
 
+private val previewSequences = List(3) { Sequence(entryPoint = 0, duration = 237_000) }
+    .toPersistentList()
+
 private val previewPlayerState = PlayerUiState(
     status = PlaybackStatus.PLAYING,
     currentModule = previewQueue[1],
     queue = previewQueue,
     currentQueueIndex = 1,
-    repeatMode = 2,
+    repeatMode = Player.REPEAT_MODE_ALL,
     currentSequence = 2,
+    hasNext = true,
+    hasPrevious = true,
     modVars = ModVars(
         name = "Beneath the Fallen Stars",
         type = "Impulse Tracker",
-        seqData = arrayOf(
-            Sequence(entryPoint = 0, duration = 237_000),
-            Sequence(entryPoint = 0, duration = 237_000),
-            Sequence(entryPoint = 0, duration = 237_000),
-        ),
+        seqData = previewSequences.toTypedArray(),
         instruments = Array(12) { "Instrument ${it + 1}" },
     ),
+    instruments = List(12) { "Instrument ${it + 1}" }.toPersistentList(),
+    sequences = previewSequences,
 )
 
 private val previewFrameInfo = FrameInfo(
@@ -558,7 +575,7 @@ private fun Preview(
     AppTheme {
         PlayerScreenContent(
             state = state,
-            frameInfo = previewFrameInfo,
+            frameInfo = MutableStateFlow(previewFrameInfo),
             snackBarHostState = SnackbarHostState(),
             patternData = PatternData(),
             queueSheetState = queueSheetState,

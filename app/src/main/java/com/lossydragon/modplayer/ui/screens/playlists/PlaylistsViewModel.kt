@@ -1,28 +1,29 @@
 package com.lossydragon.modplayer.ui.screens.playlists
 
-import android.content.Context
 import android.net.Uri
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.lossydragon.modplayer.data.PlaylistRepository
-import com.lossydragon.modplayer.data.exportPlaylistsToJson
-import com.lossydragon.modplayer.data.readImportFromUri
-import com.lossydragon.modplayer.data.toRoomEntities
-import com.lossydragon.modplayer.data.writeExportToUri
 import com.lossydragon.modplayer.db.entity.ModuleEntity
 import com.lossydragon.modplayer.db.entity.PlaylistEntity
+import com.lossydragon.modplayer.util.UiText
+import com.lossydragon.modplayer.util.toUiText
 import kotlinx.collections.immutable.ImmutableList
 import kotlinx.collections.immutable.persistentListOf
 import kotlinx.collections.immutable.toImmutableList
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.channels.Channel
+import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.launchIn
 import kotlinx.coroutines.flow.onEach
+import kotlinx.coroutines.flow.receiveAsFlow
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 
+/** [error] is only set when loading playlists/entries fails; operation failures go to [PlaylistsViewModel.events]. */
 data class PlaylistsUiState(
     val playlists: ImmutableList<PlaylistEntity> = persistentListOf(),
     val selectedPlaylist: PlaylistEntity? = null,
@@ -39,13 +40,20 @@ data class ImportResultUi(
     val skipped: Int
 )
 
+/** One-shot notifications; the UI shows them as a snackbar/toast. */
+sealed interface PlaylistsEvent {
+    data class Error(val message: UiText) : PlaylistsEvent
+}
+
 class PlaylistsViewModel(
-    private val appContext: Context,
     private val repo: PlaylistRepository
 ) : ViewModel() {
 
     val state: StateFlow<PlaylistsUiState>
         field = MutableStateFlow(PlaylistsUiState())
+
+    private val _events = Channel<PlaylistsEvent>(Channel.BUFFERED)
+    val events: Flow<PlaylistsEvent> = _events.receiveAsFlow()
 
     init {
         repo.playlists
@@ -60,7 +68,7 @@ class PlaylistsViewModel(
         if (name.isBlank()) return
         viewModelScope.launch {
             runCatching { repo.createPlaylist(name.trim(), comment.trim()) }
-                .onFailure { state.update { s -> s.copy(error = it.message) } }
+                .onFailure { reportError(it) }
         }
     }
 
@@ -70,7 +78,7 @@ class PlaylistsViewModel(
         viewModelScope.launch {
             runCatching {
                 repo.renamePlaylist(playlist.id, newName.trim(), newComment.trim())
-            }.onFailure { state.update { s -> s.copy(error = it.message) } }
+            }.onFailure { reportError(it) }
         }
     }
 
@@ -78,19 +86,17 @@ class PlaylistsViewModel(
     fun deletePlaylist(playlist: PlaylistEntity) {
         viewModelScope.launch {
             runCatching { repo.deletePlaylist(playlist.id) }
-                .onFailure { state.update { s -> s.copy(error = it.message) } }
-
-            // If the deleted playlist was selected, deselect it
-            if (state.value.selectedPlaylist?.id == playlist.id) {
-                state.update { it.copy(selectedPlaylist = null, entries = persistentListOf()) }
-            }
+                .onSuccess {
+                    if (state.value.selectedPlaylist?.id == playlist.id) deselectPlaylist()
+                }
+                .onFailure { reportError(it) }
         }
     }
 
     /** Selects [playlist] and loads its entries. */
     fun selectPlaylist(playlist: PlaylistEntity) {
         viewModelScope.launch {
-            state.update { it.copy(isLoading = true, selectedPlaylist = playlist) }
+            state.update { it.copy(isLoading = true, selectedPlaylist = playlist, error = null) }
             runCatching { repo.getPlaylistFiles(playlist.id).toImmutableList() }
                 .onSuccess { files ->
                     state.update { it.copy(entries = files, isLoading = false) }
@@ -101,16 +107,16 @@ class PlaylistsViewModel(
         }
     }
 
-    /** Adds [file] to [playlist]. Refreshes entries if [playlist] is currently selected. */
+    /** Adds [file] to [playlist] unless already present. Refreshes entries if [playlist] is selected. */
     fun addToPlaylist(playlist: PlaylistEntity, file: ModuleEntity) {
         viewModelScope.launch {
             runCatching { repo.addToPlaylist(playlist.id, file) }
-                .onSuccess {
-                    if (state.value.selectedPlaylist?.id == playlist.id) {
+                .onSuccess { added ->
+                    if (added > 0 && state.value.selectedPlaylist?.id == playlist.id) {
                         refreshEntries()
                     }
                 }
-                .onFailure { state.update { s -> s.copy(error = it.message) } }
+                .onFailure { reportError(it) }
         }
     }
 
@@ -120,7 +126,7 @@ class PlaylistsViewModel(
         viewModelScope.launch {
             runCatching { repo.removeFromPlaylist(playlist.id, file.filePath) }
                 .onSuccess { refreshEntries() }
-                .onFailure { state.update { s -> s.copy(error = it.message) } }
+                .onFailure { reportError(it) }
         }
     }
 
@@ -138,7 +144,7 @@ class PlaylistsViewModel(
         viewModelScope.launch {
             runCatching { repo.reorderEntries(playlist.id, entries) }
                 .onFailure { e ->
-                    state.update { s -> s.copy(error = e.message) }
+                    reportError(e)
                     refreshEntries() // revert on failure
                 }
         }
@@ -156,20 +162,11 @@ class PlaylistsViewModel(
     fun exportPlaylists(outputUri: Uri) {
         viewModelScope.launch {
             state.update { it.copy(isLoading = true) }
-
-            runCatching {
-                withContext(Dispatchers.IO) {
-                    val allPlaylists = repo.getAllPlaylistsOnce()
-                    val entries = allPlaylists.associate { it.id to repo.getEntriesRaw(it.id) }
-                    val jsonString = exportPlaylistsToJson(allPlaylists, entries)
-                    writeExportToUri(appContext, outputUri, jsonString).getOrThrow()
-                }
-            }
-                .onSuccess {
-                    state.update { it.copy(isLoading = false, exportSuccess = true) }
-                }
+            runCatching { withContext(Dispatchers.IO) { repo.exportTo(outputUri) } }
+                .onSuccess { state.update { it.copy(isLoading = false, exportSuccess = true) } }
                 .onFailure { e ->
-                    state.update { it.copy(isLoading = false, error = e.message) }
+                    state.update { it.copy(isLoading = false) }
+                    reportError(e)
                 }
         }
     }
@@ -182,36 +179,23 @@ class PlaylistsViewModel(
     fun importPlaylists(inputUri: Uri, validateUris: Boolean = true) {
         viewModelScope.launch {
             state.update { it.copy(isLoading = true) }
-
-            runCatching {
-                withContext(Dispatchers.IO) {
-                    val export = readImportFromUri(appContext, inputUri).getOrThrow()
-                    val (playlists, entryMap, result) = export.toRoomEntities(
-                        context = appContext,
-                        validateUris = validateUris,
-                    )
-                    playlists.forEach { playlist ->
-                        val newId = repo.createPlaylist(playlist)
-                        entryMap[playlist.name]?.forEach { entry ->
-                            repo.addRawEntry(entry.copy(playlistId = newId))
-                        }
-                    }
-                    result
-                }
-            }.onSuccess { result ->
-                state.update {
-                    it.copy(
-                        isLoading = false,
-                        importResult = ImportResultUi(
-                            playlistsImported = result.playlistsImported,
-                            entriesImported = result.entriesImported,
-                            skipped = result.skipped,
+            runCatching { withContext(Dispatchers.IO) { repo.importFrom(inputUri, validateUris) } }
+                .onSuccess { result ->
+                    state.update {
+                        it.copy(
+                            isLoading = false,
+                            importResult = ImportResultUi(
+                                playlistsImported = result.playlistsImported,
+                                entriesImported = result.entriesImported,
+                                skipped = result.skipped,
+                            )
                         )
-                    )
+                    }
                 }
-            }.onFailure { e ->
-                state.update { it.copy(isLoading = false, error = e.message) }
-            }
+                .onFailure { e ->
+                    state.update { it.copy(isLoading = false) }
+                    reportError(e)
+                }
         }
     }
 
@@ -220,6 +204,10 @@ class PlaylistsViewModel(
     fun dismissImportResult() = state.update { it.copy(importResult = null) }
 
     fun dismissExportSuccess() = state.update { it.copy(exportSuccess = false) }
+
+    private suspend fun reportError(e: Throwable) {
+        _events.send(PlaylistsEvent.Error(e.toUiText()))
+    }
 
     private fun refreshEntries() {
         val playlist = state.value.selectedPlaylist ?: return

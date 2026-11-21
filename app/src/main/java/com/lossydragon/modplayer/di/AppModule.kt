@@ -7,6 +7,7 @@ import com.lossydragon.modplayer.data.DownloadHistoryRepository
 import com.lossydragon.modplayer.data.ModArchiveService
 import com.lossydragon.modplayer.data.ModuleRepository
 import com.lossydragon.modplayer.data.PlaylistRepository
+import com.lossydragon.modplayer.data.SafDataSource
 import com.lossydragon.modplayer.db.AppDatabase
 import com.lossydragon.modplayer.db.AppPreferences
 import com.lossydragon.modplayer.player.Engine
@@ -18,25 +19,33 @@ import com.lossydragon.modplayer.ui.screens.downloads.DownloadsViewModel
 import com.lossydragon.modplayer.ui.screens.playlists.PlaylistsViewModel
 import io.ktor.client.HttpClient
 import io.ktor.client.engine.android.Android
-import io.ktor.client.plugins.contentnegotiation.ContentNegotiation
+import io.ktor.client.plugins.HttpRequestRetry
+import io.ktor.client.plugins.HttpTimeout
 import io.ktor.client.plugins.defaultRequest
-import io.ktor.client.request.accept
-import io.ktor.http.ContentType
-import io.ktor.serialization.kotlinx.xml.xml
+import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.SupervisorJob
 import org.koin.android.ext.koin.androidContext
 import org.koin.core.module.dsl.viewModel
+import org.koin.core.qualifier.named
 import org.koin.dsl.module
+
+/** Qualifier of the process-wide [CoroutineScope] for work that must outlive a ViewModel. */
+const val APP_SCOPE = "appScope"
 
 val appModule = module {
     // Core
     single { AppPreferences(androidContext()) }
     single { FileLoggingTree(androidContext()) }
 
+    single(named(APP_SCOPE)) { CoroutineScope(SupervisorJob() + Dispatchers.Default) }
+    single { SafDataSource(androidContext()) }
+
     // ViewModels
-    viewModel { FileBrowserViewModel(androidContext(), get(), get(), get()) }
-    viewModel { DownloadsViewModel(androidContext(), get(), get(), get(), get(), get()) }
-    viewModel { PlayerViewModel(androidContext(), get(), get()) }
-    viewModel { PlaylistsViewModel(androidContext(), get()) }
+    viewModel { FileBrowserViewModel(get(), get(), get()) }
+    viewModel { DownloadsViewModel(get(), get(), get(), get(), get(), get()) }
+    viewModel { PlayerViewModel(get(), get(), get()) }
+    viewModel { PlaylistsViewModel(get()) }
 
     // Database
     single {
@@ -57,18 +66,25 @@ val appModule = module {
     single { get<AppDatabase>().moduleMetadataDao() }
     single { get<AppDatabase>().downloadHistoryDao() }
     single { get<AppDatabase>().playlistDao() }
-    single { ModuleRepository(androidContext(), get(), get()) }
+    single { ModuleRepository(get(), get(), get(), get(named(APP_SCOPE))) }
     single { DownloadHistoryRepository(get()) }
-    single { PlaylistRepository(get()) }
+    single { PlaylistRepository(get(), get()) }
 
     // Downloads
     single {
         HttpClient(engineFactory = Android) {
-            install(ContentNegotiation) { xml() }
-            defaultRequest {
-                url(Constants.HTTP_BASE_URL)
-                accept(ContentType.Application.Xml)
+            expectSuccess = true
+            install(HttpTimeout) {
+                connectTimeoutMillis = 15_000
+                socketTimeoutMillis = 30_000
+                requestTimeoutMillis = 30_000
             }
+            install(HttpRequestRetry) {
+                retryOnServerErrors(maxRetries = 2)
+                exponentialDelay()
+            }
+            // Accept headers are per request: XML for the API, none for binary downloads.
+            defaultRequest { url(Constants.HTTP_BASE_URL) }
         }
     }
     single { ModArchiveService(get()) }

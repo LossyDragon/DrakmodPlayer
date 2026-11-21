@@ -1,6 +1,5 @@
 package com.lossydragon.modplayer.ui.screens.browser
 
-import android.content.Context
 import android.net.Uri
 import androidx.annotation.StringRes
 import androidx.compose.runtime.*
@@ -8,23 +7,32 @@ import androidx.core.net.toUri
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.lossydragon.modplayer.R
+import com.lossydragon.modplayer.data.IndexKind
+import com.lossydragon.modplayer.data.IndexState
 import com.lossydragon.modplayer.data.ModuleRepository
 import com.lossydragon.modplayer.data.PlaylistRepository
 import com.lossydragon.modplayer.db.AppPreferences
 import com.lossydragon.modplayer.db.entity.ModuleEntity
 import com.lossydragon.modplayer.db.entity.PlaylistEntity
-import com.lossydragon.modplayer.util.takeReadWritePermission
+import com.lossydragon.modplayer.util.UiText
+import com.lossydragon.modplayer.util.toUiText
 import kotlinx.collections.immutable.ImmutableList
 import kotlinx.collections.immutable.persistentListOf
 import kotlinx.collections.immutable.toImmutableList
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.ExperimentalCoroutinesApi
+import kotlinx.coroutines.channels.Channel
+import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
+import kotlinx.coroutines.flow.combine
+import kotlinx.coroutines.flow.conflate
 import kotlinx.coroutines.flow.filterNotNull
 import kotlinx.coroutines.flow.flatMapLatest
+import kotlinx.coroutines.flow.flowOn
 import kotlinx.coroutines.flow.launchIn
 import kotlinx.coroutines.flow.onEach
+import kotlinx.coroutines.flow.receiveAsFlow
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
 
@@ -55,9 +63,17 @@ data class BrowserUiState(
     val sortOrder: BrowserSortOrder = BrowserSortOrder.NAME
 )
 
+/** One-shot notifications; the UI shows them as a snackbar/toast. */
+sealed interface BrowserEvent {
+    /** [skipped] entries were already in the playlist. */
+    data class AddedToPlaylist(val playlist: PlaylistEntity, val added: Int, val skipped: Int) :
+        BrowserEvent
+
+    data class Error(val message: UiText) : BrowserEvent
+}
+
 @OptIn(ExperimentalCoroutinesApi::class)
 class FileBrowserViewModel(
-    private val appContext: Context,
     private val prefs: AppPreferences,
     private val db: ModuleRepository,
     private val playlistRepo: PlaylistRepository
@@ -69,8 +85,12 @@ class FileBrowserViewModel(
     val playlists: StateFlow<ImmutableList<PlaylistEntity>>
         field = MutableStateFlow<ImmutableList<PlaylistEntity>>(persistentListOf())
 
+    private val _events = Channel<BrowserEvent>(Channel.BUFFERED)
+    val events: Flow<BrowserEvent> = _events.receiveAsFlow()
+
     private val currentPath = MutableStateFlow<String?>(null)
-    private val currentChildren = MutableStateFlow<List<ModuleEntity>>(emptyList())
+    private val filterQuery = MutableStateFlow("")
+    private val sortOrder = MutableStateFlow(BrowserSortOrder.NAME)
 
     // Stack of (uri string, display name) for breadcrumb navigation
     private val dirStack = ArrayDeque<Pair<String, String>>()
@@ -80,27 +100,27 @@ class FileBrowserViewModel(
             state.update { it.copy(isLoading = true, loadingReason = R.string.loading) }
 
             val savedUri = prefs.getLastDirectoryUri()
-            if (savedUri == null) {
-                state.update { it.copy(isLoading = false, hasStorageAccess = false) }
-                return@launch
-            }
-
-            pushDir(savedUri, displayName(savedUri))
-            state.update { it.copy(hasStorageAccess = true) }
-
-            launch(Dispatchers.IO) {
+            if (savedUri != null) {
+                pushDir(savedUri, displayName(savedUri))
+                state.update { it.copy(hasStorageAccess = true) }
                 db.indexDirectoryIfStale(savedUri.toUri())
-                state.update { it.copy(isLoading = false) }
+            } else {
+                state.update { it.copy(isLoading = false, hasStorageAccess = false) }
             }
+            // Subscribed only now so the initial Idle doesn't flash an empty screen.
+            db.indexState
+                .onEach { indexState -> state.update { it.withIndexState(indexState) } }
+                .launchIn(this)
         }
 
-        currentPath
+        val children = currentPath
             .filterNotNull()
             .flatMapLatest { path -> db.getChildren(path) }
-            .onEach { children ->
-                currentChildren.value = children
-                applyFilters()
-            }
+            .conflate()
+
+        combine(children, filterQuery, sortOrder) { c, q, o -> buildLists(c, q, o) }
+            .flowOn(Dispatchers.Default)
+            .onEach { (dirs, files) -> state.update { it.copy(directories = dirs, files = files) } }
             .launchIn(viewModelScope)
 
         prefs.getGlobalShuffleFlow().onEach { isShuffle ->
@@ -113,15 +133,24 @@ class FileBrowserViewModel(
     }
 
     fun addFileToPlaylist(playlist: PlaylistEntity, file: ModuleEntity) {
-        viewModelScope.launch(Dispatchers.IO) {
+        viewModelScope.launch {
             runCatching { playlistRepo.addToPlaylist(playlist.id, file) }
+                .onSuccess { added ->
+                    _events.send(BrowserEvent.AddedToPlaylist(playlist, added, 1 - added))
+                }
+                .onFailure { _events.send(BrowserEvent.Error(it.toUiText())) }
         }
     }
 
     fun addFolderToPlaylist(playlist: PlaylistEntity, folder: FileItem) {
-        viewModelScope.launch(Dispatchers.IO) {
-            val files = db.getDescendantModules(folder.uri.toString())
-            runCatching { playlistRepo.addAllToPlaylist(playlist.id, files) }
+        viewModelScope.launch {
+            runCatching {
+                val files = db.getDescendantModules(folder.uri.toString())
+                val added = playlistRepo.addAllToPlaylist(playlist.id, files)
+                BrowserEvent.AddedToPlaylist(playlist, added, files.size - added)
+            }
+                .onSuccess { _events.send(it) }
+                .onFailure { _events.send(BrowserEvent.Error(it.toUiText())) }
         }
     }
 
@@ -130,29 +159,26 @@ class FileBrowserViewModel(
             it.copy(
                 isLoading = true,
                 loadingReason = R.string.indexing,
-                hasStorageAccess = true
+                hasStorageAccess = true,
+                error = null,
             )
         }
-
-        appContext.takeReadWritePermission(uri)
-        viewModelScope.launch { prefs.setLastDirectoryUri(uri.toString()) }
 
         dirStack.clear()
         pushDir(uri.toString(), displayName(uri.toString()))
 
-        viewModelScope.launch(Dispatchers.IO) {
-            db.indexDirectory(uri)
-            state.update { it.copy(isLoading = false) }
+        viewModelScope.launch {
+            runCatching { db.setRootFolder(uri) }.onFailure { e ->
+                state.update {
+                    it.copy(isLoading = false, hasStorageAccess = false, error = e.message)
+                }
+            }
         }
     }
 
     fun onRefresh() {
         val rootUri = dirStack.firstOrNull()?.first?.toUri() ?: return
-        state.update { it.copy(isLoading = true, loadingReason = R.string.reindexing) }
-        viewModelScope.launch(Dispatchers.IO) {
-            db.reindexDirectory(rootUri)
-            state.update { it.copy(isLoading = false) }
-        }
+        db.reindexDirectory(rootUri)
     }
 
     fun navigateInto(item: FileItem) {
@@ -179,13 +205,18 @@ class FileBrowserViewModel(
     }
 
     fun setSortOrder(order: BrowserSortOrder) {
+        sortOrder.value = order
         state.update { it.copy(sortOrder = order) }
-        applyFilters()
     }
 
     fun setFilter(query: String) {
+        filterQuery.value = query
         state.update { it.copy(filterQuery = query) }
-        applyFilters()
+    }
+
+    suspend fun getRecursiveModules(): List<ModuleEntity> {
+        val path = currentPath.value ?: return emptyList()
+        return db.getDescendantModules(path)
     }
 
     private fun pushDir(path: String, name: String) {
@@ -196,51 +227,78 @@ class FileBrowserViewModel(
 
     private fun updateBreadcrumbs() {
         state.update {
-            it.copy(breadcrumbs = dirStack.map { (_, name) -> name }.toImmutableList())
+            it.copy(
+                currentPath = dirStack.lastOrNull()?.first.orEmpty(),
+                breadcrumbs = dirStack.map { (_, name) -> name }.toImmutableList(),
+            )
         }
     }
 
-    private fun applyFilters() {
-        val children = currentChildren.value
-        val query = state.value.filterQuery
-        val order = state.value.sortOrder
+    private fun BrowserUiState.withIndexState(indexState: IndexState) = when (indexState) {
+        IndexState.Idle -> copy(isLoading = false, loadingReason = null)
 
-        val dirs = children
-            .filter { it.isDirectory }
-            .sortedBy { it.filename.lowercase() }
-            .map { FileItem(name = it.filename, uri = it.uri, isDirectory = true, size = 0L) }
-            .toImmutableList()
+        is IndexState.Running -> copy(
+            isLoading = true,
+            error = null,
+            loadingReason = when (indexState.kind) {
+                IndexKind.INITIAL -> R.string.loading
+                IndexKind.FULL -> R.string.indexing
+                IndexKind.REFRESH -> R.string.reindexing
+            },
+        )
 
-        val files = children
-            .filter { !it.isDirectory && it.isValidModule }
-            .filter { entity ->
-                query.isBlank() ||
-                    entity.moduleName.contains(query, ignoreCase = true) ||
-                    entity.filename.contains(query, ignoreCase = true)
-            }
-            .sortedWith(
-                when (order) {
-                    BrowserSortOrder.NAME -> compareBy {
-                        it.moduleName.ifBlank { it.filename }.lowercase()
-                    }
+        IndexState.NoAccess -> copy(
+            isLoading = false,
+            loadingReason = null,
+            hasStorageAccess = false
+        )
 
-                    BrowserSortOrder.TYPE -> compareBy { it.moduleType.lowercase() }
-
-                    BrowserSortOrder.SIZE -> compareBy { it.fileSize }
-                }
-            )
-            .toImmutableList()
-
-        state.update { it.copy(directories = dirs, files = files) }
+        is IndexState.Error -> copy(
+            isLoading = false,
+            loadingReason = null,
+            error = indexState.message
+        )
     }
 
-    suspend fun getRecursiveModules(): List<ModuleEntity> {
-        val path = currentPath.value ?: return emptyList()
-        return db.getDescendantModules(path)
-    }
-
+    /** Blank for the tree root; the UI substitutes a localised label. */
     private fun displayName(path: String): String = Uri.decode(path)
         .substringAfterLast('/')
         .substringAfterLast(':')
-        .ifBlank { "Root" }
+
+    private companion object {
+        /** Pure; runs on [Dispatchers.Default]. */
+        fun buildLists(
+            children: List<ModuleEntity>,
+            query: String,
+            order: BrowserSortOrder
+        ): Pair<ImmutableList<FileItem>, ImmutableList<ModuleEntity>> {
+            val dirs = children
+                .filter { it.isDirectory }
+                .sortedBy { it.filename.lowercase() }
+                .map { FileItem(name = it.filename, uri = it.uri, isDirectory = true, size = 0L) }
+                .toImmutableList()
+
+            val files = children
+                .filter { !it.isDirectory && it.isValidModule }
+                .filter { entity ->
+                    query.isBlank() ||
+                        entity.moduleName.contains(query, ignoreCase = true) ||
+                        entity.filename.contains(query, ignoreCase = true)
+                }
+                .sortedWith(
+                    when (order) {
+                        BrowserSortOrder.NAME -> compareBy {
+                            it.moduleName.ifBlank { it.filename }.lowercase()
+                        }
+
+                        BrowserSortOrder.TYPE -> compareBy { it.moduleType.lowercase() }
+
+                        BrowserSortOrder.SIZE -> compareBy { it.fileSize }
+                    }
+                )
+                .toImmutableList()
+
+            return dirs to files
+        }
+    }
 }

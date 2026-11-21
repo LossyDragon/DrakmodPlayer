@@ -13,8 +13,9 @@ import androidx.compose.ui.res.*
 import androidx.compose.ui.text.style.*
 import androidx.compose.ui.tooling.preview.*
 import androidx.compose.ui.unit.*
-import com.lossydragon.modplayer.R.string.title_subsong_sheet
+import com.lossydragon.modplayer.R
 import com.lossydragon.modplayer.ui.theme.AppTheme
+import com.lossydragon.modplayer.util.formatMs
 import com.lossydragon.native.model.Sequence
 import kotlinx.collections.immutable.ImmutableList
 import kotlinx.collections.immutable.toPersistentList
@@ -42,7 +43,7 @@ internal fun DurationsSheet(
                 contentAlignment = Alignment.Center,
                 content = {
                     Text(
-                        text = stringResource(title_subsong_sheet, seqData.size),
+                        text = stringResource(R.string.title_subsong_sheet, seqData.size),
                         style = MaterialTheme.typography.titleMedium,
                     )
                     IconButton(
@@ -51,7 +52,10 @@ internal fun DurationsSheet(
                             .align(Alignment.CenterEnd),
                         onClick = onDismiss,
                         content = {
-                            Icon(imageVector = Icons.Default.Close, contentDescription = null)
+                            Icon(
+                                imageVector = Icons.Default.Close,
+                                contentDescription = stringResource(R.string.close)
+                            )
                         }
                     )
                 }
@@ -87,10 +91,12 @@ private fun DurationItem(
     duration: Int,
     onItemClick: (Int) -> Unit
 ) {
-    val minutes = duration / 60000
-    val seconds = (duration / 1000) % 60
-    val label = if (index == 0) "Main Song" else "Sub Song $index"
-    val timeText = "%d:%02d - %s".format(minutes, seconds, label)
+    val label = if (index == 0) {
+        stringResource(R.string.subsong_main)
+    } else {
+        stringResource(R.string.subsong_sub, index)
+    }
+    val timeText = stringResource(R.string.subsong_item, duration.toLong().formatMs(), label)
 
     ListItem(
         modifier = Modifier.fillMaxWidth(),

@@ -4,17 +4,25 @@ import androidx.compose.foundation.layout.*
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.*
+import androidx.compose.ui.res.*
 import androidx.compose.ui.text.font.*
 import androidx.compose.ui.tooling.preview.*
 import androidx.compose.ui.unit.*
+import androidx.lifecycle.compose.collectAsStateWithLifecycle
+import com.lossydragon.modplayer.R
 import com.lossydragon.modplayer.ui.theme.AppTheme
 import com.lossydragon.native.model.FrameInfo
+import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.flow.StateFlow
 
+/** Collects the 50 Hz frame flow itself so only this row recomposes per frame. */
 @Composable
 internal fun PatternInfoRow(
-    fi: FrameInfo,
+    frameInfo: StateFlow<FrameInfo>,
     modifier: Modifier = Modifier
 ) {
+    val fi by frameInfo.collectAsStateWithLifecycle()
+
     Row(
         modifier = modifier
             .fillMaxWidth()
@@ -24,11 +32,11 @@ internal fun PatternInfoRow(
         content = {
             val numRows = fi.numRows.toString()
             val row = "${fi.row.toString().padStart(numRows.length)}/$numRows"
-            InfoChip(label = "Pos", value = "${fi.pos}")
-            InfoChip(label = "Pat", value = "${fi.pattern}")
-            InfoChip(label = "Row", value = row) // Pad fix
-            InfoChip(label = "Spd", value = "${fi.speed}")
-            InfoChip(label = "BPM", value = "${fi.bpm}")
+            InfoChip(label = stringResource(R.string.info_pos), value = "${fi.pos}")
+            InfoChip(label = stringResource(R.string.info_pat), value = "${fi.pattern}")
+            InfoChip(label = stringResource(R.string.info_row), value = row)
+            InfoChip(label = stringResource(R.string.info_spd), value = "${fi.speed}")
+            InfoChip(label = stringResource(R.string.info_bpm), value = "${fi.bpm}")
         }
     )
 }
@@ -58,13 +66,15 @@ private fun Preview() {
     AppTheme {
         Surface {
             PatternInfoRow(
-                fi = FrameInfo(
-                    pos = 3,
-                    pattern = 4,
-                    row = 6,
-                    numRows = 64,
-                    speed = 12,
-                    bpm = 128,
+                frameInfo = MutableStateFlow(
+                    FrameInfo(
+                        pos = 3,
+                        pattern = 4,
+                        row = 6,
+                        numRows = 64,
+                        speed = 12,
+                        bpm = 128,
+                    )
                 )
             )
         }

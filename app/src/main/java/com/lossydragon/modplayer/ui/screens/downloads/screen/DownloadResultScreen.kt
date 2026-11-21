@@ -28,26 +28,39 @@ import com.lossydragon.modplayer.ui.screens.downloads.SearchResultType
 import com.lossydragon.modplayer.ui.screens.downloads.SearchType
 import com.lossydragon.modplayer.ui.screens.downloads.components.DownloadListItem
 import com.lossydragon.modplayer.ui.theme.AppTheme
+import com.lossydragon.modplayer.util.UiText
+import com.lossydragon.modplayer.util.asString
+import com.lossydragon.modplayer.util.sizeKb
 import kotlinx.coroutines.flow.flowOf
-import org.koin.androidx.compose.koinViewModel
+
+/** What a results screen lists; each one is its own nav entry. */
+sealed interface ResultRequest {
+    data class Search(val query: String, val type: SearchType) : ResultRequest
+    data class Artist(val id: Int, val alias: String) : ResultRequest
+}
 
 @Composable
 internal fun DownloadResultScreen(
-    searchType: SearchType,
-    query: String,
+    viewModel: DownloadsViewModel,
+    request: ResultRequest,
     onBack: () -> Unit,
     modifier: Modifier = Modifier,
-    onModuleClick: (Int) -> Unit
+    onModuleClick: (Int) -> Unit,
+    onArtistClick: (Int, String) -> Unit
 ) {
-    val viewModel = koinViewModel<DownloadsViewModel>()
     val state by viewModel.searchState.collectAsStateWithLifecycle()
     val pagingItems = viewModel.pagingData.collectAsLazyPagingItems()
 
-    LaunchedEffect(Unit) {
-        if (searchType == SearchType.ARTIST) {
-            viewModel.searchArtist(query)
-        } else {
-            viewModel.searchFileOrTitle(query)
+    // The ViewModel ignores a repeat of its current command, so re-entry keeps the loaded pages.
+    LaunchedEffect(request) {
+        when (request) {
+            is ResultRequest.Search -> if (request.type == SearchType.ARTIST) {
+                viewModel.searchArtist(request.query)
+            } else {
+                viewModel.searchFileOrTitle(request.query)
+            }
+
+            is ResultRequest.Artist -> viewModel.getArtistById(request.id, request.alias)
         }
     }
 
@@ -57,7 +70,7 @@ internal fun DownloadResultScreen(
         pagingItems = pagingItems,
         onBack = onBack,
         onModuleClick = onModuleClick,
-        onArtistClick = viewModel::getArtistById,
+        onArtistClick = onArtistClick,
     )
 }
 
@@ -69,7 +82,7 @@ private fun DownloadScreenContent(
     onBack: () -> Unit,
     onModuleClick: (Int) -> Unit,
     modifier: Modifier = Modifier,
-    onArtistClick: (Int) -> Unit
+    onArtistClick: (Int, String) -> Unit
 ) {
     val noResultsText = when (state.activeType) {
         SearchResultType.ARTISTS -> stringResource(R.string.message_no_artists)
@@ -82,7 +95,7 @@ private fun DownloadScreenContent(
             CenterAlignedTopAppBar(
                 title = {
                     Text(
-                        text = state.title.ifBlank { stringResource(R.string.results) },
+                        text = state.title?.asString() ?: stringResource(R.string.results),
                         maxLines = 1,
                         overflow = TextOverflow.Ellipsis
                     )
@@ -101,7 +114,6 @@ private fun DownloadScreenContent(
                     modifier = Modifier.align(Alignment.Center)
                 )
 
-                // Wowsie!
                 pagingItems.loadState.refresh is LoadState.Error ||
                     (pagingItems.itemCount == 0 && state.activeType != SearchResultType.NONE) -> {
                     val text = (pagingItems.loadState.refresh as? LoadState.Error)
@@ -132,7 +144,7 @@ private fun DownloadScreenContent(
 
                             is Item -> DownloadListItem(
                                 text = item.alias,
-                                onClick = { onArtistClick(item.id) }
+                                onClick = { onArtistClick(item.id, item.alias) }
                             )
                         }
                     }
@@ -158,13 +170,13 @@ private fun PreviewModules() {
     AppTheme {
         DownloadScreenContent(
             state = DownloadSearchState(
-                title = "Results: foo",
+                title = UiText.Raw("Results: foo"),
                 activeType = SearchResultType.MODULES
             ),
             pagingItems = items.collectAsLazyPagingItems(),
             onBack = {},
             onModuleClick = {},
-            onArtistClick = {},
+            onArtistClick = { _, _ -> },
         )
     }
 }
@@ -176,13 +188,13 @@ private fun PreviewArtists() {
     AppTheme {
         DownloadScreenContent(
             state = DownloadSearchState(
-                title = "Artists: foo",
+                title = UiText.Raw("Artists: foo"),
                 activeType = SearchResultType.ARTISTS
             ),
             pagingItems = items.collectAsLazyPagingItems(),
             onBack = {},
             onModuleClick = {},
-            onArtistClick = {},
+            onArtistClick = { _, _ -> },
         )
     }
 }

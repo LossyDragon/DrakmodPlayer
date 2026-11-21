@@ -3,15 +3,16 @@
 //
 
 #include "audio.h"
-#include "common.h"
 #include "player-common.h"
 #include "player.h"
 #include "xmp.h"
 #include <algorithm>
 #include <android/log.h>
 #include <array>
+#include <atomic>
 #include <cerrno>
 #include <cstdio>
+#include <cstdlib>
 #include <cstring>
 #include <jni.h>
 #include <memory>
@@ -29,8 +30,20 @@ constexpr const char* TAG = "Drakplayer (libxmp) JNI";
 constexpr int MAX_BUFFER_SIZE = 1024;
 constexpr int PERIOD_BASE = 13696;
 
-xmp_subinstrument* getSubinstrument(const xmp_module_info& mi, int ins, int key) {
-  if (ins < 0 || ins >= mi.mod->ins || key < 0 || key >= XMP_MAX_KEYS) return nullptr;
+// Audio-thread view of the context: set by init, nulled (with the callback drained) before free.
+static std::atomic<xmp_context> g_render_ctx(nullptr);
+// passed as the loop arg to xmp_play_buffer: 0 = loop forever (repeat-one), 1 = play once
+static std::atomic<int> g_loop_flag(1);
+
+// Published by the render callback after every xmp_play_buffer; `valid` is false while stopped.
+struct FrameSnapshot {
+  bool valid = false;
+  xmp_frame_info fi{};
+};
+static SeqLock<FrameSnapshot> g_frame;
+
+static xmp_subinstrument* getSubinstrument(const xmp_module_info& mi, int ins, int key) {
+  if (!mi.mod || ins < 0 || ins >= mi.mod->ins || key < 0 || key >= XMP_MAX_KEYS) return nullptr;
   if (mi.mod->xxi[ins].map[key].ins == 0xff) return nullptr;
 
   int mapped = mi.mod->xxi[ins].map[key].ins;
@@ -39,8 +52,8 @@ xmp_subinstrument* getSubinstrument(const xmp_module_info& mi, int ins, int key)
   return &mi.mod->xxi[ins].sub[mapped];
 }
 
-constexpr const char* xmpErrorString(int code) {
-  constexpr std::array<const char*, 9> table = {
+static const char* xmpErrorString(int code) {
+  static constexpr std::array<const char*, 9> table = {
     "",                     // 0 unused
     "End of module",        // XMP_END = 1
     "Internal error",       // XMP_ERROR_INTERNAL = 2
@@ -69,6 +82,7 @@ struct XmpPlayerState {
     return std::unique_lock<std::mutex>(mutex);
   }
 
+  // Serialises engine-thread mutations against visualisation readers. Never taken by the audio thread.
   std::mutex mutex;
   bool initialized = false;
   bool mod_is_loaded = false;
@@ -89,6 +103,43 @@ private:
   XmpPlayerState() = default;
 };
 
+static int render_xmp(void* audioData, int32_t numFrames, int32_t numChannels, int32_t bytesPerSample) {
+  const int numBytes = numFrames * numChannels * bytesPerSample;
+  xmp_context ctx = g_render_ctx.load(std::memory_order_acquire);
+  if (ctx == nullptr) {
+    memset(audioData, 0, numBytes);
+    return 0;
+  }
+  int ret = xmp_play_buffer(ctx, audioData, numBytes, g_loop_flag.load(std::memory_order_relaxed));
+  g_frame.update([&](FrameSnapshot& s) {
+    s.valid = true;
+    xmp_get_frame_info(ctx, &s.fi);
+  });
+  // libxmp reports end of module as -XMP_END; any error also ends playback
+  return ret < 0 ? -1 : 0;
+}
+
+// Callers hold state.mutex and have the callback drained (RenderPause or set_playing(0)).
+static void drop_module(XmpPlayerState& state) {
+  if (state.mod_is_loaded && state.ctx) xmp_release_module(state.ctx);
+  state.mod_is_loaded = false;
+  state.playing = false;
+  state.mi = {};
+  g_frame.reset();
+  clear_module_ended();
+}
+
+static void destroy_context(XmpPlayerState& state) {
+  set_playing(0);
+  g_render_ctx.store(nullptr, std::memory_order_release);
+  drop_module(state);
+  if (state.ctx) {
+    xmp_free_context(state.ctx);
+    state.ctx = nullptr;
+  }
+  state.initialized = false;
+}
+
 jboolean xmp_hasEnded(JNIEnv* env) {
   return has_module_ended() ? JNI_TRUE : JNI_FALSE;
 }
@@ -97,6 +148,12 @@ jboolean xmp_init(JNIEnv* env, jint rate, jint ms, jint mode, jint channels, jin
   LOG_INFO("init() called - rate: %d, ms: %d, tid: %d", rate, ms, gettid());
 
   XmpPlayerState& state = XmpPlayerState::instance();
+  std::unique_lock<std::mutex> lock = state.lock();
+
+  if (state.ctx) {
+    LOG_WARN("init() - context already exists, destroying it first");
+    destroy_context(state);
+  }
 
   xmp_context ctx = xmp_create_context();
   if (!ctx) {
@@ -113,7 +170,8 @@ jboolean xmp_init(JNIEnv* env, jint rate, jint ms, jint mode, jint channels, jin
 
   state.ctx = ctx;
   state.actual_rate = actual_rate;
-  set_xmp_context(ctx);
+  g_render_ctx.store(ctx, std::memory_order_release);
+  set_render_callback(render_xmp);
 
   if (actual_rate != rate) {
     LOG_INFO("init() - sample rate adjusted: requested=%d, actual=%d", rate, actual_rate);
@@ -133,17 +191,19 @@ jboolean xmp_init(JNIEnv* env, jint rate, jint ms, jint mode, jint channels, jin
 
 jboolean xmp_setSequence(JNIEnv* env, jint seq) {
   XmpPlayerState& state = XmpPlayerState::instance();
+  RenderPause pause;
+  std::unique_lock<std::mutex> lock = state.lock();
   const xmp_module_info& mi = state.mi;
 
-  if (seq >= mi.num_sequences) return JNI_FALSE;
+  if (!state.ctx || !state.mod_is_loaded || !mi.seq_data) return JNI_FALSE;
+  if (seq < 0 || seq >= mi.num_sequences) return JNI_FALSE;
   if (mi.seq_data[seq].duration <= 0) return JNI_FALSE;
   if (state.sequence == seq) return JNI_FALSE;
 
-  set_playing(0);
   state.sequence = seq;
   xmp_set_position(state.ctx, mi.seq_data[seq].entry_point);
   xmp_play_buffer(state.ctx, nullptr, 0, 0);
-  set_playing(1);
+  clear_module_ended();
 
   return JNI_TRUE;
 }
@@ -195,19 +255,10 @@ jint xmp_deinit(JNIEnv* env) {
   LOG_INFO("deinit() called - tid: %d", gettid());
 
   XmpPlayerState& state = XmpPlayerState::instance();
-
   {
     std::unique_lock<std::mutex> lock = state.lock();
-    LOG_DEBUG("deinit() - acquired lock");
-    state.initialized = false;
-    state.mod_is_loaded = false;
-    set_playing(0); // silence callback and drain any in-flight invocation
-    set_xmp_context(nullptr);
-    xmp_free_context(state.ctx);
-    state.ctx = nullptr;
-    LOG_DEBUG("deinit() - freed context");
+    destroy_context(state);
   }
-  LOG_DEBUG("deinit() - released lock");
 
   close_audio();
   LOG_INFO("deinit() completed - tid: %d", gettid());
@@ -220,13 +271,12 @@ jint xmp_endPlayer(JNIEnv* env) {
 
   XmpPlayerState& state = XmpPlayerState::instance();
   std::unique_lock<std::mutex> lock = state.lock();
-  LOG_DEBUG("endPlayer() - acquired lock");
 
   if (state.playing) {
-    set_playing(0); // silence callback and wait for in-flight invocation to finish
+    set_playing(0);
     state.playing = false;
-    LOG_DEBUG("endPlayer() - stopping player");
-    xmp_end_player(state.ctx);
+    if (state.ctx) xmp_end_player(state.ctx);
+    g_frame.reset();
   }
 
   LOG_INFO("endPlayer() completed - tid: %d", gettid());
@@ -235,7 +285,8 @@ jint xmp_endPlayer(JNIEnv* env) {
 
 jint xmp_getPatternRows(JNIEnv* env, jint pat) {
   XmpPlayerState& state = XmpPlayerState::instance();
-  if (!state.mod_is_loaded) return 0;
+  std::unique_lock<std::mutex> lock = state.lock();
+  if (!state.mod_is_loaded || !state.mi.mod) return 0;
 
   const xmp_module_info& mi = state.mi;
   if (pat < 0 || pat >= mi.mod->pat) return 0;
@@ -246,6 +297,8 @@ jint xmp_getPatternRows(JNIEnv* env, jint pat) {
 
 jint xmp_getPlayer(JNIEnv* env, jint parm) {
   XmpPlayerState& state = XmpPlayerState::instance();
+  std::unique_lock<std::mutex> lock = state.lock();
+  if (!state.ctx) return 0;
   return xmp_get_player(state.ctx, parm);
 }
 
@@ -255,6 +308,7 @@ jint xmp_loadFd(JNIEnv* env, jint fd, jobject modInfo) {
   std::unique_ptr<FILE, decltype(&fclose)> file(fdopen(fd, "rb"), fclose);
   if (!file) {
     LOG_ERROR("loadModuleFd() - fdopen failed: %s", strerror(errno));
+    close(fd);
     return -1;
   }
 
@@ -282,6 +336,15 @@ jint xmp_loadFd(JNIEnv* env, jint fd, jobject modInfo) {
   }
 
   XmpPlayerState& state = XmpPlayerState::instance();
+  RenderPause pause;
+  pause.stay_stopped(); // loading ends the player; Kotlin restarts it via startPlayer
+  std::unique_lock<std::mutex> lock = state.lock();
+  if (!state.ctx) {
+    LOG_ERROR("loadModuleFd() - no context");
+    return -4;
+  }
+
+  drop_module(state);
   res = xmp_load_module_from_file(state.ctx, file.get(), static_cast<off_t>(statbuf.st_size));
 
   if (res == 0) {
@@ -290,6 +353,9 @@ jint xmp_loadFd(JNIEnv* env, jint fd, jobject modInfo) {
     state.sequence = 0;
     state.mod_is_loaded = true;
     LOG_INFO("loadModuleFd() - loaded: %s", ti.name);
+  } else {
+    state.mi = {};
+    LOG_WARN("loadModuleFd() - load failed: %s (%d)", xmpErrorString(res), res);
   }
 
   return res;
@@ -297,6 +363,9 @@ jint xmp_loadFd(JNIEnv* env, jint fd, jobject modInfo) {
 
 jint xmp_mute(JNIEnv* env, jint chn, jint status) {
   XmpPlayerState& state = XmpPlayerState::instance();
+  RenderPause pause;
+  std::unique_lock<std::mutex> lock = state.lock();
+  if (!state.ctx) return -1;
   return xmp_channel_mute(state.ctx, chn, status);
 }
 
@@ -306,47 +375,58 @@ jint xmp_playAudio(JNIEnv* env) {
 
 jint xmp_releaseModule(JNIEnv* env) {
   XmpPlayerState& state = XmpPlayerState::instance();
+  RenderPause pause;
+  pause.stay_stopped();
   std::unique_lock<std::mutex> lock = state.lock();
-
-  if (state.mod_is_loaded) {
-    state.mod_is_loaded = false;
-    xmp_release_module(state.ctx);
-  }
-
+  drop_module(state);
   return 0;
 }
 
 jint xmp_seek(JNIEnv* env, jint time) {
   XmpPlayerState& state = XmpPlayerState::instance();
+  RenderPause pause;
   std::unique_lock<std::mutex> lock = state.lock();
+  if (!state.ctx) return -1;
   return xmp_seek_time(state.ctx, time);
 }
 
 jint xmp_setPlayer(JNIEnv* env, jint parm, jint value) {
   XmpPlayerState& state = XmpPlayerState::instance();
+  RenderPause pause;
+  std::unique_lock<std::mutex> lock = state.lock();
+  if (!state.ctx) return -1;
   auto res = xmp_set_player(state.ctx, parm, value);
-  if (res != 0) LOG_WARN("xmp_play_buffer: %s (%d)", xmpErrorString(res), res);
+  if (res != 0) LOG_WARN("xmp_set_player(%d, %d): %s (%d)", parm, value, xmpErrorString(res), res);
   return res;
 }
 
 jint xmp_startPlayer(JNIEnv* env, jint rate, jint format) {
   XmpPlayerState& state = XmpPlayerState::instance();
-  int use_rate = state.actual_rate > 0 ? state.actual_rate : rate;
+  RenderPause pause;
+  pause.stay_stopped(); // set_playing(1) below decides, and also clears module_ended
+  std::unique_lock<std::mutex> lock = state.lock();
 
+  if (!state.ctx || !state.mod_is_loaded) {
+    LOG_ERROR("startPlayer() - no module loaded");
+    return -XMP_ERROR_STATE;
+  }
+
+  int use_rate = state.actual_rate > 0 ? state.actual_rate : rate;
   LOG_INFO("startPlayer() - requested: %d, using: %d, tid: %d", rate, use_rate, gettid());
 
-  std::unique_lock<std::mutex> lock = state.lock();
-  LOG_DEBUG("startPlayer() - acquired lock");
-
   state.last_key.fill(-1);
-  state.playing = true;
+  state.cur_vol.fill(0);
+  state.hold_vol.fill(0);
+  g_frame.reset();
 
-  reset_render_callback();
+  set_render_callback(render_xmp);
   int ret = xmp_start_player(state.ctx, use_rate, get_effective_format_flags());
   if (ret == 0) {
-    set_playing(1); // tell callback to start calling xmp_play_buffer
+    state.playing = true;
+    set_playing(1);
   } else {
     state.playing = false;
+    LOG_WARN("startPlayer() - xmp_start_player: %s (%d)", xmpErrorString(ret), ret);
   }
 
   LOG_INFO("startPlayer() completed - result: %d, tid: %d", ret, gettid());
@@ -401,11 +481,6 @@ void xmp_getAudioStats(JNIEnv* env, jobject info) {
 void xmp_getChannelData(JNIEnv* env, jobject channelInfo) {
   XmpPlayerState& state = XmpPlayerState::instance();
 
-  if (!state.initialized) {
-    LOG_WARN("getChannelData() - early exit: not initialized - tid: %d", gettid());
-    return;
-  }
-
   int chn = 0;
   std::array<int, XMP_MAX_CHANNELS> lVol{}, lFinalVol{}, lPan{}, lIns{};
   std::array<int, XMP_MAX_CHANNELS> lKey{}, lPeriod{}, lHoldVol{};
@@ -413,17 +488,20 @@ void xmp_getChannelData(JNIEnv* env, jobject channelInfo) {
 
   {
     std::unique_lock<std::mutex> lock = state.lock();
-    if (!state.mod_is_loaded || !state.playing) return;
+    if (!state.initialized || !state.mod_is_loaded || !state.playing || !state.mi.mod) return;
+
+    static thread_local FrameSnapshot snap; // 1.6 KB; keep it off the stack of UI threads
+    if (!g_frame.read(snap) || !snap.valid) return;
 
     const xmp_module_info& mi = state.mi;
-    chn = mi.mod->chn;
-    xmp_frame_info fi = {};
-    xmp_get_frame_info(state.ctx, &fi);
+    const xmp_frame_info& fi = snap.fi;
+    chn = std::min<int>(mi.mod->chn, XMP_MAX_CHANNELS);
+    const int vol_base = mi.vol_base > 0 ? mi.vol_base : 0x40;
 
     for (int i = 0; i < chn; i++) {
       const xmp_channel_info& ci = fi.channel_info[i];
 
-      if (ci.event.vol > 0) state.hold_vol[i] = ci.event.vol * 0x40 / mi.vol_base;
+      if (ci.event.vol > 0) state.hold_vol[i] = ci.event.vol * 0x40 / vol_base;
 
       state.cur_vol[i] = std::max(0, state.cur_vol[i] - state.decay);
 
@@ -431,17 +509,17 @@ void xmp_getChannelData(JNIEnv* env, jobject channelInfo) {
       if (ci.event.note > 0 && ci.event.note <= 0x80) {
         key = ci.event.note - 1;
         state.last_key[i] = key;
-        if (xmp_subinstrument* sub = getSubinstrument(mi, ci.instrument, key)) state.cur_vol[i] = sub->vol * 0x40 / mi.vol_base;
+        if (xmp_subinstrument* sub = getSubinstrument(mi, ci.instrument, key)) state.cur_vol[i] = sub->vol * 0x40 / vol_base;
       }
       if (ci.event.vol > 0) {
         key = state.last_key[i];
-        state.cur_vol[i] = ci.event.vol * 0x40 / mi.vol_base;
+        state.cur_vol[i] = ci.event.vol * 0x40 / vol_base;
       }
 
       lVol[i] = state.cur_vol[i];
       lHoldVol[i] = state.hold_vol[i];
       lKey[i] = key;
-      lIns[i] = static_cast<unsigned char>(ci.instrument);
+      lIns[i] = (ci.instrument == 0xff) ? -1 : ci.instrument; // -1 = no instrument, same as openmpt
       lFinalVol[i] = ci.volume;
       lPan[i] = ci.pan;
       lPeriod[i] = static_cast<int>(ci.period) >> 8;
@@ -454,7 +532,8 @@ void xmp_getChannelData(JNIEnv* env, jobject channelInfo) {
 
   auto set = [&](jfieldID fid, const std::array<int, XMP_MAX_CHANNELS>& arr) {
     auto obj = (jintArray)env->GetObjectField(channelInfo, fid);
-    env->SetIntArrayRegion(obj, 0, chn, arr.data());
+    if (obj) env->SetIntArrayRegion(obj, 0, chn, arr.data());
+    env->DeleteLocalRef(obj);
   };
 
   set(g_channelInfo.volumes, lVol);
@@ -471,65 +550,31 @@ void xmp_getChannelData(JNIEnv* env, jobject channelInfo) {
 }
 
 void xmp_getFrameInfo(JNIEnv* env, jobject frameInfo) {
-  XmpPlayerState& state = XmpPlayerState::instance();
+  static thread_local FrameSnapshot snap;
+  if (!g_frame.read(snap) || !snap.valid) return;
+  const xmp_frame_info& fi = snap.fi;
 
-  if (!state.initialized) return;
-
-  struct Snap {
-    int pos, pattern, row, numRows, frame, speed, bpm, time, totalTime;
-    int frameTime, bufferSize, totalSize, volume, loopCount, virtChannels, virtUsed, sequence;
-  } s{};
-
-  {
-    std::unique_lock<std::mutex> lock = state.lock();
-    if (!state.mod_is_loaded || !state.playing) return;
-    xmp_frame_info fi = {};
-    xmp_get_frame_info(state.ctx, &fi);
-    s = {fi.pos,
-      fi.pattern,
-      fi.row,
-      fi.num_rows,
-      fi.frame,
-      fi.speed,
-      fi.bpm,
-      fi.time,
-      fi.total_time,
-      fi.frame_time,
-      fi.buffer_size,
-      fi.total_size,
-      fi.volume,
-      fi.loop_count,
-      fi.virt_channels,
-      fi.virt_used,
-      fi.sequence};
-  }
-
-  env->SetIntField(frameInfo, g_frameInfo.pos, s.pos);
-  env->SetIntField(frameInfo, g_frameInfo.pattern, s.pattern);
-  env->SetIntField(frameInfo, g_frameInfo.row, s.row);
-  env->SetIntField(frameInfo, g_frameInfo.numRows, s.numRows);
-  env->SetIntField(frameInfo, g_frameInfo.frame, s.frame);
-  env->SetIntField(frameInfo, g_frameInfo.speed, s.speed);
-  env->SetIntField(frameInfo, g_frameInfo.bpm, s.bpm);
-  env->SetIntField(frameInfo, g_frameInfo.time, s.time);
-  env->SetIntField(frameInfo, g_frameInfo.totalTime, s.totalTime);
-  env->SetIntField(frameInfo, g_frameInfo.frameTime, s.frameTime);
-  env->SetIntField(frameInfo, g_frameInfo.bufferSize, s.bufferSize);
-  env->SetIntField(frameInfo, g_frameInfo.totalSize, s.totalSize);
-  env->SetIntField(frameInfo, g_frameInfo.volume, s.volume);
-  env->SetIntField(frameInfo, g_frameInfo.loopCount, s.loopCount);
-  env->SetIntField(frameInfo, g_frameInfo.virtChannels, s.virtChannels);
-  env->SetIntField(frameInfo, g_frameInfo.virtUsed, s.virtUsed);
-  env->SetIntField(frameInfo, g_frameInfo.sequence, s.sequence);
+  env->SetIntField(frameInfo, g_frameInfo.pos, fi.pos);
+  env->SetIntField(frameInfo, g_frameInfo.pattern, fi.pattern);
+  env->SetIntField(frameInfo, g_frameInfo.row, fi.row);
+  env->SetIntField(frameInfo, g_frameInfo.numRows, fi.num_rows);
+  env->SetIntField(frameInfo, g_frameInfo.frame, fi.frame);
+  env->SetIntField(frameInfo, g_frameInfo.speed, fi.speed);
+  env->SetIntField(frameInfo, g_frameInfo.bpm, fi.bpm);
+  env->SetIntField(frameInfo, g_frameInfo.time, fi.time);
+  env->SetIntField(frameInfo, g_frameInfo.totalTime, fi.total_time);
+  env->SetIntField(frameInfo, g_frameInfo.frameTime, fi.frame_time);
+  env->SetIntField(frameInfo, g_frameInfo.bufferSize, fi.buffer_size);
+  env->SetIntField(frameInfo, g_frameInfo.totalSize, fi.total_size);
+  env->SetIntField(frameInfo, g_frameInfo.volume, fi.volume);
+  env->SetIntField(frameInfo, g_frameInfo.loopCount, fi.loop_count);
+  env->SetIntField(frameInfo, g_frameInfo.virtChannels, fi.virt_channels);
+  env->SetIntField(frameInfo, g_frameInfo.virtUsed, fi.virt_used);
+  env->SetIntField(frameInfo, g_frameInfo.sequence, fi.sequence);
 }
 
 void xmp_getModVars(JNIEnv* env, jobject modVars) {
   XmpPlayerState& state = XmpPlayerState::instance();
-
-  if (!state.initialized) {
-    LOG_WARN("getModVars() - early exit: not initialized - tid: %d", gettid());
-    return;
-  }
 
   std::string modName, modType, modComment;
   int pat, trk, chn, ins, smp, spd, bpm, len, rst, gvl, numSeq;
@@ -541,7 +586,7 @@ void xmp_getModVars(JNIEnv* env, jobject modVars) {
 
   {
     std::unique_lock<std::mutex> lock = state.lock();
-    if (!state.mod_is_loaded) {
+    if (!state.initialized || !state.mod_is_loaded || !state.mi.mod) {
       LOG_WARN("getModVars() - module not loaded - tid: %d", gettid());
       return;
     }
@@ -638,18 +683,10 @@ static void packEffect(uint8_t type, uint8_t parm, jbyte& outType, jbyte& outPar
 }
 
 void xmp_getPatternRow(JNIEnv* env, jint pat, jint row, jbyteArray rowNotes, jbyteArray rowInstruments, jbyteArray rowFxType, jbyteArray rowFxParm, jbyteArray rowFx2Type, jbyteArray rowFx2Parm) {
+  if (!rowNotes || !rowInstruments || !rowFxType || !rowFxParm || !rowFx2Type || !rowFx2Parm) return;
   XmpPlayerState& state = XmpPlayerState::instance();
 
-  if (!state.mod_is_loaded) return;
-
-  const xmp_module_info& mi = state.mi;
-  if (pat < 0 || pat >= mi.mod->pat) return;
-
-  const xmp_pattern* xxp = mi.mod->xxp[pat];
-  if (!xxp || row >= xxp->rows) return;
-
-  int chn = mi.mod->chn;
-
+  int chn = 0;
   std::array<jbyte, XMP_MAX_CHANNELS> row_note{};
   std::array<jbyte, XMP_MAX_CHANNELS> row_ins{};
   std::array<jbyte, XMP_MAX_CHANNELS> row_fxt{};
@@ -657,14 +694,28 @@ void xmp_getPatternRow(JNIEnv* env, jint pat, jint row, jbyteArray rowNotes, jby
   std::array<jbyte, XMP_MAX_CHANNELS> row_f2t{};
   std::array<jbyte, XMP_MAX_CHANNELS> row_f2p{};
 
-  for (int i = 0; i < chn; i++) {
-    const xmp_track* xxt = mi.mod->xxt[xxp->index[i]];
-    const xmp_event& e = xxt->event[row];
+  {
+    std::unique_lock<std::mutex> lock = state.lock();
+    if (!state.mod_is_loaded || !state.mi.mod) return;
 
-    row_note[i] = static_cast<jbyte>(e.note);
-    row_ins[i] = static_cast<jbyte>(e.ins);
-    packEffect(e.fxt, e.fxp, row_fxt[i], row_fxp[i]);
-    packEffect(e.f2t, e.f2p, row_f2t[i], row_f2p[i]);
+    const xmp_module_info& mi = state.mi;
+    if (pat < 0 || pat >= mi.mod->pat || row < 0) return;
+
+    const xmp_pattern* xxp = mi.mod->xxp[pat];
+    if (!xxp || row >= xxp->rows) return;
+
+    chn = std::min<int>(mi.mod->chn, XMP_MAX_CHANNELS);
+
+    for (int i = 0; i < chn; i++) {
+      const xmp_track* xxt = mi.mod->xxt[xxp->index[i]];
+      if (!xxt || row >= xxt->rows) continue;
+      const xmp_event& e = xxt->event[row];
+
+      row_note[i] = static_cast<jbyte>(e.note);
+      row_ins[i] = static_cast<jbyte>(e.ins);
+      packEffect(e.fxt, e.fxp, row_fxt[i], row_fxp[i]);
+      packEffect(e.f2t, e.f2p, row_f2t[i], row_f2p[i]);
+    }
   }
 
   env->SetByteArrayRegion(rowNotes, 0, chn, row_note.data());
@@ -676,16 +727,17 @@ void xmp_getPatternRow(JNIEnv* env, jint pat, jint row, jbyteArray rowNotes, jby
 }
 
 void xmp_getSampleData(JNIEnv* env, jboolean trigger, jint ins, jint key, jint period, jint chn, jint width, jbyteArray buffer) {
-  XmpPlayerState& state = XmpPlayerState::instance();
-
+  if (!buffer) return;
   width = std::min(width, MAX_BUFFER_SIZE);
+  if (width <= 0) return;
 
+  XmpPlayerState& state = XmpPlayerState::instance();
   std::array<jbyte, MAX_BUFFER_SIZE> sample_buffer{};
 
   [&]() {
     std::unique_lock<std::mutex> lock = state.lock();
 
-    if (!state.mod_is_loaded) return;
+    if (!state.mod_is_loaded || !state.mi.mod) return;
     if (chn < 0 || chn >= XMP_MAX_CHANNELS) return;
     if (period <= 0 || ins < 0 || key < 0 || key >= XMP_MAX_KEYS) return;
 
@@ -754,7 +806,7 @@ void xmp_getSampleData(JNIEnv* env, jboolean trigger, jint ins, jint key, jint p
 void xmp_setLoopMode(JNIEnv* env, jboolean loop) {
   // loop=true  → xmp_play_buffer loop=0 (loop forever, repeat-one)
   // loop=false → xmp_play_buffer loop=1 (play once, signal end)
-  set_loop_mode(loop == JNI_TRUE ? 0 : 1);
+  g_loop_flag.store(loop == JNI_TRUE ? 0 : 1, std::memory_order_relaxed);
 }
 
 void xmp_setPlaying(JNIEnv* env, jboolean value) {
@@ -764,19 +816,5 @@ void xmp_setPlaying(JNIEnv* env, jboolean value) {
 void xmp_freeContext(JNIEnv* env) {
   XmpPlayerState& state = XmpPlayerState::instance();
   std::unique_lock<std::mutex> lock = state.lock();
-
-  set_playing(0);
-  set_xmp_context(nullptr);
-
-  if (state.mod_is_loaded) {
-    xmp_release_module(state.ctx);
-    state.mod_is_loaded = false;
-  }
-
-  if (state.ctx) {
-    xmp_free_context(state.ctx);
-    state.ctx = nullptr;
-  }
-
-  state.initialized = false;
+  destroy_context(state);
 }

@@ -43,15 +43,18 @@ fun DownloadSearchScreen(
     var query by rememberSaveable { mutableStateOf("") }
     var type by rememberSaveable { mutableStateOf(SearchType.TITLE) }
     var hasInteracted by rememberSaveable { mutableStateOf(false) }
+    var hasAutoFocused by rememberSaveable { mutableStateOf(false) }
 
+    // Open the keyboard on the first visit only, not every time the user comes back.
     LaunchedEffect(Unit) {
-        delay(500L.milliseconds) // Chill
+        if (hasAutoFocused) return@LaunchedEffect
+        hasAutoFocused = true
+        delay(500L.milliseconds)
         focusRequester.requestFocus()
     }
 
     Scaffold(
         modifier = modifier,
-        snackbarHost = { SnackbarHost(snackbarHostState) },
         topBar = {
             CenterAlignedTopAppBar(
                 title = { Text(text = stringResource(R.string.title_download)) },
@@ -87,20 +90,22 @@ fun DownloadSearchScreen(
             )
         },
         bottomBar = {
-            ShortNavigationBar(
-                modifier = Modifier
-                    .navigationBarsPadding()
-                    .imePadding(),
+            Surface(
+                modifier = Modifier.imePadding(),
+                color = MaterialTheme.colorScheme.surfaceContainer,
                 content = {
-                    Box(
-                        modifier = Modifier.fillMaxWidth(),
-                        contentAlignment = Alignment.Center,
+                    Row(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .padding(vertical = 12.dp),
+                        horizontalArrangement = Arrangement.Center,
                         content = {
                             Text(
                                 text = annotatedLinkString(
                                     text = stringResource(R.string.search_api_credits),
                                     url = Constants.TMA_BASE_URL,
                                 ),
+                                style = MaterialTheme.typography.bodySmall,
                             )
                         }
                     )
@@ -150,6 +155,9 @@ fun DownloadSearchScreen(
 
                 Spacer(modifier = Modifier.height(24.dp))
 
+                // ButtonGroup items are built outside composition; resolve the labels first.
+                val titleLabel = stringResource(R.string.search_selection_title)
+                val artistLabel = stringResource(R.string.search_selection_artist)
                 ButtonGroup(
                     modifier = Modifier.padding(horizontal = 16.dp),
                     expandedRatio = .20f,
@@ -158,14 +166,14 @@ fun DownloadSearchScreen(
                         toggleableItem(
                             checked = type == SearchType.TITLE,
                             enabled = hasApiKey,
-                            label = resource.getString(R.string.search_selection_title),
+                            label = titleLabel,
                             onCheckedChange = { type = SearchType.TITLE },
                             weight = 1f,
                         )
                         toggleableItem(
                             checked = type == SearchType.ARTIST,
                             enabled = hasApiKey,
-                            label = resource.getString(R.string.search_selection_artist),
+                            label = artistLabel,
                             onCheckedChange = { type = SearchType.ARTIST },
                             weight = 1f,
                         )

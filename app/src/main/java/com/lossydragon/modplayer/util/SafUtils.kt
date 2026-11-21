@@ -203,8 +203,7 @@ fun Context.findDownloadedModule(
 class PartialDownload(
     val dirUri: Uri,
     val partUri: Uri,
-    val finalName: String,
-    val stream: OutputStream
+    val finalName: String
 )
 
 private const val PART_SUFFIX = ".part"
@@ -233,8 +232,9 @@ private fun ContentResolver.findChildFile(rootUri: Uri, dirUri: Uri, name: Strin
 }
 
 /**
- * Opens a `<filename>.part` document for [module] in its download directory (replacing a stale
- * one), so an interrupted download never leaves a file that looks complete.
+ * Creates a `<filename>.part` document for [module] in its download directory (replacing a stale
+ * one), so an interrupted download never leaves a file that looks complete. Open it with
+ * [openPartialDownload] once there are bytes to write.
  */
 fun Context.createPartialDownload(
     rootUri: Uri,
@@ -248,11 +248,15 @@ fun Context.createPartialDownload(
     cr.findChildFile(rootUri, dirUri, partName)?.let { DocumentsContract.deleteDocument(cr, it) }
     val partUri = DocumentsContract.createDocument(cr, dirUri, "application/octet-stream", partName)
         ?: return null
-    val stream = cr.openOutputStream(partUri) ?: run {
-        DocumentsContract.deleteDocument(cr, partUri)
-        return null
-    }
-    PartialDownload(dirUri, partUri, finalName, stream)
+    PartialDownload(dirUri, partUri, finalName)
+} catch (e: Exception) {
+    Timber.e(e)
+    null
+}
+
+/** Opens the `.part` document for writing. Caller closes it. */
+fun Context.openPartialDownload(download: PartialDownload): OutputStream? = try {
+    contentResolver.openOutputStream(download.partUri)
 } catch (e: Exception) {
     Timber.e(e)
     null

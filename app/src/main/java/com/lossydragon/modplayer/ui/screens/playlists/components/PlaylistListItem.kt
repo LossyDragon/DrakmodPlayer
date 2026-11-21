@@ -36,7 +36,10 @@ internal fun PlaylistListItem(
             Column {
                 if (item.comment.isNotBlank()) Text(text = item.comment)
                 Text(
-                    text = "Created: ${item.createdAt.toReadableDate()}",
+                    text = stringResource(
+                        R.string.playlist_created,
+                        item.createdAt.toReadableDate()
+                    ),
                     fontSize = 10.sp,
                 )
             }
@@ -47,7 +50,10 @@ internal fun PlaylistListItem(
         trailingContent = {
             Box {
                 IconButton(onClick = { expanded = true }) {
-                    Icon(imageVector = Icons.Default.MoreVert, contentDescription = null)
+                    Icon(
+                        imageVector = Icons.Default.MoreVert,
+                        contentDescription = stringResource(R.string.desc_more_options)
+                    )
                 }
                 DropdownMenu(
                     expanded = expanded,

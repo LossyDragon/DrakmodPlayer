@@ -1,11 +1,7 @@
 package com.lossydragon.modplayer.data
 
-import android.content.Context
-import android.net.Uri
-import androidx.core.net.toUri
 import com.lossydragon.modplayer.db.entity.PlaylistEntity
 import com.lossydragon.modplayer.db.entity.PlaylistEntryEntity
-import com.lossydragon.modplayer.util.isAccessible
 import java.time.Instant
 import kotlinx.serialization.Serializable
 import kotlinx.serialization.json.Json
@@ -38,6 +34,17 @@ data class ImportResult(
     val playlistsImported: Int,
     val entriesImported: Int,
     val skipped: Int // entries whose URIs are no longer accessible
+)
+
+/** One playlist to insert with its (not yet renumbered) entries; `playlistId` is unset. */
+data class ImportedPlaylist(
+    val playlist: PlaylistEntity,
+    val entries: List<PlaylistEntryEntity>
+)
+
+data class ImportBatch(
+    val playlists: List<ImportedPlaylist>,
+    val result: ImportResult
 )
 
 private val json = Json {
@@ -75,69 +82,29 @@ fun exportPlaylistsToJson(
     return json.encodeToString(export)
 }
 
-/**
- * Writes the JSON string to [outputUri] via SAF.
- * Call from a coroutine on [kotlinx.coroutines.Dispatchers.IO].
- */
-fun writeExportToUri(
-    context: Context,
-    outputUri: Uri,
-    jsonString: String
-): Result<Unit> = runCatching {
-    context.contentResolver.openOutputStream(outputUri)?.use { stream ->
-        stream.write(jsonString.toByteArray(Charsets.UTF_8))
-    } ?: error("Could not open output stream for $outputUri")
-}
+fun parsePlaylistExport(jsonString: String): PlaylistExport = json.decodeFromString(jsonString)
 
 /**
- * Reads JSON from [inputUri] and returns parsed [PlaylistExport].
- * Call from a coroutine on [kotlinx.coroutines.Dispatchers.IO].
+ * Converts a [PlaylistExport] into entities ready to insert, in file order (duplicate names
+ * stay separate). Entries failing [isAccessible] are skipped; pass null to import everything.
  */
-fun readImportFromUri(
-    context: Context,
-    inputUri: Uri
-): Result<PlaylistExport> = runCatching {
-    val jsonString = context.contentResolver.openInputStream(inputUri)?.use { stream ->
-        stream.readBytes().toString(Charsets.UTF_8)
-    } ?: error("Could not open input stream for $inputUri")
-
-    json.decodeFromString(jsonString)
-}
-
-/**
- * Converts a [PlaylistExport] into [PlaylistEntity] and [PlaylistEntryEntity] pairs
- * ready to insert into Room.
- *
- * Optionally validates that each entry URI is still accessible via [context].
- * Set [validateUris] to false to import all entries regardless.
- */
-fun PlaylistExport.toRoomEntities(
-    context: Context,
-    validateUris: Boolean = true
-): Triple<List<PlaylistEntity>, Map<String, List<PlaylistEntryEntity>>, ImportResult> {
+fun PlaylistExport.toRoomEntities(isAccessible: ((String) -> Boolean)? = null): ImportBatch {
     var totalEntries = 0
     var skipped = 0
 
-    val playlistEntities = mutableListOf<PlaylistEntity>()
-    // keyed by playlist name since IDs aren't known until Room inserts
-    val entryMap = mutableMapOf<String, List<PlaylistEntryEntity>>()
-
-    for (importedPlaylist in playlists) {
+    val imported = playlists.map { importedPlaylist ->
         val playlist = PlaylistEntity(
             name = importedPlaylist.name,
             comment = importedPlaylist.comment,
             createdAt = importedPlaylist.createdAt,
         )
-        playlistEntities.add(playlist)
-
         val validEntries = importedPlaylist.entries.mapNotNull { entry ->
             totalEntries++
-            if (validateUris && !entry.uri.toUri().isAccessible(context)) {
+            if (isAccessible != null && !isAccessible(entry.uri)) {
                 Timber.w("Skipping inaccessible URI: ${entry.uri}")
                 skipped++
                 return@mapNotNull null
             }
-            // ID will be set after Room insert - use 0 as placeholder
             PlaylistEntryEntity(
                 playlistId = 0L,
                 position = entry.position,
@@ -146,14 +113,13 @@ fun PlaylistExport.toRoomEntities(
                 extension = entry.extension,
             )
         }
-        entryMap[importedPlaylist.name] = validEntries
+        ImportedPlaylist(playlist, validEntries)
     }
 
-    return Triple(
-        playlistEntities,
-        entryMap,
-        ImportResult(
-            playlistsImported = playlistEntities.size,
+    return ImportBatch(
+        playlists = imported,
+        result = ImportResult(
+            playlistsImported = imported.size,
             entriesImported = totalEntries - skipped,
             skipped = skipped,
         )

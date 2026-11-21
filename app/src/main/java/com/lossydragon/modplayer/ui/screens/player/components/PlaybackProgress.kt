@@ -6,22 +6,32 @@ import androidx.compose.runtime.*
 import androidx.compose.ui.*
 import androidx.compose.ui.tooling.preview.*
 import androidx.compose.ui.unit.*
+import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.lossydragon.modplayer.ui.theme.AppTheme
 import com.lossydragon.modplayer.util.formatMs
 import com.lossydragon.native.model.FrameInfo
+import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.flow.StateFlow
 
+/** Collects the 50 Hz frame flow itself so only this row recomposes per frame. */
 @Composable
 internal fun PlaybackProgress(
-    frameInfo: FrameInfo,
+    frameInfo: StateFlow<FrameInfo>,
     onSeek: (Long) -> Unit
 ) {
-    val duration = frameInfo.totalTime.toFloat().coerceAtLeast(1f)
+    val fi by frameInfo.collectAsStateWithLifecycle()
+    val duration = fi.totalTime.toFloat().coerceAtLeast(1f)
 
     var isSeeking by remember { mutableStateOf(false) }
     val state = rememberSliderState()
     // The engine drives the thumb except while the user is dragging it.
-    LaunchedEffect(frameInfo.time, duration) {
-        if (!isSeeking) state.value = (frameInfo.time.toFloat() / duration).coerceIn(0f, 1f)
+    LaunchedEffect(Unit) {
+        snapshotFlow { fi }.collect { info ->
+            if (!isSeeking) {
+                val total = info.totalTime.toFloat().coerceAtLeast(1f)
+                state.value = (info.time.toFloat() / total).coerceIn(0f, 1f)
+            }
+        }
     }
 
     Row(
@@ -34,7 +44,7 @@ internal fun PlaybackProgress(
                 text = if (isSeeking) {
                     (state.value * duration).toLong().formatMs()
                 } else {
-                    frameInfo.time.toLong().formatMs()
+                    fi.time.toLong().formatMs()
                 },
                 style = MaterialTheme.typography.titleMedium,
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
@@ -55,7 +65,7 @@ internal fun PlaybackProgress(
 
             Text(
                 modifier = Modifier.padding(horizontal = 6.dp),
-                text = frameInfo.totalTime.toLong().formatMs(),
+                text = fi.totalTime.toLong().formatMs(),
                 style = MaterialTheme.typography.titleMedium,
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
             )
@@ -69,9 +79,11 @@ private fun Preview() {
     AppTheme {
         Surface {
             PlaybackProgress(
-                frameInfo = FrameInfo(
-                    time = 47_000,
-                    totalTime = 237_000,
+                frameInfo = MutableStateFlow(
+                    FrameInfo(
+                        time = 47_000,
+                        totalTime = 237_000,
+                    )
                 ),
                 onSeek = {}
             )

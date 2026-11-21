@@ -7,8 +7,10 @@ import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.*
 import androidx.compose.ui.graphics.vector.*
+import androidx.compose.ui.res.*
 import androidx.compose.ui.text.style.*
 import androidx.compose.ui.tooling.preview.*
+import com.lossydragon.modplayer.R
 import com.lossydragon.modplayer.ui.theme.AppTheme
 
 @OptIn(ExperimentalMaterial3ExpressiveApi::class)
@@ -45,7 +47,7 @@ internal fun BrowserListItem(
                     content = {
                         Icon(
                             imageVector = Icons.Default.MoreVert,
-                            contentDescription = null
+                            contentDescription = stringResource(R.string.dialog_title_pick_playlist)
                         )
                     }
                 )

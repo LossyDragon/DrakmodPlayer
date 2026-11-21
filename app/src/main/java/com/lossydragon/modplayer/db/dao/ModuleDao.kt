@@ -18,6 +18,10 @@ interface ModuleDao {
     @Insert(onConflict = OnConflictStrategy.REPLACE)
     suspend fun upsert(item: ModuleEntity)
 
+    /** Batch form of [upsert]; Room runs the whole list in one transaction. */
+    @Insert(onConflict = OnConflictStrategy.REPLACE)
+    suspend fun upsertAll(items: List<ModuleEntity>)
+
     @Query(
         "SELECT * FROM modules WHERE parentPath = :parentPath " +
             "ORDER BY isDirectory DESC, filename ASC"
@@ -30,8 +34,26 @@ interface ModuleDao {
     )
     suspend fun getChildrenOnce(parentPath: String): List<ModuleEntity>
 
+    /**
+     * Every valid module at any depth below [rootPath], in path order. Walks `parentPath`
+     * links so it works for providers whose document ids are not path-shaped.
+     */
+    @Query(
+        "WITH RECURSIVE dirs(path) AS (" +
+            "SELECT :rootPath " +
+            "UNION ALL " +
+            "SELECT m.filePath FROM modules m JOIN dirs ON m.parentPath = dirs.path " +
+            "WHERE m.isDirectory = 1) " +
+            "SELECT * FROM modules WHERE parentPath IN (SELECT path FROM dirs) " +
+            "AND isValidModule = 1 AND isDirectory = 0 ORDER BY filePath"
+    )
+    suspend fun getDescendantModules(rootPath: String): List<ModuleEntity>
+
     @Query("SELECT * FROM modules WHERE isValidModule = 1 AND isDirectory = 0")
     suspend fun getAllValidModules(): List<ModuleEntity>
+
+    @Query("SELECT COUNT(*) FROM modules")
+    suspend fun count(): Int
 
     @Query("SELECT filePath FROM modules")
     suspend fun getAllFilePaths(): List<String>

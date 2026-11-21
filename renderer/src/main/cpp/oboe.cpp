@@ -1,8 +1,8 @@
 #include "audio.h"
-#include "xmp.h"
 #include <android/log.h>
 #include <atomic>
 #include <cstring>
+#include <memory>
 #include <oboe/Oboe.h>
 #include <pthread.h>
 #include <sched.h>
@@ -16,43 +16,41 @@
 #define lock() pthread_mutex_lock(&mutex)
 #define unlock() pthread_mutex_unlock(&mutex)
 
-// xmp context set by init(), cleared before free by deinit()
-static xmp_context xmp_ctx = nullptr;
-// true = callback calls xmp_play_buffer; false = output silence
-static std::atomic<bool> xmp_playing(false);
-// true while inside onAudioReady, used to drain in-flight callback safely
+// mirror XMP_FORMAT_MONO / XMP_FORMAT_32BIT without pulling xmp.h into the audio layer
+constexpr int FORMAT_MONO = 1 << 2;
+constexpr int FORMAT_32BIT = 1 << 3;
+
+// true = callback calls the render callback; false = output silence
+static std::atomic<bool> playing(false);
+// true while inside onAudioReady; paired with `playing` via seq_cst so a drain can never miss a running render
 static std::atomic<bool> in_callback(false);
-// set by callback when xmp_play_buffer returns < 0 (module ended)
+// set by callback when the render callback returns < 0 (module ended)
 static std::atomic<bool> module_ended(false);
 // set by onErrorAfterClose when Oboe reports ErrorDisconnected
 static std::atomic<bool> audio_disconnected(false);
-// passed as the loop arg to xmp_play_buffer: 0 = loop forever, 1 = play once
-static std::atomic<int> xmp_loop_flag(1);
-// swappable render function; reset_render_callback() points this at render_xmp,
-// set_render_callback() lets openmpt (or any future backend) plug in its own renderer
+// installed by the active backend (render_xmp / renderOpenMpt); nullptr = silence
 static std::atomic<AudioRenderCallback> render_callback(nullptr);
-
 static std::atomic<int32_t> underrun_count(0);
-static std::shared_ptr<oboe::AudioStream> audio_stream;
-class XmpAudioCallback;
-static XmpAudioCallback* audio_callback = nullptr;
+
+// Never destroyed: callers lock it outside the open/close window.
+static pthread_mutex_t mutex = PTHREAD_MUTEX_INITIALIZER;
+static std::shared_ptr<oboe::AudioStream> audio_stream; // written under mutex
 static int actual_channels = 2;
 static int effective_format_flags = 0;
 static int requested_buffer_ms = 0;
-static pthread_mutex_t mutex;
 
 void note_underrun() {
   underrun_count.fetch_add(1, std::memory_order_relaxed);
 }
 
 // Asks Oboe for roughly `ms` of buffering. Oboe clamps to the device's capacity range.
-static void apply_buffer_size(int ms) {
-  if (!audio_stream || ms <= 0) return;
-  const int32_t frames = static_cast<int32_t>(static_cast<int64_t>(audio_stream->getSampleRate()) * ms / 1000);
-  auto result = audio_stream->setBufferSizeInFrames(frames);
+static void apply_buffer_size(const std::shared_ptr<oboe::AudioStream>& stream, int ms) {
+  if (!stream || ms <= 0) return;
+  const int32_t frames = static_cast<int32_t>(static_cast<int64_t>(stream->getSampleRate()) * ms / 1000);
+  auto result = stream->setBufferSizeInFrames(frames);
   if (result) {
     LOG_INFO("Buffer size: requested %d ms (%d frames), got %d frames (capacity %d)",
-      ms, frames, result.value(), audio_stream->getBufferCapacityInFrames());
+      ms, frames, result.value(), stream->getBufferCapacityInFrames());
   } else {
     LOG_WARN("setBufferSizeInFrames(%d) failed: %s", frames, oboe::convertToText(result.error()));
   }
@@ -60,37 +58,21 @@ static void apply_buffer_size(int ms) {
 
 // Spin until the current callback invocation finishes (at most one burst period, ~5ms).
 static void wait_for_callback() {
-  while (in_callback.load(std::memory_order_acquire)) sched_yield();
+  while (in_callback.load(std::memory_order_seq_cst)) sched_yield();
 }
 
-class XmpAudioCallback : public oboe::AudioStreamDataCallback,
-                         public oboe::AudioStreamErrorCallback {
+class AudioCallback : public oboe::AudioStreamDataCallback,
+                      public oboe::AudioStreamErrorCallback {
 public:
   oboe::DataCallbackResult onAudioReady(oboe::AudioStream* audioStream, void* audioData, int32_t numFrames) override {
-    in_callback.store(true, std::memory_order_release);
-
-    static int callback_count = 0;
-    static int32_t last_xrun_count = 0;
-    if (++callback_count >= 1000) {
-      callback_count = 0;
-      if (audioStream->isXRunCountSupported()) {
-        auto xRunResult = audioStream->getXRunCount();
-        if (xRunResult) {
-          int32_t current = xRunResult.value();
-          if (current != last_xrun_count) {
-            LOG_WARN("XRuns detected: %d (new: %d)", current, current - last_xrun_count);
-            last_xrun_count = current;
-          }
-        }
-      }
-    }
+    in_callback.store(true, std::memory_order_seq_cst);
 
     const int numChannels = audioStream->getChannelCount();
     const int bytesPerSample = (audioStream->getFormat() == oboe::AudioFormat::I32) ? 4 : 2;
     const int numBytes = numFrames * numChannels * bytesPerSample;
 
     AudioRenderCallback callback = render_callback.load(std::memory_order_acquire);
-    if (xmp_playing.load(std::memory_order_acquire) && callback != nullptr) {
+    if (playing.load(std::memory_order_seq_cst) && callback != nullptr) {
       timespec t0{};
       clock_gettime(CLOCK_MONOTONIC, &t0);
       int ret = callback(audioData, numFrames, numChannels, bytesPerSample);
@@ -101,43 +83,26 @@ public:
       const int64_t budget_ns = static_cast<int64_t>(numFrames) * 1000000000LL / audioStream->getSampleRate();
       if (spent_ns > budget_ns) note_underrun();
       if (ret < 0) {
-        bool was_ended = module_ended.exchange(true, std::memory_order_release);
-        if (!was_ended) LOG_INFO("onAudioReady: module_ended set by render callback");
+        module_ended.store(true, std::memory_order_release);
         memset(audioData, 0, numBytes);
       }
     } else {
       memset(audioData, 0, numBytes);
     }
 
-    in_callback.store(false, std::memory_order_release);
+    in_callback.store(false, std::memory_order_seq_cst);
     return oboe::DataCallbackResult::Continue;
   }
 
+  // Runs on Oboe's error thread, not the audio thread; touches only atomics.
   void onErrorAfterClose(oboe::AudioStream* oboeStream, oboe::Result error) override {
     LOG_ERROR("Stream closed due to error: %s", oboe::convertToText(error));
-    if (error == oboe::Result::ErrorDisconnected) {
-      LOG_ERROR("Audio device disconnected");
-      audio_disconnected.store(true, std::memory_order_release);
-    }
+    if (error == oboe::Result::ErrorDisconnected) audio_disconnected.store(true, std::memory_order_release);
   }
 };
 
-void set_xmp_context(void* ctx) {
-  xmp_ctx = static_cast<xmp_context>(ctx);
-}
-
-static int render_xmp(void* audioData, int32_t numFrames, int32_t numChannels, int32_t bytesPerSample) {
-  if (xmp_ctx == nullptr) return -1;
-  int numBytes = numFrames * numChannels * bytesPerSample;
-  int ret = xmp_play_buffer(xmp_ctx, audioData, numBytes, xmp_loop_flag.load(std::memory_order_relaxed));
-  // xmp_play_buffer returns XMP_END (1) on end-of-module; normalise to -1 so onAudioReady
-  // sets module_ended the same way the libopenmpt callback does.
-  return (ret == XMP_END) ? -1 : ret;
-}
-
-void reset_render_callback() {
-  render_callback.store(render_xmp, std::memory_order_release);
-}
+// Stateless and never deleted: Oboe may still call into it from its error thread after close().
+static AudioCallback audio_callback;
 
 void set_render_callback(AudioRenderCallback callback) {
   render_callback.store(callback, std::memory_order_release);
@@ -145,40 +110,54 @@ void set_render_callback(AudioRenderCallback callback) {
 
 void set_playing(int val) {
   if (!val) {
-    xmp_playing.store(false, std::memory_order_release);
+    playing.store(false, std::memory_order_seq_cst);
     wait_for_callback();
   } else {
     module_ended.store(false, std::memory_order_release);
-    xmp_playing.store(true, std::memory_order_release);
+    playing.store(true, std::memory_order_seq_cst);
   }
 }
 
+int is_playing() {
+  return playing.load(std::memory_order_seq_cst) ? 1 : 0;
+}
+
+int pause_render() {
+  bool was = playing.exchange(false, std::memory_order_seq_cst);
+  wait_for_callback();
+  return was ? 1 : 0;
+}
+
+void resume_render(int was_playing) {
+  if (was_playing) playing.store(true, std::memory_order_seq_cst);
+}
+
 int has_module_ended() {
-  return module_ended.load(std::memory_order_relaxed) ? 1 : 0;
+  return module_ended.load(std::memory_order_acquire) ? 1 : 0;
+}
+
+void clear_module_ended() {
+  module_ended.store(false, std::memory_order_release);
 }
 
 int has_audio_disconnected() {
   return audio_disconnected.load(std::memory_order_acquire) ? 1 : 0;
 }
 
-void clear_audio_disconnected() {
-  audio_disconnected.store(false, std::memory_order_release);
-}
-
-// 0 = loop (repeat-one), 1 = play once
-void set_loop_mode(int loop_flag) {
-  xmp_loop_flag.store(loop_flag, std::memory_order_relaxed);
+static void oboe_close() {
+  lock();
+  if (audio_stream) {
+    audio_stream->stop();
+    audio_stream->close();
+    audio_stream.reset();
+  }
+  unlock();
 }
 
 static int oboe_open(int sample_rate, int performance_mode, int channel_count, int audio_api, int format_flags) {
-  oboe::AudioStreamBuilder builder;
+  oboe_close(); // a previous stream (e.g. after disconnect) must be fully closed before reusing the callback
 
-  // Guard against a stale callback from a prior disconnect
-  if (audio_callback) {
-    delete audio_callback;
-    audio_callback = nullptr;
-  }
-  audio_callback = new XmpAudioCallback();
+  oboe::AudioStreamBuilder builder;
 
   const auto pMode = [&]() -> oboe::PerformanceMode {
     switch (performance_mode) {
@@ -204,13 +183,13 @@ static int oboe_open(int sample_rate, int performance_mode, int channel_count, i
     }
   }();
 
-  const auto oboeFormat = (format_flags & (1 << 3)) ? oboe::AudioFormat::I32 : oboe::AudioFormat::I16;
+  const auto oboeFormat = (format_flags & FORMAT_32BIT) ? oboe::AudioFormat::I32 : oboe::AudioFormat::I16;
 
   builder.setDirection(oboe::Direction::Output)
     ->setAudioApi(aApi)
     ->setChannelCount(cCount)
-    ->setDataCallback(audio_callback)
-    ->setErrorCallback(audio_callback)
+    ->setDataCallback(&audio_callback)
+    ->setErrorCallback(&audio_callback)
     ->setFormat(oboeFormat)
     ->setPerformanceMode(pMode)
     ->setSampleRate(sample_rate)
@@ -222,31 +201,33 @@ static int oboe_open(int sample_rate, int performance_mode, int channel_count, i
     builder.setBufferCapacityInFrames(static_cast<int32_t>(static_cast<int64_t>(sample_rate) * requested_buffer_ms / 1000));
   }
 
-  oboe::Result result = builder.openStream(audio_stream);
-  if (result != oboe::Result::OK) {
+  std::shared_ptr<oboe::AudioStream> stream;
+  oboe::Result result = builder.openStream(stream);
+  if (result != oboe::Result::OK || !stream) {
     LOG_ERROR("Failed to open stream: %s", oboe::convertToText(result));
-    delete audio_callback;
-    audio_callback = nullptr;
     return -1;
   }
 
   audio_disconnected.store(false, std::memory_order_release);
   underrun_count.store(0, std::memory_order_relaxed);
+  actual_channels = stream->getChannelCount();
+  apply_buffer_size(stream, requested_buffer_ms);
 
-  actual_channels = audio_stream->getChannelCount();
-  apply_buffer_size(requested_buffer_ms);
+  lock();
+  audio_stream = stream;
+  unlock();
 
-  const char* sharingMode = (audio_stream->getSharingMode() == oboe::SharingMode::Exclusive) ? "Exclusive" : "Shared";
+  const char* sharingMode = (stream->getSharingMode() == oboe::SharingMode::Exclusive) ? "Exclusive" : "Shared";
 
   LOG_INFO("Stream opened: rate=%d, burst=%d, capacity=%d, sharingMode=%s, channels=%d",
-    audio_stream->getSampleRate(),
-    audio_stream->getFramesPerBurst(),
-    audio_stream->getBufferCapacityInFrames(),
+    stream->getSampleRate(),
+    stream->getFramesPerBurst(),
+    stream->getBufferCapacityInFrames(),
     sharingMode,
     actual_channels);
 
   const char* apiName;
-  switch (audio_stream->getAudioApi()) {
+  switch (stream->getAudioApi()) {
     case oboe::AudioApi::AAudio:
       apiName = "AAudio";
       break;
@@ -259,26 +240,12 @@ static int oboe_open(int sample_rate, int performance_mode, int channel_count, i
   }
   LOG_INFO("Audio API: %s", apiName);
 
-  return audio_stream->getSampleRate();
-}
-
-static void oboe_close() {
-  lock();
-  if (audio_stream) {
-    audio_stream->stop();
-    audio_stream->close();
-    audio_stream.reset();
-  }
-  if (audio_callback) {
-    delete audio_callback;
-    audio_callback = nullptr;
-  }
-  unlock();
+  return stream->getSampleRate();
 }
 
 void close_audio() {
+  set_playing(0);
   oboe_close();
-  pthread_mutex_destroy(&mutex);
 }
 
 int get_effective_format_flags() {
@@ -288,39 +255,36 @@ int get_effective_format_flags() {
 int open_audio(int rate, int buffer_ms, int performance_mode, int channel_count, int audio_api, int format_flags) {
   requested_buffer_ms = buffer_ms;
 
-  if (pthread_mutex_init(&mutex, nullptr) != 0) {
-    LOG_ERROR("Failed to initialize mutex");
-    return -1;
-  }
-
   // OpenSL ES only supports I16 and Float
-  if (audio_api == 2 /* OpenSLES */ && (format_flags & (1 << 3))) {
+  if (audio_api == 2 /* OpenSLES */ && (format_flags & FORMAT_32BIT)) {
     LOG_WARN("I32 format not supported by OpenSL ES; falling back to I16");
-    format_flags &= ~(1 << 3);
+    format_flags &= ~FORMAT_32BIT;
   }
 
-  effective_format_flags = format_flags;
-  reset_render_callback();
+  set_playing(0);
+  set_render_callback(nullptr); // silence until the backend installs its renderer
 
   int assumed_channels = (channel_count == 1) ? 1 : 2;
 
   int actual_rate = oboe_open(rate, performance_mode, channel_count, audio_api, format_flags);
-  if (actual_rate < 0) {
-    pthread_mutex_destroy(&mutex);
-    return -1;
-  }
+  if (actual_rate < 0) return -1;
 
   if (actual_rate != rate || actual_channels != assumed_channels) {
     LOG_INFO("Buffer mismatch: rate %d->%d, channels %d->%d - reopening", rate, actual_rate, assumed_channels, actual_channels);
-    oboe_close();
-    int reopen_rate = oboe_open(actual_rate, performance_mode, channel_count, audio_api, format_flags);
-    if (reopen_rate < 0) {
-      pthread_mutex_destroy(&mutex);
-      return -1;
-    }
+    actual_rate = oboe_open(actual_rate, performance_mode, channel_count, audio_api, format_flags);
+    if (actual_rate < 0) return -1;
   }
 
-  LOG_INFO("Audio opened: requested_rate=%d, actual_rate=%d, channels=%d", rate, actual_rate, actual_channels);
+  // The mixer must match what the stream actually delivers, not what was asked for.
+  lock();
+  const bool is_i32 = audio_stream && audio_stream->getFormat() == oboe::AudioFormat::I32;
+  unlock();
+  int flags = format_flags;
+  flags = (actual_channels == 1) ? (flags | FORMAT_MONO) : (flags & ~FORMAT_MONO);
+  flags = is_i32 ? (flags | FORMAT_32BIT) : (flags & ~FORMAT_32BIT);
+  effective_format_flags = flags;
+
+  LOG_INFO("Audio opened: requested_rate=%d, actual_rate=%d, channels=%d, format_flags=0x%x", rate, actual_rate, actual_channels, flags);
 
   return actual_rate;
 }
@@ -372,18 +336,25 @@ int stop_audio() {
 }
 
 int get_audio_stats(struct AudioStats* stats) {
-  if (!audio_stream || !stats) return -1;
+  if (!stats) return -1;
 
-  stats->sample_rate = audio_stream->getSampleRate();
-  stats->frames_per_burst = audio_stream->getFramesPerBurst();
-  stats->buffer_capacity = audio_stream->getBufferCapacityInFrames();
-  stats->buffer_size = audio_stream->getBufferSizeInFrames();
+  lock();
+  std::shared_ptr<oboe::AudioStream> stream = audio_stream;
+  if (!stream) {
+    unlock();
+    return -1;
+  }
+
+  stats->sample_rate = stream->getSampleRate();
+  stats->frames_per_burst = stream->getFramesPerBurst();
+  stats->buffer_capacity = stream->getBufferCapacityInFrames();
+  stats->buffer_size = stream->getBufferSizeInFrames();
   stats->underrun_count = underrun_count.load(std::memory_order_relaxed);
 
-  auto xRunResult = audio_stream->getXRunCount();
-  stats->xrun_count = (audio_stream->isXRunCountSupported() && xRunResult) ? xRunResult.value() : 0;
+  auto xRunResult = stream->getXRunCount();
+  stats->xrun_count = (stream->isXRunCountSupported() && xRunResult) ? xRunResult.value() : 0;
 
-  switch (audio_stream->getAudioApi()) {
+  switch (stream->getAudioApi()) {
     case oboe::AudioApi::AAudio:
       stats->audio_api = "AAudio";
       break;
@@ -395,7 +366,7 @@ int get_audio_stats(struct AudioStats* stats) {
       break;
   }
 
-  switch (audio_stream->getSharingMode()) {
+  switch (stream->getSharingMode()) {
     case oboe::SharingMode::Exclusive:
       stats->sharing_mode = "Exclusive";
       break;
@@ -404,7 +375,7 @@ int get_audio_stats(struct AudioStats* stats) {
       break;
   }
 
-  switch (audio_stream->getPerformanceMode()) {
+  switch (stream->getPerformanceMode()) {
     case oboe::PerformanceMode::None:
       stats->perf_mode = "None";
       break;
@@ -416,7 +387,7 @@ int get_audio_stats(struct AudioStats* stats) {
       break;
   }
 
-  switch (audio_stream->getFormat()) {
+  switch (stream->getFormat()) {
     case oboe::AudioFormat::I16:
       stats->audio_format = "I16";
       break;
@@ -428,5 +399,6 @@ int get_audio_stats(struct AudioStats* stats) {
       break;
   }
 
+  unlock();
   return 0;
 }

@@ -177,7 +177,7 @@ class AutoBrowseCallback(
         Timber.d("onSearch: query='$query'")
         val future = SettableFuture.create<LibraryResult<Void>>()
         activeSearchJob?.cancel()
-        activeSearchJob = scope.launch(Dispatchers.IO) {
+        val job = scope.launch(Dispatchers.IO) {
             try {
                 val playlistItems = playlistDao.searchByName(query).map { entry ->
                     buildPlayableItem(
@@ -205,6 +205,11 @@ class AutoBrowseCallback(
                 future.set(LibraryResult.ofError(SessionError.ERROR_UNKNOWN))
             }
         }
+        // A scope cancelled before the body ran would otherwise leave the browser waiting.
+        job.invokeOnCompletion {
+            if (!future.isDone) future.set(LibraryResult.ofError(SessionError.ERROR_UNKNOWN))
+        }
+        activeSearchJob = job
         return future
     }
 
@@ -238,7 +243,7 @@ class AutoBrowseCallback(
 
             val mediaItems = files.map { file ->
                 buildPlayableItem(
-                    id = file.filePath,
+                    id = AutoMediaId.file(file.filePath),
                     title = file.filename,
                     uri = file.uri,
                     artworkUri = drawableUri(R.drawable.aa_file),
@@ -382,6 +387,8 @@ class AutoBrowseCallback(
                 Timber.e(e, "Auto browse future failed")
                 future.setException(e)
             }
+        }.invokeOnCompletion { cause ->
+            if (!future.isDone) future.setException(cause ?: IllegalStateException("cancelled"))
         }
         return future
     }

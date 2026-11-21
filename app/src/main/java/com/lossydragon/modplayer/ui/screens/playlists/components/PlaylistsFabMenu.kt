@@ -34,14 +34,17 @@ internal fun PlaylistsFabMenu(
                 onClick = onExpand,
                 shape = MaterialTheme.shapes.small,
                 content = {
-                    Icon(
-                        imageVector = if (expanded) {
-                            Icons.Default.PlaylistRemove
-                        } else {
-                            Icons.AutoMirrored.Filled.PlaylistPlay
-                        },
-                        contentDescription = null,
-                    )
+                    if (expanded) {
+                        Icon(
+                            imageVector = Icons.Default.PlaylistRemove,
+                            contentDescription = stringResource(R.string.desc_menu_collapse),
+                        )
+                    } else {
+                        Icon(
+                            imageVector = Icons.AutoMirrored.Filled.PlaylistPlay,
+                            contentDescription = stringResource(R.string.desc_menu_expand),
+                        )
+                    }
                 }
             )
         },

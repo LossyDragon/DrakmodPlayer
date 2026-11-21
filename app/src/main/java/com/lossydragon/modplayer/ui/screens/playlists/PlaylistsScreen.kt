@@ -1,9 +1,6 @@
 package com.lossydragon.modplayer.ui.screens.playlists
 
 import android.net.Uri
-import androidx.activity.ComponentActivity
-import androidx.activity.compose.BackHandler
-import androidx.activity.compose.LocalActivity
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.animation.*
@@ -28,13 +25,11 @@ import androidx.navigation3.ui.NavDisplay
 import com.lossydragon.modplayer.R
 import com.lossydragon.modplayer.db.entity.ModuleEntity
 import com.lossydragon.modplayer.db.entity.PlaylistEntity
-import com.lossydragon.modplayer.player.PlaybackStatus
-import com.lossydragon.modplayer.player.PlayerUiState
 import com.lossydragon.modplayer.player.PlayerViewModel
+import com.lossydragon.modplayer.ui.activityViewModel
 import com.lossydragon.modplayer.ui.components.BackButton
 import com.lossydragon.modplayer.ui.components.MessageBox
 import com.lossydragon.modplayer.ui.components.ProgressbarIndicator
-import com.lossydragon.modplayer.ui.screens.player.components.MiniPlayerBar
 import com.lossydragon.modplayer.ui.screens.playlists.components.DeletePlaylistDialog
 import com.lossydragon.modplayer.ui.screens.playlists.components.NewPlaylistDialog
 import com.lossydragon.modplayer.ui.screens.playlists.components.PlaylistEntriesFabMenu
@@ -42,12 +37,11 @@ import com.lossydragon.modplayer.ui.screens.playlists.components.PlaylistEntryIt
 import com.lossydragon.modplayer.ui.screens.playlists.components.PlaylistListItem
 import com.lossydragon.modplayer.ui.screens.playlists.components.PlaylistsFabMenu
 import com.lossydragon.modplayer.ui.theme.AppTheme
-import com.lossydragon.native.model.FrameInfo
-import com.lossydragon.native.model.ModVars
+import com.lossydragon.modplayer.util.asString
+import kotlinx.collections.immutable.ImmutableList
 import kotlinx.collections.immutable.persistentListOf
 import kotlinx.coroutines.launch
 import kotlinx.serialization.Serializable
-import org.koin.compose.viewmodel.koinViewModel
 import sh.calvin.reorderable.ReorderableItem
 import sh.calvin.reorderable.rememberReorderableLazyListState
 
@@ -68,19 +62,22 @@ fun NavPlaylists(
     modifier: Modifier = Modifier,
     onNavigateToPlayer: () -> Unit
 ) {
-    val playerViewModel = koinViewModel<PlayerViewModel>(
-        viewModelStoreOwner = LocalActivity.current as ComponentActivity
-    )
-    val playlistsViewModel = koinViewModel<PlaylistsViewModel>()
+    val context = LocalContext.current
+    val playerViewModel = activityViewModel<PlayerViewModel>()
+    val playlistsViewModel = activityViewModel<PlaylistsViewModel>()
 
-    val playerState by playerViewModel.state.collectAsStateWithLifecycle()
-    val frameInfo by playerViewModel.frameInfo.collectAsStateWithLifecycle()
     val playlistsState by playlistsViewModel.state.collectAsStateWithLifecycle()
 
     val backStack = rememberNavBackStack(NavKeyPlaylists.List)
 
-    BackHandler(enabled = backStack.size > 1) {
-        backStack.removeLastOrNull()
+    LaunchedEffect(playlistsViewModel) {
+        playlistsViewModel.events.collect { event ->
+            when (event) {
+                is PlaylistsEvent.Error -> snackbarHostState.showSnackbar(
+                    event.message.asString(context)
+                )
+            }
+        }
     }
 
     NavDisplay(
@@ -95,15 +92,8 @@ fun NavPlaylists(
                 PlaylistListScreen(
                     modifier = modifier,
                     state = playlistsState,
-                    playerState = playerState,
-                    frameInfo = frameInfo,
                     snackbarHostState = snackbarHostState,
                     onBack = onBack,
-                    onNavigateToPlayer = onNavigateToPlayer,
-                    onMiniPlayerToggle = playerViewModel::togglePlayPause,
-                    onMiniPlayerNext = playerViewModel::next,
-                    onMiniPlayerPrev = playerViewModel::previous,
-                    onMiniPlayerStop = playerViewModel::stop,
                     onSelectPlaylist = { playlist ->
                         val entry = NavKeyPlaylists.Entries(
                             playlistId = playlist.id,
@@ -117,7 +107,6 @@ fun NavPlaylists(
                     onDeletePlaylist = playlistsViewModel::deletePlaylist,
                     onExport = playlistsViewModel::exportPlaylists,
                     onImport = playlistsViewModel::importPlaylists,
-                    onDismissError = playlistsViewModel::dismissError,
                     onDismissImport = playlistsViewModel::dismissImportResult,
                     onDismissExport = playlistsViewModel::dismissExportSuccess,
                     onRenamePlaylist = { playlist, name, comment ->
@@ -131,15 +120,8 @@ fun NavPlaylists(
                     modifier = modifier,
                     playlistName = key.playlistName,
                     state = playlistsState,
-                    playerState = playerState,
-                    frameInfo = frameInfo,
-                    snackbarHostState = snackbarHostState,
                     onBack = { backStack.removeLastOrNull() },
-                    onNavigateToPlayer = onNavigateToPlayer,
-                    onMiniPlayerToggle = playerViewModel::togglePlayPause,
-                    onMiniPlayerNext = playerViewModel::next,
-                    onMiniPlayerPrev = playerViewModel::previous,
-                    onMiniPlayerStop = playerViewModel::stop,
+                    onDismissError = playlistsViewModel::dismissError,
                     onPlayEntry = { file ->
                         val entries = playlistsState.entries
                         playerViewModel.playAll(
@@ -147,6 +129,7 @@ fun NavPlaylists(
                             startAt = entries.indexOf(file).coerceAtLeast(0),
                             isShuffle = false,
                         )
+                        onNavigateToPlayer()
                     },
                     onPlayAll = {
                         playerViewModel.playAll(
@@ -154,6 +137,7 @@ fun NavPlaylists(
                             startAt = 0,
                             isShuffle = false,
                         )
+                        onNavigateToPlayer()
                     },
                     onShuffle = {
                         playerViewModel.playAll(
@@ -161,6 +145,7 @@ fun NavPlaylists(
                             startAt = 0,
                             isShuffle = true,
                         )
+                        onNavigateToPlayer()
                     },
                     onRemoveEntry = playlistsViewModel::removeFromPlaylist,
                     onReorderEntry = playlistsViewModel::reorderEntry,
@@ -175,21 +160,13 @@ fun NavPlaylists(
 private fun PlaylistListScreen(
     modifier: Modifier = Modifier,
     state: PlaylistsUiState,
-    playerState: PlayerUiState,
-    frameInfo: FrameInfo,
     snackbarHostState: SnackbarHostState,
     onBack: () -> Unit,
-    onNavigateToPlayer: () -> Unit,
-    onMiniPlayerToggle: () -> Unit,
-    onMiniPlayerNext: () -> Unit,
-    onMiniPlayerPrev: () -> Unit,
-    onMiniPlayerStop: () -> Unit,
     onSelectPlaylist: (PlaylistEntity) -> Unit,
     onCreatePlaylist: (String, String) -> Unit,
     onDeletePlaylist: (PlaylistEntity) -> Unit,
     onExport: (Uri) -> Unit,
     onImport: (Uri) -> Unit,
-    onDismissError: () -> Unit,
     onDismissImport: () -> Unit,
     onDismissExport: () -> Unit,
     onRenamePlaylist: (PlaylistEntity, String, String) -> Unit
@@ -197,9 +174,6 @@ private fun PlaylistListScreen(
     val scope = rememberCoroutineScope()
     val resource = LocalResources.current
 
-    val hasModule by remember(playerState.currentModule) {
-        mutableStateOf(playerState.currentModule != null)
-    }
     var isFabExpanded by remember { mutableStateOf(false) }
 
     val showSnackBar: (String) -> Unit = {
@@ -251,39 +225,23 @@ private fun PlaylistListScreen(
     }
 
     // Delete Playlist
-    var isDeletePlaylistDialog by remember { mutableStateOf(false) }
     var deletePlaylistItem by remember { mutableStateOf<PlaylistEntity?>(null) }
-    val showDeletePlaylistDialog: (PlaylistEntity) -> Unit = {
-        deletePlaylistItem = it
-        isDeletePlaylistDialog = true
-    }
-    val dismissDeletePlaylistDialog: () -> Unit = {
-        isDeletePlaylistDialog = false
-        deletePlaylistItem = null
-    }
-    if (isDeletePlaylistDialog && deletePlaylistItem != null) {
+    deletePlaylistItem?.let { item ->
         DeletePlaylistDialog(
-            playlist = deletePlaylistItem!!,
-            onDismiss = dismissDeletePlaylistDialog,
-            onConfirm = { onDeletePlaylist(deletePlaylistItem!!) },
+            playlist = item,
+            onDismiss = { deletePlaylistItem = null },
+            onConfirm = { onDeletePlaylist(item) },
         )
     }
 
     // Rename
-    var isRenamePlaylistDialog by remember { mutableStateOf(false) }
     var renamePlaylistItem by remember { mutableStateOf<PlaylistEntity?>(null) }
-
-    if (isRenamePlaylistDialog && renamePlaylistItem != null) {
+    renamePlaylistItem?.let { item ->
         NewPlaylistDialog(
-            initialName = renamePlaylistItem!!.name,
-            initialComment = renamePlaylistItem!!.comment,
-            onDismiss = {
-                isRenamePlaylistDialog = false
-                renamePlaylistItem = null
-            },
-            onCreate = { name, comment ->
-                onRenamePlaylist(renamePlaylistItem!!, name, comment)
-            },
+            initialName = item.name,
+            initialComment = item.comment,
+            onDismiss = { renamePlaylistItem = null },
+            onCreate = { name, comment -> onRenamePlaylist(item, name, comment) },
             onError = showSnackBar,
         )
     }
@@ -317,7 +275,6 @@ private fun PlaylistListScreen(
     // Content
     Scaffold(
         modifier = modifier.fillMaxSize(),
-        snackbarHost = { SnackbarHost(snackbarHostState) },
         topBar = {
             CenterAlignedTopAppBar(
                 title = { Text(text = stringResource(R.string.playlists)) },
@@ -326,7 +283,7 @@ private fun PlaylistListScreen(
         },
         floatingActionButton = {
             AnimatedVisibility(
-                visible = !state.isLoading && state.error == null,
+                visible = !state.isLoading,
                 enter = slideInVertically { it } + fadeIn(),
                 exit = slideOutVertically { it } + fadeOut(),
                 content = {
@@ -349,87 +306,59 @@ private fun PlaylistListScreen(
                 }
             )
         },
-        bottomBar = {
-            AnimatedVisibility(
-                visible = hasModule,
-                enter = slideInVertically { it } + fadeIn(),
-                exit = slideOutVertically { it } + fadeOut(),
-                content = {
-                    MiniPlayerBar(
-                        state = playerState,
-                        frameInfo = frameInfo,
-                        onTap = onNavigateToPlayer,
-                        onPlayPause = onMiniPlayerToggle,
-                        onNext = onMiniPlayerNext,
-                        onPrevious = onMiniPlayerPrev,
-                        onDismiss = onMiniPlayerStop,
-                    )
-                }
-            )
-        },
     ) { padding ->
         val listState = rememberLazyListState()
 
         Crossfade(
             targetState = state.isLoading,
             content = { isLoading ->
-                if (isLoading) {
-                    Box(
+                when {
+                    isLoading -> Box(
                         modifier = Modifier
                             .padding(padding)
                             .fillMaxSize(),
                         contentAlignment = Alignment.Center,
                         content = { ProgressbarIndicator() }
                     )
-                } else {
-                    if (!state.error.isNullOrBlank()) {
-                        MessageBox(
-                            text = state.error,
-                            actions = {
-                                TextButton(
-                                    onClick = {
-                                        onDismissError()
-                                        onBack()
-                                    },
-                                    content = {
-                                        Text(text = stringResource(R.string.desc_back_button))
-                                    }
-                                )
-                            }
-                        )
-                    } else if (state.playlists.isEmpty()) {
-                        MessageBox(
-                            modifier = Modifier.padding(padding),
-                            text = stringResource(R.string.message_no_playlists),
-                        )
-                    } else {
-                        LazyColumn(
-                            modifier = Modifier
-                                .padding(padding)
-                                .fillMaxSize(),
-                            state = listState,
-                            content = {
-                                items(
-                                    items = state.playlists,
-                                    key = { it.id },
-                                    itemContent = { item ->
-                                        PlaylistListItem(
-                                            item = item,
-                                            onSelect = { onSelectPlaylist(item) },
-                                            onDelete = { showDeletePlaylistDialog(item) },
-                                            onRename = {
-                                                renamePlaylistItem = item
-                                                isRenamePlaylistDialog = true
-                                            },
-                                        )
-                                    }
-                                )
-                            }
-                        )
-                    }
+
+                    state.playlists.isEmpty() -> MessageBox(
+                        modifier = Modifier.padding(padding),
+                        text = stringResource(R.string.message_no_playlists),
+                    )
+
+                    else -> LazyColumn(
+                        modifier = Modifier
+                            .padding(padding)
+                            .fillMaxSize(),
+                        state = listState,
+                        content = {
+                            items(
+                                items = state.playlists,
+                                key = { it.id },
+                                itemContent = { item ->
+                                    PlaylistListItem(
+                                        item = item,
+                                        onSelect = { onSelectPlaylist(item) },
+                                        onDelete = { deletePlaylistItem = item },
+                                        onRename = { renamePlaylistItem = item },
+                                    )
+                                }
+                            )
+                        }
+                    )
                 }
             }
         )
+    }
+}
+
+/** Duplicates get an occurrence suffix so keys stay unique yet stable while reordering. */
+private fun ImmutableList<ModuleEntity>.stableKeys(): List<String> {
+    val seen = HashMap<String, Int>()
+    return map { file ->
+        val n = seen.getOrPut(file.filePath) { 0 }
+        seen[file.filePath] = n + 1
+        if (n == 0) file.filePath else "${file.filePath}#$n"
     }
 }
 
@@ -439,27 +368,18 @@ private fun PlaylistEntriesScreen(
     modifier: Modifier = Modifier,
     playlistName: String,
     state: PlaylistsUiState,
-    playerState: PlayerUiState,
-    frameInfo: FrameInfo,
-    snackbarHostState: SnackbarHostState,
     onBack: () -> Unit,
-    onNavigateToPlayer: () -> Unit,
-    onMiniPlayerToggle: () -> Unit,
-    onMiniPlayerNext: () -> Unit,
-    onMiniPlayerPrev: () -> Unit,
-    onMiniPlayerStop: () -> Unit,
+    onDismissError: () -> Unit,
     onPlayEntry: (ModuleEntity) -> Unit,
     onPlayAll: () -> Unit,
     onShuffle: () -> Unit,
     onRemoveEntry: (ModuleEntity) -> Unit,
     onReorderEntry: (Int, Int) -> Unit
 ) {
-    val hasModule = playerState.currentModule != null
     var isFabExpanded by remember { mutableStateOf(false) }
 
     Scaffold(
         modifier = modifier,
-        snackbarHost = { SnackbarHost(snackbarHostState) },
         topBar = {
             CenterAlignedTopAppBar(
                 title = { Text(playlistName) },
@@ -480,23 +400,6 @@ private fun PlaylistEntriesScreen(
                 )
             }
         },
-        bottomBar = {
-            AnimatedVisibility(
-                visible = hasModule,
-                enter = slideInVertically { it } + fadeIn(),
-                exit = slideOutVertically { it } + fadeOut(),
-            ) {
-                MiniPlayerBar(
-                    state = playerState,
-                    frameInfo = frameInfo,
-                    onTap = onNavigateToPlayer,
-                    onPlayPause = onMiniPlayerToggle,
-                    onNext = onMiniPlayerNext,
-                    onPrevious = onMiniPlayerPrev,
-                    onDismiss = onMiniPlayerStop,
-                )
-            }
-        },
     ) { padding ->
         val hapticFeedback = LocalHapticFeedback.current
         val lazyListState = rememberLazyListState()
@@ -509,6 +412,7 @@ private fun PlaylistEntriesScreen(
                 )
             }
         )
+        val keys = remember(state.entries) { state.entries.stableKeys() }
 
         Box(modifier = Modifier.padding(padding)) {
             when {
@@ -516,6 +420,19 @@ private fun PlaylistEntriesScreen(
                     modifier = Modifier.fillMaxSize(),
                     contentAlignment = Alignment.Center,
                     content = { ProgressbarIndicator() }
+                )
+
+                state.error != null -> MessageBox(
+                    text = state.error,
+                    actions = {
+                        TextButton(
+                            onClick = {
+                                onDismissError()
+                                onBack()
+                            },
+                            content = { Text(text = stringResource(R.string.desc_back_button)) }
+                        )
+                    }
                 )
 
                 state.entries.isEmpty() -> MessageBox(
@@ -530,11 +447,11 @@ private fun PlaylistEntriesScreen(
                     ) {
                         itemsIndexed(
                             items = state.entries,
-                            key = { _, f -> f.uri.toString() },
+                            key = { index, _ -> keys[index] },
                         ) { index, file ->
                             ReorderableItem(
                                 state = reorderableLazyListState,
-                                key = file.filePath
+                                key = keys[index]
                             ) { isDragging ->
                                 val elevation by animateDpAsState(
                                     if (isDragging) 4.dp else 0.dp,
@@ -631,22 +548,19 @@ private val sampleEntries = persistentListOf(
         moduleName = "Escape",
         moduleType = "Scream Tracker 3",
     ),
-)
-
-private val playingState = PlayerUiState(
-    status = PlaybackStatus.PLAYING,
-    currentModule = sampleEntries[1],
-    currentQueueIndex = 1,
-    queue = sampleEntries,
-    modVars = ModVars(
-        name = "Beneath the Fallen Stars",
-        type = "Impulse Tracker",
+    // Same file twice: keys must still be unique.
+    ModuleEntity(
+        filePath = "content://preview/1",
+        filename = "alpharapii.mod",
+        fileExtension = "mod",
+        fileSize = 45_678L,
+        moduleName = "alpharapii",
+        moduleType = "Amiga Protracker/Compatible",
     ),
 )
 
 private data class PlaylistPreviewState(
     val playlistsState: PlaylistsUiState,
-    val playerState: PlayerUiState,
     val description: String
 )
 
@@ -655,22 +569,14 @@ private class PlaylistListPreviewParameter : PreviewParameterProvider<PlaylistPr
         PlaylistPreviewState(
             description = "Empty",
             playlistsState = PlaylistsUiState(),
-            playerState = PlayerUiState(),
         ),
         PlaylistPreviewState(
-            description = "Playlists - idle",
+            description = "Playlists",
             playlistsState = PlaylistsUiState(playlists = samplePlaylists),
-            playerState = PlayerUiState(),
         ),
         PlaylistPreviewState(
-            description = "Playlists - playing",
-            playlistsState = PlaylistsUiState(playlists = samplePlaylists),
-            playerState = playingState,
-        ),
-        PlaylistPreviewState(
-            description = "Error",
-            playlistsState = PlaylistsUiState(error = "Failed to load."),
-            playerState = PlayerUiState(),
+            description = "Importing",
+            playlistsState = PlaylistsUiState(playlists = samplePlaylists, isLoading = true),
         ),
     )
 
@@ -687,25 +593,14 @@ private class PlaylistEntriesPreviewParameter : PreviewParameterProvider<Playlis
                 selectedPlaylist = samplePlaylists[0],
                 isLoading = true,
             ),
-            playerState = PlayerUiState(),
         ),
         PlaylistPreviewState(
-            description = "Entries - idle",
+            description = "Entries",
             playlistsState = PlaylistsUiState(
                 playlists = samplePlaylists,
                 selectedPlaylist = samplePlaylists[0],
                 entries = sampleEntries,
             ),
-            playerState = PlayerUiState(),
-        ),
-        PlaylistPreviewState(
-            description = "Entries - playing",
-            playlistsState = PlaylistsUiState(
-                playlists = samplePlaylists,
-                selectedPlaylist = samplePlaylists[1],
-                entries = sampleEntries,
-            ),
-            playerState = playingState,
         ),
         PlaylistPreviewState(
             description = "Empty playlist",
@@ -714,7 +609,14 @@ private class PlaylistEntriesPreviewParameter : PreviewParameterProvider<Playlis
                 selectedPlaylist = samplePlaylists[2],
                 entries = persistentListOf(),
             ),
-            playerState = PlayerUiState(),
+        ),
+        PlaylistPreviewState(
+            description = "Load error",
+            playlistsState = PlaylistsUiState(
+                playlists = samplePlaylists,
+                selectedPlaylist = samplePlaylists[2],
+                error = "Failed to load.",
+            ),
         ),
     )
 
@@ -731,21 +633,13 @@ private fun PreviewPlaylistListScreen(
         PlaylistListScreen(
             modifier = Modifier,
             state = params.playlistsState,
-            playerState = params.playerState,
-            frameInfo = FrameInfo(time = 47_000, totalTime = 237_000),
             snackbarHostState = SnackbarHostState(),
             onBack = {},
-            onNavigateToPlayer = {},
-            onMiniPlayerToggle = {},
-            onMiniPlayerNext = {},
-            onMiniPlayerPrev = {},
-            onMiniPlayerStop = {},
             onSelectPlaylist = {},
             onCreatePlaylist = { _, _ -> },
             onDeletePlaylist = {},
             onExport = {},
             onImport = {},
-            onDismissError = {},
             onDismissImport = {},
             onDismissExport = {},
             onRenamePlaylist = { _, _, _ -> }
@@ -763,15 +657,8 @@ private fun PreviewPlaylistEntriesScreen(
             modifier = Modifier,
             playlistName = params.playlistsState.selectedPlaylist?.name ?: "AAAAA",
             state = params.playlistsState,
-            playerState = params.playerState,
-            frameInfo = FrameInfo(time = 47_000, totalTime = 237_000),
-            snackbarHostState = SnackbarHostState(),
             onBack = {},
-            onNavigateToPlayer = {},
-            onMiniPlayerToggle = {},
-            onMiniPlayerNext = {},
-            onMiniPlayerPrev = {},
-            onMiniPlayerStop = {},
+            onDismissError = {},
             onPlayEntry = {},
             onPlayAll = {},
             onShuffle = {},

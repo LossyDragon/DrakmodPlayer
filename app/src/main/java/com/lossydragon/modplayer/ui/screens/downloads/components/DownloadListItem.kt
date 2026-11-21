@@ -5,7 +5,6 @@ import androidx.compose.foundation.layout.*
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.*
-import androidx.compose.ui.graphics.*
 import androidx.compose.ui.res.*
 import androidx.compose.ui.text.style.*
 import androidx.compose.ui.tooling.preview.*
@@ -64,10 +63,13 @@ private fun FormatsIcon(text: String) {
     Box(
         modifier = Modifier
             .size(40.dp)
-            .background(Color(0xff404040), shape = MaterialTheme.shapes.extraSmall)
+            .background(
+                MaterialTheme.colorScheme.surfaceContainerHighest,
+                shape = MaterialTheme.shapes.extraSmall
+            )
             .border(
                 2.dp,
-                Color(0xff808080),
+                MaterialTheme.colorScheme.outline,
                 shape = MaterialTheme.shapes.extraSmall
             ),
         contentAlignment = Alignment.Center,
@@ -75,7 +77,7 @@ private fun FormatsIcon(text: String) {
             Text(
                 text = text,
                 fontSize = 11.sp,
-                color = Color.White
+                color = MaterialTheme.colorScheme.onSurface
             )
         }
     )

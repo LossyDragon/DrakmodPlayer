@@ -5,7 +5,6 @@ import androidx.compose.foundation.*
 import androidx.compose.foundation.layout.*
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
-import androidx.compose.runtime.saveable.*
 import androidx.compose.ui.*
 import androidx.compose.ui.platform.*
 import androidx.compose.ui.res.*
@@ -25,7 +24,8 @@ import com.lossydragon.modplayer.model.SponsorDetails
 import com.lossydragon.modplayer.ui.theme.AppTheme
 import com.lossydragon.modplayer.util.annotatedLinkString
 import com.lossydragon.modplayer.util.formatSize
-import kotlinx.coroutines.launch
+import com.lossydragon.modplayer.util.formattedComment
+import com.lossydragon.modplayer.util.formattedInstruments
 
 @Composable
 internal fun ModuleDetailLayout(
@@ -36,15 +36,21 @@ internal fun ModuleDetailLayout(
     val expandTextColor = MaterialTheme.colorScheme.primary
 
     val module = moduleResult.module
-    val scope = rememberCoroutineScope()
     val scrollState = rememberScrollState()
-    var moduleFile by rememberSaveable { mutableStateOf(module.filename) }
 
-    var textLayoutResultState by remember { mutableStateOf<TextLayoutResult?>(null) }
-    var isExpanded by remember { mutableStateOf(false) }
+    // Keyed on the module so Random doesn't keep the previous module's license/expansion.
+    var textLayoutResultState by remember(module.filename) {
+        mutableStateOf<TextLayoutResult?>(null)
+    }
+    var isExpanded by remember(module.filename) { mutableStateOf(false) }
 
-    val licenseDescription by remember { mutableStateOf(module.license.description) }
-    var licenseText by remember { mutableStateOf(AnnotatedString(licenseDescription)) }
+    val licenseDescription = module.license.description
+    var licenseText by remember(module.filename) {
+        mutableStateOf(AnnotatedString(licenseDescription))
+    }
+
+    LaunchedEffect(module.filename) { scrollState.scrollTo(0) }
+
     LaunchedEffect(textLayoutResultState) {
         when {
             isExpanded -> {
@@ -95,16 +101,6 @@ internal fun ModuleDetailLayout(
             .verticalScroll(scrollState),
         horizontalAlignment = Alignment.CenterHorizontally
     ) {
-        // Scroll to the top on a new module.
-        if (module.filename != moduleFile) {
-            moduleFile = module.filename
-            LaunchedEffect(scrollState) {
-                scope.launch {
-                    scrollState.scrollTo(0)
-                }
-            }
-        }
-
         val size = module.bytes.toLong().formatSize()
         val info = stringResource(R.string.module_detail_by, module.format, module.artist, size)
 
@@ -139,7 +135,7 @@ internal fun ModuleDetailLayout(
         Spacer(modifier = Modifier.height(5.dp))
         // Licence Statement
         Text(
-            modifier = modifier
+            modifier = Modifier
                 .padding(start = 10.dp, end = 10.dp)
                 .clickable { isExpanded = !isExpanded }
                 .animateContentSize(),

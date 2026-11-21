@@ -42,7 +42,9 @@ dependencyAnalysis {
 android {
     namespace = "com.lossydragon.modplayer"
     compileSdk {
-        version = release(37)
+        version = release(37) {
+            minorApiLevel = 2
+        }
     }
 
     defaultConfig {
@@ -99,6 +101,7 @@ android {
     }
     testOptions {
         unitTests.isIncludeAndroidResources = true
+        unitTests.all { it.useJUnitPlatform() }
     }
     splits {
         abi {
@@ -132,6 +135,10 @@ dependencies {
     implementation(libs.reorderable)
     implementation(libs.timber)
 
-    testImplementation(libs.junit)
+    testImplementation(libs.junit.jupiter.api)
+    testImplementation(libs.junit4) // Robolectric has no Jupiter runner
     testImplementation(libs.robolectric)
+    testRuntimeOnly(libs.junit.jupiter.engine)
+    testRuntimeOnly(libs.junit.platform.launcher)
+    testRuntimeOnly(libs.junit.vintage.engine)
 }

@@ -57,7 +57,10 @@ internal fun QueueSheet(
                             .align(Alignment.CenterEnd),
                         onClick = onDismiss,
                         content = {
-                            Icon(imageVector = Icons.Default.Close, contentDescription = null)
+                            Icon(
+                                imageVector = Icons.Default.Close,
+                                contentDescription = stringResource(R.string.close)
+                            )
                         }
                     )
                 }
@@ -69,7 +72,8 @@ internal fun QueueSheet(
                 content = {
                     itemsIndexed(
                         items = queue,
-                        key = { _, f -> f.uri.toString() },
+                        // The same file can be queued twice.
+                        key = { i, f -> "$i:${f.filePath}" },
                         itemContent = { index, file ->
                             QueueListItem(
                                 isCurrentItem = index == currentIndex,

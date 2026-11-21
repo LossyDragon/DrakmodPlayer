@@ -11,9 +11,7 @@ import androidx.compose.ui.res.*
 import androidx.compose.ui.tooling.preview.*
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.lossydragon.modplayer.R
-import com.lossydragon.modplayer.model.Artist
-import com.lossydragon.modplayer.model.ArtistInfo
-import com.lossydragon.modplayer.model.Module
+import com.lossydragon.modplayer.data.DownloadHistoryItem
 import com.lossydragon.modplayer.ui.components.BackButton
 import com.lossydragon.modplayer.ui.components.MessageBox
 import com.lossydragon.modplayer.ui.screens.downloads.DownloadsViewModel
@@ -21,16 +19,15 @@ import com.lossydragon.modplayer.ui.screens.downloads.components.DownloadListIte
 import com.lossydragon.modplayer.ui.theme.AppTheme
 import kotlinx.collections.immutable.ImmutableList
 import kotlinx.collections.immutable.toPersistentList
-import org.koin.androidx.compose.koinViewModel
 
 @Composable
 internal fun DownloadHistoryScreen(
+    viewModel: DownloadsViewModel,
     onBack: () -> Unit,
     modifier: Modifier = Modifier,
     onModuleClick: (Int) -> Unit
 ) {
-    val viewModel = koinViewModel<DownloadsViewModel>()
-    val history by viewModel.historyState.collectAsStateWithLifecycle()
+    val history by viewModel.history.collectAsStateWithLifecycle()
 
     var showClearDialog by remember { mutableStateOf(false) }
 
@@ -70,7 +67,7 @@ internal fun DownloadHistoryScreen(
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 private fun DownloadHistoryContent(
-    history: ImmutableList<Module>,
+    history: ImmutableList<DownloadHistoryItem>,
     onBack: () -> Unit,
     onModuleClick: (Int) -> Unit,
     modifier: Modifier = Modifier,
@@ -122,12 +119,13 @@ private fun DownloadHistoryContent(
                         content = {
                             items(
                                 items = history,
-                                itemContent = { module ->
+                                key = { it.id },
+                                itemContent = { item ->
                                     DownloadListItem(
-                                        text = module.songtitle,
-                                        supportingText = module.artist,
-                                        leadingText = module.format,
-                                        onClick = { onModuleClick(module.id) }
+                                        text = item.songtitle,
+                                        supportingText = item.artist,
+                                        leadingText = item.format,
+                                        onClick = { onModuleClick(item.id) }
                                     )
                                 }
                             )
@@ -145,11 +143,14 @@ private fun Preview() {
     AppTheme {
         DownloadHistoryContent(
             history = Array(10) {
-                Module(
-                    format = "MOD",
+                DownloadHistoryItem(
+                    id = it,
+                    filename = "song_$it.mod",
                     songtitle = "Song Title $it",
-                    artistInfo = ArtistInfo(artist = listOf(Artist(alias = "Song Artist $it"))),
+                    format = "MOD",
                     bytes = (it + 1) * 1234,
+                    artist = "Song Artist $it",
+                    viewedAt = System.currentTimeMillis() - it * 60_000L,
                 )
             }.toPersistentList(),
             onBack = {},

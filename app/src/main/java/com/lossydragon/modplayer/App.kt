@@ -6,6 +6,7 @@ import com.lossydragon.modplayer.core.CrashHandler
 import com.lossydragon.modplayer.core.FileLoggingTree
 import com.lossydragon.modplayer.db.AppPreferences
 import com.lossydragon.modplayer.di.appModule
+import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.MainScope
 import kotlinx.coroutines.cancel
 import kotlinx.coroutines.launch
@@ -43,6 +44,7 @@ class App : Application() {
         }
 
         CrashHandler.initialize(this@App)
+        appScope.launch(Dispatchers.IO) { CrashHandler.exportPendingReports(this@App) }
     }
 
     override fun onTerminate() {

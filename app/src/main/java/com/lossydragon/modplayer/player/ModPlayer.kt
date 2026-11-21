@@ -1,7 +1,7 @@
 package com.lossydragon.modplayer.player
 
-import android.annotation.SuppressLint
 import android.content.Context
+import android.content.Intent
 import android.net.Uri
 import android.os.Handler
 import android.os.Looper
@@ -10,6 +10,7 @@ import androidx.core.net.toUri
 import androidx.media3.common.C
 import androidx.media3.common.MediaItem
 import androidx.media3.common.MediaMetadata
+import androidx.media3.common.PlaybackException
 import androidx.media3.common.Player
 import androidx.media3.common.SimpleBasePlayer
 import androidx.media3.common.util.UnstableApi
@@ -19,8 +20,6 @@ import com.lossydragon.modplayer.R
 import com.lossydragon.modplayer.db.AppPreferences
 import com.lossydragon.modplayer.db.PlaybackState
 import com.lossydragon.modplayer.db.entity.ModuleEntity
-import com.lossydragon.native.model.AudioStats
-import kotlin.math.abs
 import kotlin.time.Duration.Companion.milliseconds
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
@@ -35,8 +34,12 @@ import kotlinx.serialization.json.Json
 import timber.log.Timber
 
 /**
- * Media3 [SimpleBasePlayer] backed by [PlayerEngine]. Queue decisions live in
+ * Media3 [SimpleBasePlayer] backed by an [Engine]. Queue decisions live in
  * [QueueController]; this class carries them out against the engine and Media3.
+ *
+ * All state here is owned by the main thread. Engine commands are posted to the engine
+ * thread and report back through [mainHandler]; a load generation counter discards
+ * results of requests that were superseded while in flight.
  */
 @OptIn(UnstableApi::class)
 class ModPlayer(
@@ -45,62 +48,44 @@ class ModPlayer(
     private val prefs: AppPreferences
 ) : SimpleBasePlayer(Looper.getMainLooper()) {
 
+    private enum class Phase { IDLE, LOADING, READY, PLAYING, ENDED }
+
+    private companion object {
+        /** The disconnect itself plus one failed restart. */
+        const val MAX_RECOVERIES = 2
+    }
+
     private val queue = QueueController<ModuleEntity>()
 
-    /** [QueueController.items] as [MediaItem]s for [getState]; the current one has real metadata. */
+    /** [QueueController.items] as [MediaItem]s for [getState]; the loaded one has real metadata. */
     private val playlist = mutableListOf<MediaItem>()
 
-    /** Guards [isLoading] and [pendingLoad]. */
-    private val loadLock = Any()
+    private var phase = Phase.IDLE
 
-    /** True while [loadAndStartAt] is running a background [Thread]. */
-    @Volatile
-    private var isLoading = false
+    /** User intent, independent of whether the engine is actually rendering yet. */
+    private var playWhenReady = false
+    private var playWhenReadyReason = PLAY_WHEN_READY_CHANGE_REASON_USER_REQUEST
+    private var suppressionReason = PLAYBACK_SUPPRESSION_REASON_NONE
+    private var playerError: PlaybackException? = null
 
-    /** Newest load requested while [isLoading]; processed when the current load finishes. */
-    private var pendingLoad: LoadRequest? = null
+    /** Bumped on every load/stop so stale engine results are ignored. */
+    private var loadGeneration = 0
 
-    /** True when the user explicitly paused; prevents audio-focus regain from auto-resuming. */
-    @Volatile
-    private var userPaused = false
+    /** Disconnect recoveries since the engine last started; stops a dead stream looping. */
+    private var recoveries = 0
 
-    /**
-     * Desired seek target while a seek is in-flight. Held until the engine
-     * position converges, then reset to -1. Guards against position flicker.
-     */
-    @Volatile
+    /** Position to seek to the next time the current item is started. */
+    private var resumePositionMs = 0L
+
+    /** Seek target reported until the engine has applied it; -1 when none. */
     private var pendingSeekPositionMs = -1L
 
-    /**
-     * True while shuffle is being toggled. Prevents [currentIndexFlow] from
-     * triggering a metadata reload mid-reorder.
-     */
-    @Volatile
-    var isReordering = false
-
-    /** Per-frame snapshots from the render thread. */
-    val frameInfoFlow by engine::frameInfoFlow
-
-    /** True while the engine render loop is running. */
-    val isPlaying by engine::isPlaying
-
-    /** Current multi-sequence index, emitted on sequence change. */
-    val currentSequenceFlow by engine::currentSequenceFlow
-
-    /** Module metadata, emitted once after each successful load. */
-    val modVarsFlow by engine::modVarsFlow
-
-    /** Index of the currently playing item in the queue; emitted on navigation. */
-    val currentIndexFlow: StateFlow<Int>
-        field = MutableStateFlow(0)
-
-    /** Snapshot of the current playback queue; emitted when the queue changes. */
+    /** Snapshot of the playback queue; emitted when the queue changes. */
     val queueFlow: StateFlow<List<ModuleEntity>>
         field = MutableStateFlow(emptyList())
 
-    /** Incremented each time a new module finishes loading; triggers metadata sync. */
-    val moduleLoadedFlow: StateFlow<Int>
-        field = MutableStateFlow(0)
+    val modVarsFlow by engine::modVarsFlow
+    val currentSequenceFlow by engine::currentSequenceFlow
 
     private val audioFocus = AudioFocusHandler(context)
     private val mainHandler = Handler(Looper.getMainLooper())
@@ -109,68 +94,39 @@ class ModPlayer(
 
     init {
         scope.launch {
-            prefs.getGlobalSubSongsFlow().collect { value ->
-                engine.playAllSequences = value
-            }
+            prefs.getGlobalSubSongsFlow().collect { engine.playAllSequences = it }
         }
-
         scope.launch {
-            engine.isPlaying.collect { playing ->
-                Timber.i(
-                    "isPlaying collector: playing=$playing " +
-                        "endedNaturally=${engine.endedNaturally} idx=${queue.currentIndex}/${queue.size}"
-                )
-                invalidateState()
+            engine.playingFlow.collect { playing ->
                 if (playing) {
+                    if (phase == Phase.READY) phase = Phase.PLAYING
                     startPositionUpdates()
                 } else {
                     stopPositionUpdates()
-                    // When the engine ends naturally, advance the queue on the main thread.
-                    if (engine.endedNaturally) mainHandler.post { perform(queue.next()) }
+                    if (phase == Phase.PLAYING) phase = Phase.READY
+                }
+                invalidateState()
+            }
+        }
+        scope.launch {
+            engine.events.collect { event ->
+                when (event) {
+                    EngineEvent.Ended -> onEnded()
+
+                    EngineEvent.Disconnected -> onDisconnected()
+
+                    is EngineEvent.Error -> failPlayback(event.message)
                 }
             }
         }
-
-        scope.launch {
-            engine.audioDisconnectedFlow.collect { disconnected ->
-                if (!disconnected) return@collect
-                Timber.w("Audio device disconnected — reopening stream and reloading current track")
-                val resumePositionMs = engine.positionMs.value
-                stopPositionUpdates()
-                invalidateState()
-                val resume = !userPaused
-                Thread {
-                    engine.handleAudioDisconnect()
-                    if (!queue.isEmpty) {
-                        mainHandler.post {
-                            // Reopen on the new route; only keep playing if the user hadn't paused.
-                            loadAndStartAt(
-                                index = queue.currentIndex,
-                                seekToMs = resumePositionMs,
-                                autoStart = resume,
-                            )
-                        }
-                    }
-                }.start()
-            }
-        }
     }
 
-    /** Enables or disables single-track repeat in the engine. */
-    fun isRepeatingOne(value: Boolean) = engine.isRepeatingOne(value)
+    // --- public API used by the UI --------------------------------------------------------
 
-    /** Switches to sequence [index]; updates duration and position flows on success. */
-    fun setSequence(index: Int): Boolean = engine.setSequence(index)
+    /** Switches to sequence [index] of the loaded module. */
+    fun setSequence(index: Int) = engine.post { engine.setSequence(index) }
 
-    /** Enables or disables automatic playback of all module sequences. */
-    fun setPlayAllSequences(value: Boolean) {
-        engine.playAllSequences = value
-    }
-
-    /**
-     * Loads [files] into the queue and starts playback at [startAt],
-     * seeking to [startPositionMs] once the module is loaded if it is > 0.
-     */
+    /** Loads [files] into the queue and starts playback at [startAt]. */
     fun loadQueue(
         files: List<ModuleEntity>,
         startAt: Int,
@@ -179,133 +135,110 @@ class ModPlayer(
         startPositionMs: Long = 0L
     ) {
         val repeat = repeatModeFromMedia3(repeatMode)
-        isRepeatingOne(repeat == RepeatMode.ONE)
-        userPaused = false
-
-        requestAudioFocus()
+        engine.post { engine.setRepeatOne(repeat == RepeatMode.ONE) }
+        ensureServiceRunning()
+        setPlayWhenReadyInternal(true, PLAY_WHEN_READY_CHANGE_REASON_USER_REQUEST)
+        acquireFocus()
 
         val step = queue.load(files, startAt, shuffle = shuffleMode, repeatMode = repeat)
         syncPlaylist()
-        perform(step, startPositionMs)
         persistQueueList()
+        perform(step, startPositionMs)
     }
 
-    /** Advances to the next item (or loops/parks depending on repeat mode). */
     fun next() = perform(queue.next())
 
-    /**
-     * Goes to the previous item, or seeks to the start of the current track
-     * if more than 3 seconds have elapsed.
-     */
+    /** Previous item, or back to the start of this one after more than 3 seconds. */
     fun previous() {
-        if (engine.positionMs.value > 3_000L) {
-            pendingSeekPositionMs = 0L
-            engine.seek(0)
-            invalidateState()
+        if (currentPositionForUi() >
+            3_000L
+        ) {
+            perform(QueueStep.Restart)
         } else {
             perform(queue.previous())
         }
     }
 
-    /** Jumps directly to [index] in the current queue, optionally starting at [startPositionMs]. */
     fun jumpToIndex(index: Int, startPositionMs: Long = 0L) =
         perform(queue.jumpTo(index), startPositionMs)
-
-    /**
-     * Requests / re-requests audio focus from the system. Must run on every play
-     * request: after a permanent AUDIOFOCUS_LOSS the system never hands focus back on
-     * its own, so the user pressing play is what gets it (and playback) back.
-     */
-    fun requestAudioFocus() = audioFocus.request(
-        onGain = {
-            if (!userPaused) {
-                when {
-                    engine.paused -> engine.resume()
-
-                    // Delayed-focus case: engine loaded and waiting to start (not paused, not playing).
-                    engine.initialized && !engine.isPlaying.value && !engine.endedNaturally ->
-                        Thread { engine.start() }.start()
-                }
-            }
-        },
-        onLoss = { engine.pause() },
-        onDuck = engine::setDucked,
-    )
 
     /** Releases audio focus. Called from [PlayerService.onDestroy]. */
     fun abandonAudioFocus() = audioFocus.abandon()
 
-    /** Returns cached pattern data for the pattern view. */
-    fun getPatternData(patternIndex: Int) = engine.getPatternData(patternIndex)
-
-    /** Fills [stats] with current Oboe stream statistics. */
-    fun getAudioStats(stats: AudioStats) = engine.getAudioStats(stats)
-
     /**
      * Flushes the playback position and tears down the engine. Called from
-     * [PlayerService.onDestroy].
-     *
-     * This player is a process-wide singleton shared by the UI and every
-     * [PlayerService] instance, so neither [scope] nor [SimpleBasePlayer.release] are
-     * touched here: the collectors in `init` must keep running for the next service
-     * instance (queue advance, position updates, disconnect handling all live there).
+     * [PlayerService.onDestroy]. The player is a process singleton shared by the UI and
+     * every service instance, so [scope] and the Media3 base are left alone.
      */
     fun releaseEngine() {
         stopPositionUpdates()
+        // The queue outlives the service; the next play resumes from here.
+        val position = if (phase == Phase.ENDED) 0L else currentPositionForUi()
+        loadGeneration++
+        phase = Phase.IDLE
+        resumePositionMs = position
+        pendingSeekPositionMs = -1L
         if (!queue.isEmpty) persistPlaybackState()
-        Thread { engine.release() }.start()
+        engine.post { engine.release() }
+        invalidateState()
     }
 
     /**
-     * Restores the persisted queue state, starting playback only if
-     * [AppPreferences.getAutoResume] is enabled. Called on service start.
+     * Restores the persisted queue without touching the audio device. Playback starts
+     * only when [AppPreferences.getAutoResume] is on; otherwise the first play loads.
      *
-     * @return true if a non-empty queue was successfully restored.
+     * @return true if a non-empty queue was restored.
      */
     suspend fun restoreQueue(): Boolean {
+        if (!queue.isEmpty) return false
         val state = prefs.getQueueState() ?: return false
+        val autoResume = prefs.getAutoResume()
         val files = try {
-            Json.decodeFromString<List<ModuleEntity>>(state.json)
+            withContext(Dispatchers.Default) {
+                Json.decodeFromString<List<ModuleEntity>>(state.json)
+            }
         } catch (e: Exception) {
             Timber.e(e, "Failed to restore queue")
             prefs.clearQueueState()
             return false
         }
+        // Re-check: the UI may have loaded a queue while we were suspended.
         if (files.isEmpty() || !queue.isEmpty) return false
 
         val repeat = repeatModeFromMedia3(state.repeat)
-        isRepeatingOne(repeat == RepeatMode.ONE)
+        engine.post { engine.setRepeatOne(repeat == RepeatMode.ONE) }
         queue.load(files, startAt = state.index, shuffle = state.shuffle, repeatMode = repeat)
         syncPlaylist()
+        resumePositionMs = state.positionMs.coerceAtLeast(0L)
 
-        val autoResume = prefs.getAutoResume()
-        if (autoResume) requestAudioFocus()
-        loadAndStartAt(
-            index = queue.currentIndex,
-            seekToMs = state.positionMs.takeIf { autoResume && it > 0L },
-            autoStart = autoResume,
-        )
-        invalidateState()
+        if (autoResume) {
+            setPlayWhenReadyInternal(true, PLAY_WHEN_READY_CHANGE_REASON_USER_REQUEST)
+            acquireFocus()
+            perform(QueueStep.Play(queue.currentIndex), resumePositionMs)
+        } else {
+            invalidateState()
+        }
         return true
     }
 
-    /**
-     * Constructs the immutable player state snapshot that Media3 uses for
-     * notification metadata, transport controls, and session state.
-     */
+    // --- Media3 ---------------------------------------------------------------------------
+
     override fun getState(): State {
         val commands = Player.Commands.Builder().addAll(
             COMMAND_PLAY_PAUSE,
+            COMMAND_PREPARE,
+            COMMAND_STOP,
             COMMAND_SEEK_IN_CURRENT_MEDIA_ITEM,
             COMMAND_SEEK_TO_MEDIA_ITEM,
             COMMAND_SEEK_TO_PREVIOUS,
+            COMMAND_SEEK_TO_PREVIOUS_MEDIA_ITEM,
             COMMAND_SEEK_TO_NEXT,
+            COMMAND_SEEK_TO_NEXT_MEDIA_ITEM,
             COMMAND_SEEK_FORWARD,
             COMMAND_SEEK_BACK,
             COMMAND_GET_CURRENT_MEDIA_ITEM,
             COMMAND_GET_METADATA,
             COMMAND_GET_TIMELINE,
-            COMMAND_STOP,
             COMMAND_SET_MEDIA_ITEM,
             COMMAND_CHANGE_MEDIA_ITEMS,
             COMMAND_SET_REPEAT_MODE,
@@ -315,9 +248,8 @@ class ModPlayer(
         val currentIndex = queue.currentIndex
         val durationMs = engine.modVarsFlow.value.sequenceDuration(engine.currentSequenceFlow.value)
         val playlistItems = playlist.mapIndexed { i, item ->
-            val uid = item.mediaId.ifEmpty {
-                item.localConfiguration?.uri?.toString() ?: i.toString()
-            }
+            // Original index + path: unique even when a file is queued twice, stable across shuffle.
+            val uid = "${queue.originalIndexAt(i)}:${item.mediaId}"
             val durationUs =
                 if (i == currentIndex && durationMs > 0) durationMs * 1_000L else C.TIME_UNSET
             MediaItemData.Builder(uid)
@@ -327,11 +259,11 @@ class ModPlayer(
                 .build()
         }
 
-        val position =
-            if (pendingSeekPositionMs >= 0) pendingSeekPositionMs else engine.positionMs.value
         val playbackState = when {
             playlist.isEmpty() -> STATE_IDLE
-            engine.endedNaturally -> STATE_ENDED
+            phase == Phase.IDLE -> STATE_IDLE
+            phase == Phase.LOADING -> STATE_BUFFERING
+            phase == Phase.ENDED -> STATE_ENDED
             else -> STATE_READY
         }
 
@@ -340,71 +272,80 @@ class ModPlayer(
             .setPlaylist(playlistItems)
             .setShuffleModeEnabled(queue.shuffle)
             .setRepeatMode(queue.repeatMode.toMedia3())
-            .setCurrentMediaItemIndex(currentIndex)
-            .setPlayWhenReady(engine.isPlaying.value, PLAY_WHEN_READY_CHANGE_REASON_USER_REQUEST)
+            .setCurrentMediaItemIndex(if (playlist.isEmpty()) C.INDEX_UNSET else currentIndex)
+            .setPlayWhenReady(playWhenReady, playWhenReadyReason)
+            .setPlaybackSuppressionReason(suppressionReason)
             .setPlaybackState(playbackState)
-            .setContentPositionMs(position)
-            .setSeekForwardIncrementMs(10_000L) // 10 Seconds
-            .setSeekBackIncrementMs(10_000L) // 10 Seconds
+            .setPlayerError(playerError)
+            .setContentPositionMs(currentPositionForUi())
+            .setSeekForwardIncrementMs(10_000L)
+            .setSeekBackIncrementMs(10_000L)
             .build()
     }
 
-    /** Starts or resumes the engine, or loads the current item if not yet initialised. */
-    @SuppressLint("BinaryOperationInTimber")
-    override fun handleSetPlayWhenReady(playWhenReady: Boolean): ListenableFuture<*> {
-        Timber.d(
-            "handleSetPlayWhenReady: playWhenReady=$playWhenReady " +
-                "isPlaying=${engine.isPlaying.value} initialized=${engine.initialized} " +
-                "isLoading=$isLoading queue=${queue.size}"
-        )
-        if (!playWhenReady) {
-            userPaused = true
-            engine.pause()
-        } else if (!engine.isPlaying.value) {
-            userPaused = false
-            requestAudioFocus() // also the only way back after a permanent focus loss
-            when {
-                !engine.initialized -> if (!isLoading) loadAndStartAt(queue.currentIndex)
-
-                engine.paused -> engine.resume()
-
-                // start() reads prefs and opens the native player: keep it off the main thread.
-                !engine.endedNaturally -> Thread { engine.start() }.start()
-
-                // Queue finished: play again from the top.
-                else -> jumpToIndex(0)
-            }
+    override fun handlePrepare(): ListenableFuture<*> {
+        if (phase == Phase.IDLE &&
+            !queue.isEmpty
+        ) {
+            perform(QueueStep.Play(queue.currentIndex), resumePositionMs)
         }
         return Futures.immediateVoidFuture()
     }
 
-    /** Stores the new repeat mode and persists it with the queue. */
+    override fun handleSetPlayWhenReady(playWhenReady: Boolean): ListenableFuture<*> {
+        Timber.d("handleSetPlayWhenReady: $playWhenReady phase=$phase queue=${queue.size}")
+        if (!playWhenReady) {
+            setPlayWhenReadyInternal(false, PLAY_WHEN_READY_CHANGE_REASON_USER_REQUEST)
+            pauseEngine()
+            invalidateState()
+            return Futures.immediateVoidFuture()
+        }
+
+        playerError = null
+        setPlayWhenReadyInternal(true, PLAY_WHEN_READY_CHANGE_REASON_USER_REQUEST)
+        if (!acquireFocus()) return Futures.immediateVoidFuture()
+        when (phase) {
+            Phase.IDLE -> if (!queue.isEmpty) {
+                perform(
+                    QueueStep.Play(queue.currentIndex),
+                    resumePositionMs
+                )
+            }
+
+            Phase.LOADING -> Unit
+
+            // the load completion starts the engine
+            Phase.READY -> startEngineIfWanted()
+
+            Phase.PLAYING -> Unit
+
+            Phase.ENDED -> perform(queue.jumpTo(0))
+        }
+        invalidateState()
+        return Futures.immediateVoidFuture()
+    }
+
     override fun handleSetRepeatMode(repeatMode: Int): ListenableFuture<*> {
-        queue.repeatMode = repeatModeFromMedia3(repeatMode)
-        isRepeatingOne(queue.repeatMode == RepeatMode.ONE)
+        val mode = repeatModeFromMedia3(repeatMode)
+        queue.setRepeatMode(mode)
+        engine.post { engine.setRepeatOne(mode == RepeatMode.ONE) }
         invalidateState()
         persistPlaybackState()
         return Futures.immediateVoidFuture()
     }
 
-    /**
-     * Toggles shuffle mode. Rebuilds the queue so the currently-playing track stays
-     * current, preserving its real metadata item across the reorder.
-     */
+    /** Rebuilds the order; the loaded item stays current and keeps its real metadata. */
     override fun handleSetShuffleModeEnabled(shuffleModeEnabled: Boolean): ListenableFuture<*> {
-        isReordering = true
         val currentItem = playlist.getOrNull(queue.currentIndex)
         queue.setShuffle(shuffleModeEnabled)
         syncPlaylist(retainCurrentItem = currentItem)
-        isReordering = false
         persistPlaybackState()
         return Futures.immediateVoidFuture()
     }
 
     /**
-     * Routes seek commands: next/previous navigate the queue; a seek that names a
-     * different [mediaItemIndex] (queue tap from Android Auto / a controller) jumps
-     * to that item; everything else seeks within the current item.
+     * Next/previous navigate the queue; a seek naming another [mediaItemIndex] jumps to
+     * it; anything else seeks within the current item (reloading it when parked).
      */
     override fun handleSeek(
         mediaItemIndex: Int,
@@ -423,44 +364,36 @@ class ModPlayer(
                 if (mediaItemIndex != C.INDEX_UNSET && mediaItemIndex != queue.currentIndex) {
                     jumpToIndex(mediaItemIndex, startPositionMs = targetMs)
                 } else {
-                    pendingSeekPositionMs = targetMs
-                    engine.seek(targetMs.toInt())
-                    invalidateState()
+                    seekWithinCurrent(targetMs)
                 }
             }
         }
         return Futures.immediateVoidFuture()
     }
 
-    /** Stops the engine and clears the queue. */
+    /** Media3 contract: stop playback, keep the timeline. The queue is cleared only via the queue commands. */
     override fun handleStop(): ListenableFuture<*> {
-        Thread { engine.stop() }.start()
-        queue.clear()
-        syncPlaylist()
-        persistQueueList()
+        setPlayWhenReadyInternal(false, PLAY_WHEN_READY_CHANGE_REASON_USER_REQUEST)
+        loadGeneration++
+        phase = Phase.IDLE
+        resumePositionMs = 0L
+        pendingSeekPositionMs = -1L
+        stopPositionUpdates()
+        engine.post { engine.stop() }
+        persistPlaybackState(positionOverride = 0L)
+        invalidateState()
         return Futures.immediateVoidFuture()
     }
 
-    /**
-     * Accepts a pre-resolved item list from [AutoBrowseCallback] (or playback
-     * resumption) and loads the queue starting at [startIndex]. Queue expansion
-     * (sibling scanning) is done upstream, so the list is trusted as-is.
-     */
     override fun handleSetMediaItems(
         mediaItems: List<MediaItem>,
         startIndex: Int,
         startPositionMs: Long
     ): ListenableFuture<*> {
-        val files = mediaItems.mapNotNull { item ->
-            val uri = item.localConfiguration?.uri ?: return@mapNotNull null
-            MediaItemExtras.moduleFrom(item) ?: ModuleEntity(
-                filePath = uri.toString(),
-                filename = item.mediaMetadata.title?.toString() ?: uri.lastPathSegment ?: "Unknown",
-                fileSize = 0L,
-                fileExtension = uri.lastPathSegment?.substringAfterLast('.', "") ?: "",
-            )
-        }
-        if (files.isNotEmpty()) {
+        val files = mediaItems.toModules()
+        if (files.isEmpty()) {
+            clearQueue()
+        } else {
             loadQueue(
                 files = files,
                 startAt = startIndex.coerceIn(0, files.lastIndex),
@@ -470,40 +403,344 @@ class ModPlayer(
         return Futures.immediateVoidFuture()
     }
 
-    /**
-     * Carries out a [QueueStep] decided by [queue]: loads and starts the target item,
-     * parks at the end, or drops the emptied queue. Always on the main thread.
-     */
-    private fun perform(step: QueueStep, startPositionMs: Long = 0L) {
+    override fun handleAddMediaItems(index: Int, mediaItems: List<MediaItem>): ListenableFuture<*> {
+        queue.add(index, mediaItems.toModules())
+        syncPlaylist()
+        persistQueueList()
+        return Futures.immediateVoidFuture()
+    }
+
+    override fun handleRemoveMediaItems(fromIndex: Int, toIndex: Int): ListenableFuture<*> {
+        applyEdit(queue.remove(fromIndex, toIndex))
+        return Futures.immediateVoidFuture()
+    }
+
+    override fun handleMoveMediaItems(
+        fromIndex: Int,
+        toIndex: Int,
+        newIndex: Int
+    ): ListenableFuture<*> {
+        queue.move(fromIndex, toIndex, newIndex)
+        syncPlaylist()
+        persistQueueList()
+        return Futures.immediateVoidFuture()
+    }
+
+    override fun handleReplaceMediaItems(
+        fromIndex: Int,
+        toIndex: Int,
+        mediaItems: List<MediaItem>
+    ): ListenableFuture<*> {
+        val step = queue.remove(fromIndex, toIndex)
+        queue.add(fromIndex, mediaItems.toModules())
+        // The remove's Clear is stale once the add put items back.
+        applyEdit(
+            if (step != QueueStep.None && !queue.isEmpty) {
+                QueueStep.Play(queue.currentIndex)
+            } else {
+                step
+            }
+        )
+        return Futures.immediateVoidFuture()
+    }
+
+    // --- transitions ----------------------------------------------------------------------
+
+    /** Applies the result of a queue edit (remove/replace). */
+    private fun applyEdit(step: QueueStep) {
         when (step) {
+            QueueStep.Clear -> clearQueue()
+
+            // The playing item was removed: move on only if something was playing/loaded.
             is QueueStep.Play -> {
-                currentIndexFlow.value = step.index
-                pendingSeekPositionMs = -1L
-                invalidateState()
-                loadAndStartAt(step.index, seekToMs = startPositionMs.takeIf { it > 0L })
-                persistPlaybackState()
+                syncPlaylist()
+                persistQueueList()
+                if (phase != Phase.IDLE) perform(step)
             }
 
-            QueueStep.Park -> {
-                persistPlaybackState()
-                invalidateState()
-            }
-
-            QueueStep.Clear -> {
+            else -> {
                 syncPlaylist()
                 persistQueueList()
             }
+        }
+    }
+
+    private fun clearQueue() {
+        loadGeneration++
+        queue.clear()
+        phase = Phase.IDLE
+        resumePositionMs = 0L
+        pendingSeekPositionMs = -1L
+        setPlayWhenReadyInternal(false, PLAY_WHEN_READY_CHANGE_REASON_USER_REQUEST)
+        stopPositionUpdates()
+        engine.post { engine.stop() }
+        syncPlaylist()
+        persistQueueList()
+    }
+
+    /** Carries out a [QueueStep]. Always on the main thread. */
+    private fun perform(step: QueueStep, startPositionMs: Long = 0L) {
+        when (step) {
+            is QueueStep.Play -> startLoad(step.index, startPositionMs)
+
+            QueueStep.Restart -> when (phase) {
+                Phase.READY, Phase.PLAYING, Phase.ENDED -> seekWithinCurrent(0L)
+                else -> resumePositionMs = 0L
+            }
+
+            QueueStep.Park -> {
+                phase = Phase.ENDED
+                resumePositionMs = 0L
+                // Nothing will auto-start; the UI must show a play button again.
+                setPlayWhenReadyInternal(false, PLAY_WHEN_READY_CHANGE_REASON_END_OF_MEDIA_ITEM)
+                persistPlaybackState(positionOverride = 0L)
+                invalidateState()
+            }
+
+            QueueStep.Clear -> clearQueue()
 
             QueueStep.None -> Unit
         }
     }
 
+    private fun startLoad(index: Int, startPositionMs: Long) {
+        val file = queue.items.getOrNull(index) ?: return
+        val generation = ++loadGeneration
+        phase = Phase.LOADING
+        playerError = null
+        pendingSeekPositionMs = -1L
+        resumePositionMs = startPositionMs.coerceAtLeast(0L)
+        stopPositionUpdates()
+        invalidateState()
+        persistPlaybackState(positionOverride = resumePositionMs)
+
+        engine.post {
+            val result = engine.load(file)
+            mainHandler.post { onLoadFinished(generation, index, file, result) }
+        }
+    }
+
+    private fun onLoadFinished(
+        generation: Int,
+        index: Int,
+        file: ModuleEntity,
+        result: LoadResult
+    ) {
+        if (generation != loadGeneration) return // superseded
+        when (result) {
+            LoadResult.OK -> Unit
+
+            LoadResult.UNPLAYABLE -> {
+                perform(queue.onLoadFailed())
+                return
+            }
+
+            // Not the file's fault: keep the queue rather than skipping through it.
+            LoadResult.NO_AUDIO -> {
+                failPlayback("Could not open the audio output")
+                return
+            }
+        }
+        queue.onLoadSucceeded()
+        phase = Phase.READY
+
+        val duration = engine.modVarsFlow.value.sequenceDuration(engine.currentSequenceFlow.value)
+        val realItem = file.toMediaItem(file.toRealMetadata(duration.toLong()))
+        if (playlist.getOrNull(index)?.mediaId == realItem.mediaId) playlist[index] = realItem
+
+        startEngineIfWanted()
+        invalidateState()
+    }
+
+    /** Starts the loaded item if the user wants playback and nothing suppresses it. */
+    private fun startEngineIfWanted() {
+        if (phase != Phase.READY || !playWhenReady ||
+            suppressionReason != PLAYBACK_SUPPRESSION_REASON_NONE
+        ) {
+            return
+        }
+        val seekMs = resumePositionMs
+        resumePositionMs = 0L
+        if (seekMs > 0L) pendingSeekPositionMs = seekMs
+        val generation = loadGeneration
+        engine.post {
+            val started = engine.play()
+            if (started && seekMs > 0L) engine.seek(seekMs.toInt())
+            mainHandler.post {
+                if (started) recoveries = 0
+                if (generation == loadGeneration &&
+                    pendingSeekPositionMs == seekMs
+                ) {
+                    pendingSeekPositionMs = -1L
+                }
+            }
+        }
+    }
+
+    private fun seekWithinCurrent(targetMs: Long) {
+        when (phase) {
+            Phase.IDLE, Phase.LOADING -> resumePositionMs = targetMs
+
+            Phase.ENDED -> perform(QueueStep.Play(queue.currentIndex), targetMs)
+
+            Phase.READY, Phase.PLAYING -> {
+                pendingSeekPositionMs = targetMs
+                val generation = loadGeneration
+                engine.post {
+                    engine.seek(targetMs.toInt())
+                    mainHandler.post {
+                        if (generation == loadGeneration &&
+                            pendingSeekPositionMs == targetMs
+                        ) {
+                            pendingSeekPositionMs = -1L
+                        }
+                    }
+                }
+            }
+        }
+        invalidateState()
+    }
+
+    /** READY counts too: a start may already be posted and the phase not caught up yet. */
+    private fun pauseEngine() {
+        if (phase == Phase.READY || phase == Phase.PLAYING) engine.post { engine.pause() }
+    }
+
+    /** Goes idle with an error, keeping the queue and position. Media3 only allows an error in STATE_IDLE. */
+    private fun failPlayback(message: String) {
+        playerError = PlaybackException(message, null, PlaybackException.ERROR_CODE_UNSPECIFIED)
+        loadGeneration++
+        phase = Phase.IDLE
+        setPlayWhenReadyInternal(false, PLAY_WHEN_READY_CHANGE_REASON_USER_REQUEST)
+        invalidateState()
+    }
+
+    private fun onEnded() {
+        if (phase == Phase.IDLE || phase == Phase.LOADING) return
+        perform(queue.next())
+    }
+
+    private fun onDisconnected() {
+        if (phase == Phase.IDLE) return
+        Timber.w("Audio route lost; reopening on the next start")
+        val position = currentPositionForUi()
+        val generation = ++loadGeneration
+        phase = Phase.IDLE
+        resumePositionMs = position
+        pendingSeekPositionMs = -1L
+        stopPositionUpdates()
+        if (++recoveries > MAX_RECOVERIES) {
+            // The stream keeps failing to start; stop instead of reloading forever.
+            playerError = PlaybackException(
+                "Could not start the audio output",
+                null,
+                PlaybackException.ERROR_CODE_UNSPECIFIED,
+            )
+            setPlayWhenReadyInternal(false, PLAY_WHEN_READY_CHANGE_REASON_USER_REQUEST)
+        }
+        invalidateState()
+        engine.post {
+            engine.recoverFromDisconnect()
+            mainHandler.post {
+                if (generation != loadGeneration || queue.isEmpty) return@post
+                if (playWhenReady) perform(QueueStep.Play(queue.currentIndex), position)
+            }
+        }
+    }
+
+    // --- audio focus ----------------------------------------------------------------------
+
     /**
-     * Rebuilds [playlist] from the controller's order and publishes the queue flows.
-     *
-     * @param retainCurrentItem Real-metadata item to keep at the current index
-     *   across a reorder; the engine's metadata belongs to the loaded file, not to
-     *   whatever lands at that index.
+     * Requests focus. Returns true when the engine may start now. A delayed grant leaves
+     * [playWhenReady] set and suppressed until GAIN; a refusal clears it.
+     */
+    private fun acquireFocus(): Boolean {
+        val result = audioFocus.request(
+            onGain = {
+                suppressionReason = PLAYBACK_SUPPRESSION_REASON_NONE
+                if (playWhenReady) {
+                    when (phase) {
+                        Phase.READY -> startEngineIfWanted()
+
+                        Phase.IDLE -> if (!queue.isEmpty) {
+                            perform(
+                                QueueStep.Play(queue.currentIndex),
+                                resumePositionMs
+                            )
+                        }
+
+                        else -> Unit
+                    }
+                }
+                invalidateState()
+            },
+            onLoss = { transient ->
+                if (transient) {
+                    suppressionReason = PLAYBACK_SUPPRESSION_REASON_TRANSIENT_AUDIO_FOCUS_LOSS
+                } else {
+                    setPlayWhenReadyInternal(false, PLAY_WHEN_READY_CHANGE_REASON_AUDIO_FOCUS_LOSS)
+                }
+                pauseEngine()
+                invalidateState()
+            },
+            onDuck = engine::setDucked,
+        )
+        return when (result) {
+            FocusResult.GRANTED -> {
+                suppressionReason = PLAYBACK_SUPPRESSION_REASON_NONE
+                true
+            }
+
+            FocusResult.DELAYED -> {
+                suppressionReason = PLAYBACK_SUPPRESSION_REASON_TRANSIENT_AUDIO_FOCUS_LOSS
+                false
+            }
+
+            FocusResult.FAILED -> {
+                setPlayWhenReadyInternal(false, PLAY_WHEN_READY_CHANGE_REASON_AUDIO_FOCUS_LOSS)
+                false
+            }
+        }
+    }
+
+    private fun setPlayWhenReadyInternal(value: Boolean, reason: Int) {
+        playWhenReady = value
+        playWhenReadyReason = reason
+        if (value) suppressionReason = PLAYBACK_SUPPRESSION_REASON_NONE
+    }
+
+    // --- helpers --------------------------------------------------------------------------
+
+    private fun currentPositionForUi(): Long = when {
+        pendingSeekPositionMs >= 0L -> pendingSeekPositionMs
+        phase == Phase.IDLE || phase == Phase.LOADING -> resumePositionMs
+        else -> engine.positionMs.value
+    }
+
+    /** Media3 Service start, so the session and notification exist before audio does. */
+    private fun ensureServiceRunning() {
+        try {
+            context.startService(Intent(context, PlayerService::class.java))
+        } catch (e: IllegalStateException) {
+            // Background start restriction; the service is started by the session when it binds.
+            Timber.w(e, "Could not start PlayerService")
+        }
+    }
+
+    private fun List<MediaItem>.toModules(): List<ModuleEntity> = mapNotNull { item ->
+        val uri = item.localConfiguration?.uri ?: return@mapNotNull null
+        MediaItemExtras.moduleFrom(item) ?: ModuleEntity(
+            filePath = uri.toString(),
+            filename = item.mediaMetadata.title?.toString() ?: uri.lastPathSegment ?: "Unknown",
+            fileSize = 0L,
+            fileExtension = uri.lastPathSegment?.substringAfterLast('.', "") ?: "",
+        )
+    }
+
+    /**
+     * Rebuilds [playlist] and publishes [queueFlow].
+     * @param retainCurrentItem Real-metadata item to keep at the current index across a
+     *   reorder; the engine's metadata belongs to the loaded file, not to the index.
      */
     private fun syncPlaylist(retainCurrentItem: MediaItem? = null) {
         playlist.clear()
@@ -512,105 +749,15 @@ class ModPlayer(
             if (queue.currentIndex in playlist.indices) playlist[queue.currentIndex] = item
         }
         queueFlow.value = queue.items.toList()
-        currentIndexFlow.value = queue.currentIndex
         invalidateState()
     }
 
-    /** A queued request for the loader thread. */
-    private class LoadRequest(
-        val index: Int,
-        val file: ModuleEntity,
-        val seekToMs: Long?,
-        val autoStart: Boolean
-    )
-
-    /**
-     * Loads the module at [index] on a background thread.
-     *
-     * The native engine can only load one module at a time, so if a load is already
-     * running the request is parked in [pendingLoad] and picked up as soon as the current
-     * one finishes (only the newest request is kept — rapid next/next/next lands on the
-     * last track the user asked for instead of being dropped).
-     *
-     * @param seekToMs Optional position to seek to after loading.
-     * @param autoStart Whether to begin playback immediately after loading.
-     */
-    private fun loadAndStartAt(index: Int, seekToMs: Long? = null, autoStart: Boolean = true) {
-        val file = queue.items.getOrNull(index) ?: return
-        val request = LoadRequest(index, file, seekToMs, autoStart)
-        synchronized(loadLock) {
-            if (isLoading) {
-                pendingLoad = request
-                return
-            }
-            isLoading = true
-        }
-
-        Thread {
-            var current: LoadRequest? = request
-            while (current != null) {
-                performLoad(current)
-                current = synchronized(loadLock) {
-                    pendingLoad.also {
-                        pendingLoad = null
-                        if (it == null) isLoading = false
-                    }
-                }
-            }
-        }.start()
-    }
-
-    /** Runs on the loader thread: loads, publishes metadata, and starts [request]. */
-    private fun performLoad(request: LoadRequest) {
-        val (index, file) = request.index to request.file
-        Timber.d("performLoad: index=$index autoStart=${request.autoStart} file=${file.name}")
-
-        if (!engine.loadNext(file)) {
-            mainHandler.post {
-                // Only react if the user hasn't already navigated elsewhere.
-                if (queue.current === file) perform(queue.onLoadFailed())
-            }
-            return
-        }
-
-        // A newer request arrived while loading: don't start audio for this stale one.
-        if (synchronized(loadLock) { pendingLoad != null }) return
-
-        // Replace the placeholder item with real metadata from the backend.
-        val duration = engine.modVarsFlow.value.sequenceDuration(currentSequenceFlow.value)
-        val realItem = file.toMediaItem(file.toRealMetadata(duration.toLong()))
-        mainHandler.post {
-            queue.onLoadSucceeded()
-            // The queue may have been cleared or re-ordered while we were loading.
-            if (playlist.getOrNull(index)?.mediaId == realItem.mediaId) playlist[index] = realItem
-            moduleLoadedFlow.value++
-            invalidateState()
-        }
-
-        if (request.autoStart) {
-            engine.start()
-            val seekToMs = request.seekToMs
-            if (seekToMs != null && seekToMs > 0L) {
-                engine.seek(seekToMs.toInt())
-                pendingSeekPositionMs = seekToMs
-            }
-        }
-        mainHandler.post(::invalidateState)
-    }
-
-    /** Starts the 500 ms position-update loop, also flushing queue state every 5 s. */
     private fun startPositionUpdates() {
-        positionUpdateJob?.cancel()
+        if (positionUpdateJob?.isActive == true) return
         positionUpdateJob = scope.launch {
-            var lastPersist = 0L
+            var lastPersist = System.currentTimeMillis()
             while (true) {
                 delay(500L.milliseconds)
-                // Clear a pending seek once the engine position has converged.
-                if (pendingSeekPositionMs >= 0 &&
-                    abs(engine.positionMs.value - pendingSeekPositionMs) < 2_000L
-                ) {
-                    pendingSeekPositionMs = -1L
-                }
                 invalidateState()
                 val now = System.currentTimeMillis()
                 if (now - lastPersist > 5_000) {
@@ -621,24 +768,19 @@ class ModPlayer(
         }
     }
 
-    /** Cancels the position-update loop. */
     private fun stopPositionUpdates() {
         positionUpdateJob?.cancel()
         positionUpdateJob = null
     }
 
-    /**
-     * Persists the queue *contents* (or clears them when empty) plus the current
-     * playback state. Only called when the queue itself changes — the JSON
-     * encoding of a large queue is not something to redo every few seconds.
-     */
+    /** Persists the queue contents (or clears them) plus the playback state. Only on queue changes. */
     private fun persistQueueList() {
         if (queue.isEmpty) {
             scope.launch { prefs.clearQueueState() }
             return
         }
         val snapshot = queue.originalItems.toList()
-        val state = capturePlaybackState()
+        val state = capturePlaybackState(null)
         scope.launch {
             val json = withContext(Dispatchers.Default) { Json.encodeToString(snapshot) }
             prefs.saveQueueList(json)
@@ -646,31 +788,24 @@ class ModPlayer(
         }
     }
 
-    /** Persists only index / position / modes — cheap, safe to call every few seconds. */
-    private fun persistPlaybackState() {
+    /** Persists only index / position / modes; cheap enough to run every few seconds. */
+    private fun persistPlaybackState(positionOverride: Long? = null) {
         if (queue.isEmpty) return
-        val state = capturePlaybackState()
+        val state = capturePlaybackState(positionOverride)
         scope.launch { prefs.savePlaybackState(state) }
     }
 
-    /** Snapshot of the mutable playback state, taken on the main thread. */
-    private fun capturePlaybackState() = PlaybackState(
+    private fun capturePlaybackState(positionOverride: Long?) = PlaybackState(
         index = queue.currentOriginalIndex,
         shuffle = queue.shuffle,
         repeat = queue.repeatMode.toMedia3(),
-        positionMs = engine.positionMs.value,
+        positionMs = positionOverride ?: currentPositionForUi(),
     )
 
-    /** Placeholder artwork for the media notification. */
     private fun drawableUri(resId: Int): Uri =
         "android.resource://${context.packageName}/$resId".toUri()
 
-    /**
-     * Constructs a [MediaMetadata] with the given [title] and [artist], the app's placeholder
-     * album art, and an optional [durationMs]. Used to populate media session metadata for the
-     * lock-screen / notification; artwork is a static drawable because module files carry no
-     * embedded images.
-     */
+    /** Module files carry no artwork, so the notification gets a static drawable. */
     private fun buildMetadata(
         title: String,
         artist: String,
@@ -683,19 +818,15 @@ class ModPlayer(
         .setIsPlayable(true)
         .build()
 
-    /**
-     * Builds a [MediaItem] with placeholder metadata for initial queue population.
-     * Real metadata (loaded from libxmp) is injected by [loadAndStartAt] later.
-     */
+    /** Placeholder item; real metadata replaces it once the module is loaded. */
     private fun ModuleEntity.toMediaItem(
         metadata: MediaMetadata = buildMetadata(name, type)
     ): MediaItem = MediaItem.Builder()
         .setUri(uri)
-        .setMediaId(filePath)
+        .setMediaId(AutoMediaId.file(filePath)) // same id scheme as the Auto browse tree
         .setMediaMetadata(metadata)
         .build()
 
-    /** Builds [MediaMetadata] from libxmp after the module has been loaded successfully. */
     private fun ModuleEntity.toRealMetadata(durationMs: Long): MediaMetadata = buildMetadata(
         title = modVarsFlow.value.modName.ifBlank { filename },
         artist = modVarsFlow.value.modType.ifBlank { fileExtension.uppercase() },
