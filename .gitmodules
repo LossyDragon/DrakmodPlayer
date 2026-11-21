@@ -4,3 +4,4 @@
 [submodule "renderer/src/main/cpp/openmpt"]
 	path = renderer/src/main/cpp/openmpt
 	url = https://github.com/OpenMPT/openmpt.git
+	ignore = dirty
