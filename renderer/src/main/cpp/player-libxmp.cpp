@@ -177,11 +177,6 @@ jboolean xmp_init(JNIEnv* env, jint rate, jint ms, jint mode, jint channels, jin
     LOG_INFO("init() - sample rate adjusted: requested=%d, actual=%d", rate, actual_rate);
   }
 
-  initAudioStatsFields(env);
-  initChannelInfoFields(env);
-  initFrameInfoFields(env);
-  initModVarsFields(env);
-  initSequenceFields(env);
 
   state.initialized = true;
   LOG_INFO("init() completed successfully - actual_rate=%d", actual_rate);
@@ -210,11 +205,10 @@ jboolean xmp_setSequence(JNIEnv* env, jint seq) {
 
 jboolean xmp_testFd(JNIEnv* env, jint fd, jobject modInfo) {
   LOG_INFO("testModuleFd() called - fd: %d, tid: %d", fd, gettid());
-  initModInfoFields(env);
 
+  UniqueFd owned(fd); // ownership was transferred by ParcelFileDescriptor.detachFd()
   lseek(fd, 0, SEEK_SET);
   std::vector<unsigned char> data = readFd(fd);
-  close(fd); // ownership was transferred by ParcelFileDescriptor.detachFd()
   if (data.empty()) {
     LOG_ERROR("testModuleFd() - failed to read fd %d", fd);
     return JNI_FALSE;
@@ -228,8 +222,9 @@ jboolean xmp_testFd(JNIEnv* env, jint fd, jobject modInfo) {
   if (res == 0) {
     LOG_INFO("testModuleFd() - valid module: '%s' (type: %s)", ti.name, ti.type);
 
-    jstring name = env->NewStringUTF(sanitizeForJni(ti.name).c_str());
-    jstring type = env->NewStringUTF(sanitizeForJni(ti.type).c_str());
+    const ModuleCharset charset = charsetForFormat(ti.type);
+    jstring name = env->NewStringUTF(decodeModuleText(ti.name, charset).c_str());
+    jstring type = env->NewStringUTF(decodeModuleText(ti.type, charset).c_str());
 
     if (!name || !type) {
       LOG_ERROR("testModuleFd() - failed to create Java strings");
@@ -304,7 +299,6 @@ jint xmp_getPlayer(JNIEnv* env, jint parm) {
 
 jint xmp_loadFd(JNIEnv* env, jint fd, jobject modInfo) {
   LOG_INFO("loadModuleFd() called - fd: %d, tid: %d", fd, gettid());
-  initModInfoFields(env);
   std::unique_ptr<FILE, decltype(&fclose)> file(fdopen(fd, "rb"), fclose);
   if (!file) {
     LOG_ERROR("loadModuleFd() - fdopen failed: %s", strerror(errno));
@@ -320,8 +314,9 @@ jint xmp_loadFd(JNIEnv* env, jint fd, jobject modInfo) {
     return -2;
   }
 
-  jstring name = env->NewStringUTF(sanitizeForJni(ti.name).c_str());
-  jstring type = env->NewStringUTF(sanitizeForJni(ti.type).c_str());
+  const ModuleCharset charset = charsetForFormat(ti.type);
+  jstring name = env->NewStringUTF(decodeModuleText(ti.name, charset).c_str());
+  jstring type = env->NewStringUTF(decodeModuleText(ti.type, charset).c_str());
   env->SetObjectField(modInfo, g_modInfo.name, name);
   env->SetObjectField(modInfo, g_modInfo.type, type);
   env->DeleteLocalRef(name);
@@ -363,6 +358,12 @@ jint xmp_loadFd(JNIEnv* env, jint fd, jobject modInfo) {
 
 jint xmp_mute(JNIEnv* env, jint chn, jint status) {
   XmpPlayerState& state = XmpPlayerState::instance();
+  if (status < 0) {
+    // A query only reads a flag the renderer never writes: no need to silence the callback.
+    std::unique_lock<std::mutex> lock = state.lock();
+    if (!state.ctx) return -1;
+    return xmp_channel_mute(state.ctx, chn, status);
+  }
   RenderPause pause;
   std::unique_lock<std::mutex> lock = state.lock();
   if (!state.ctx) return -1;
@@ -450,7 +451,6 @@ jobjectArray xmp_getFormats(JNIEnv* env) {
 }
 
 void xmp_getAudioStats(JNIEnv* env, jobject info) {
-  initAudioStatsFields(env);
 
   struct AudioStats stats{};
   get_audio_stats(&stats);
@@ -591,9 +591,10 @@ void xmp_getModVars(JNIEnv* env, jobject modVars) {
       return;
     }
     const xmp_module_info& mi = state.mi;
-    modName = sanitizeForJni(mi.mod->name);
-    modType = sanitizeForJni(mi.mod->type);
-    modComment = sanitizeForJni(mi.comment);
+    const ModuleCharset charset = charsetForFormat(mi.mod->type);
+    modName = decodeModuleText(mi.mod->name, charset);
+    modType = decodeModuleText(mi.mod->type, charset);
+    modComment = decodeModuleText(mi.comment, charset);
     pat = mi.mod->pat;
     trk = mi.mod->trk;
     chn = mi.mod->chn;
@@ -611,9 +612,9 @@ void xmp_getModVars(JNIEnv* env, jobject modVars) {
     }
     instrNames.reserve(ins);
     for (int i = 0; i < ins; i++) {
-      std::array<char, 64> buf{};
-      snprintf(buf.data(), buf.size(), "%02X %s", i + 1, sanitizeForJni(mi.mod->xxi[i].name).c_str());
-      instrNames.emplace_back(buf.data());
+      std::array<char, 8> index{};
+      snprintf(index.data(), index.size(), "%02X ", i + 1);
+      instrNames.push_back(index.data() + decodeModuleText(mi.mod->xxi[i].name, charset));
     }
   }
 

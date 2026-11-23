@@ -13,21 +13,26 @@
 
 #include "audio.h"
 
-// FindClass returns a local ref that dies with the JNI call, so it is only kept
-// on the stack while the (stable) field IDs are resolved.
-#define GET_CLASS(a, b)                       \
-  jclass jniClazz_ = env->FindClass(b);       \
-  a.initialized = (jniClazz_ != nullptr)
-#define GET_FIELD(a, b, c) a.b = env->GetFieldID(jniClazz_, #b, c)
+// Closes the fd on every exit path, including an exception while reading it.
+struct UniqueFd {
+  explicit UniqueFd(int fd) : fd(fd) {}
+  ~UniqueFd() {
+    if (fd >= 0) close(fd);
+  }
+  UniqueFd(const UniqueFd&) = delete;
+  UniqueFd& operator=(const UniqueFd&) = delete;
+  int fd;
+};
 
-// Text sanitizer for charsets like CP437.
-inline std::string sanitizeForJni(const char* src) {
-  if (!src) return "";
-  std::string out;
-  out.reserve(strlen(src));
-  for (const auto* p = reinterpret_cast<const unsigned char*>(src); *p; ++p) out += (*p < 0x80) ? static_cast<char>(*p) : '?';
-  return out;
-}
+// Module text is single-byte in the charset of the machine it was written on. libxmp hands
+// it over raw, and NewStringUTF needs UTF-8, so decode it: ISO-8859-1 for Amiga formats,
+// CP437 (including its glyphs below 0x20, common in titles and sample text) for the rest.
+enum class ModuleCharset { CP437, LATIN1 };
+
+// Guessed from libxmp's format name, the only hint it gives.
+ModuleCharset charsetForFormat(const char* type);
+
+std::string decodeModuleText(const char* src, ModuleCharset charset);
 
 // Single-writer snapshot: the audio thread publishes without blocking, readers retry on a torn copy.
 template <typename T>
@@ -75,7 +80,6 @@ struct RenderPause {
 };
 
 struct AudioStatsFields {
-  bool initialized = false;
   jfieldID xrunCount = nullptr;
   jfieldID underrunCount = nullptr;
   jfieldID framesPerBurst = nullptr;
@@ -89,7 +93,6 @@ struct AudioStatsFields {
 };
 
 struct ChannelInfoFields {
-  bool initialized = false;
   jfieldID volumes = nullptr;
   jfieldID finalVols = nullptr;
   jfieldID pans = nullptr;
@@ -104,7 +107,6 @@ struct ChannelInfoFields {
 };
 
 struct FrameInfoFields {
-  bool initialized = false;
   jfieldID pos = nullptr;
   jfieldID pattern = nullptr;
   jfieldID row = nullptr;
@@ -125,13 +127,11 @@ struct FrameInfoFields {
 };
 
 struct ModInfoFields {
-  bool initialized = false;
   jfieldID name = nullptr;
   jfieldID type = nullptr;
 };
 
 struct ModVarsFields {
-  bool initialized = false;
   jfieldID name = nullptr;
   jfieldID type = nullptr;
   jfieldID pat = nullptr;
@@ -152,7 +152,6 @@ struct ModVarsFields {
 };
 
 struct SequenceFields {
-  bool initialized = false;
   jfieldID entryPoint = nullptr;
   jfieldID duration = nullptr;
 };
@@ -164,11 +163,9 @@ extern ModInfoFields g_modInfo;
 extern ModVarsFields g_modVars;
 extern SequenceFields g_sequence;
 
-void initAudioStatsFields(JNIEnv* env);
-void initChannelInfoFields(JNIEnv* env);
-void initFrameInfoFields(JNIEnv* env);
-void initModInfoFields(JNIEnv* env);
-void initModVarsFields(JNIEnv* env);
-void initSequenceFields(JNIEnv* env);
+// Resolves every field ID above. Called once from JNI_OnLoad, so no native method can
+// observe a half-filled table. False (with a Java exception pending) if a class or field is missing.
+bool initFieldIds(JNIEnv* env);
 
+// The whole file, or empty when it cannot be read or is larger than any real module.
 std::vector<unsigned char> readFd(int fd);

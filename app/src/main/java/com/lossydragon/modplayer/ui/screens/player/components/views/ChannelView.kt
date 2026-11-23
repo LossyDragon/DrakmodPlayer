@@ -157,7 +157,8 @@ fun ChannelView(
         }
 
         while (isActive) {
-            if (isPlayingState.value) {
+            // Once even when paused, so a view opened then shows the channels as they stand.
+            if (isPlayingState.value || drawTick == 0) {
                 withContext(Dispatchers.Default) {
                     Player.getChannelData(ci)
                     for (i in 0 until numChannels) {

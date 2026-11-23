@@ -73,9 +73,22 @@ add_library(openmpt_static STATIC
         ${OPENMPT_PLUGINS}
         ${OPENMPT_DMO}
         ${OPENMPT_SOUNDDSP}
+        # Bundled decoders for MP3 and Vorbis compressed samples (MO3, OXM); same setup as
+        # OpenMPT's own Makefile when the system libraries are absent.
+        openmpt/include/minimp3/minimp3.c
+        openmpt/include/stb_vorbis/stb_vorbis.c
 )
 target_include_directories(openmpt_static PUBLIC openmpt openmpt/src openmpt/common)
-target_compile_definitions(openmpt_static PRIVATE LIBOPENMPT_BUILD MPT_WITH_ZLIB OPENMPT_VERSION_REVISION=0)
+target_include_directories(openmpt_static PRIVATE openmpt/include)
+target_compile_definitions(openmpt_static PRIVATE
+        LIBOPENMPT_BUILD
+        MPT_WITH_ZLIB
+        MPT_WITH_MINIMP3
+        MPT_WITH_STBVORBIS
+        STB_VORBIS_NO_PULLDATA_API
+        STB_VORBIS_NO_STDIO
+        OPENMPT_VERSION_REVISION=0
+)
 target_compile_options(openmpt_static PRIVATE -fexceptions -frtti -Wno-deprecated-declarations)
 
 # Find Oboe package from gradle import

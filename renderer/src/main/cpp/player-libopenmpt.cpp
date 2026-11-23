@@ -10,6 +10,7 @@
 #include <algorithm>
 #include <android/log.h>
 #include <array>
+#include <atomic>
 #include <cerrno>
 #include <cmath>
 #include <cstdio>
@@ -34,10 +35,13 @@ constexpr int OPENMPT_SAMPLE_16BIT = 0x01;
 constexpr int OPENMPT_SAMPLE_LOOP = 0x02;
 constexpr int OPENMPT_SAMPLE_PINGPONG = 0x04;
 constexpr int OPENMPT_SAMPLE_STEREO = 0x40;
+// How often the render callback publishes channel states; the visualiser draws no faster.
+constexpr int CHANNEL_SNAPSHOT_HZ = 60;
 
 // Fixed scratch for format conversion; larger requests are rendered in chunks so the callback never allocates.
 constexpr int32_t SCRATCH_FRAMES = 2048;
 static std::array<int16_t, SCRATCH_FRAMES * 2> g_scratch{};
+static std::array<float, SCRATCH_FRAMES * 2> g_scratch_float{};
 
 // Published by the render callback after every read; `valid` is false while stopped.
 struct OpenMptFrame {
@@ -47,18 +51,45 @@ struct OpenMptFrame {
 };
 static SeqLock<OpenMptFrame> g_frame;
 
+// Per-channel play state for the visualiser. Only the render callback may read it from the
+// module (libopenmpt is not thread-safe), so it is published the same way as the frame.
+struct OpenMptChannels {
+  int count = 0;
+  std::array<bool, MAX_CHANNELS> ok{};
+  std::array<openmpt_module_current_channel_state, MAX_CHANNELS> ch{};
+};
+static SeqLock<OpenMptChannels> g_channels;
+static OpenMptChannels g_channels_scratch; // audio thread only
+
+struct SubsongInfo {
+  int ms = 0;
+  int speed = 0;
+  int bpm = 0;
+};
+
 struct OpenMptState {
-  // Taken by the render callback too, so every holder keeps it to microseconds: no JNI, no I/O under it.
+  // Serialises engine-thread mutations against visualisation readers. Never taken by the audio thread.
   std::mutex mutex;
   bool initialized = false;
-  bool mod_is_loaded = false;
-  bool playing = false;
-  bool loop = false;
-  int actual_rate = 44100;
-  int selected_subsong = 0;
-  int loop_count = 0; // audio thread: manual restarts after a short read
-  double duration = 0.0;
-  openmpt_module* mod = nullptr;
+
+  // Read by the render callback without a lock. Every write happens with the callback
+  // drained (RenderPause / set_playing(0)); they are atomic so that hand-over is well defined.
+  std::atomic<openmpt_module*> mod{nullptr};
+  std::atomic<bool> playing{false};
+  std::atomic<bool> loop{false};
+  std::atomic<int> actual_rate{44100};
+  std::atomic<int> selected_subsong{0};
+  std::atomic<double> duration{0.0};
+  std::atomic<int> restart_order{0}; // where repeat-one resumes, for the selected subsong
+  std::atomic<int> restart_row{0};
+  // Audio thread only; reset with the callback drained.
+  int loop_count = 0; // repeat-one restarts
+  int frames_since_channels = 0;
+
+  // Fixed at load, per subsong: readers must not ask the module for anything the renderer changes.
+  std::vector<SubsongInfo> subsongs;
+  // Our own record of the mutes, so a query never has to touch the module.
+  std::array<bool, MAX_CHANNELS> muted{};
   // used to derive pitch bend: period when the note last triggered
   std::array<int, MAX_CHANNELS> base_periods{};
   std::array<int, MAX_CHANNELS> prev_keys{};
@@ -68,6 +99,13 @@ struct OpenMptState {
     return s;
   }
 };
+
+struct ModuleDeleter {
+  void operator()(openmpt_module* mod) const {
+    openmpt_module_destroy(mod);
+  }
+};
+using ModulePtr = std::unique_ptr<openmpt_module, ModuleDeleter>;
 
 static std::string openmptString(const char* value) {
   if (!value) return "";
@@ -80,87 +118,145 @@ static std::string metadata(openmpt_module* mod, const char* key) {
   return openmptString(openmpt_module_get_metadata(mod, key));
 }
 
+// libopenmpt does not clip float output.
+static int32_t floatToInt32(float v) {
+  const double clipped = std::min(1.0, std::max(-1.0, static_cast<double>(v)));
+  return static_cast<int32_t>(clipped * 2147483647.0);
+}
+
+// Renders up to `count` frames into `audioData` starting at frame `offset`, converting
+// libopenmpt's stereo output to the stream's layout. A 32-bit stream is rendered in float so
+// it carries more than 16 bits of precision. Returns the frames written; fewer than `count`
+// means the module ended.
+static int32_t readFrames(openmpt_module* mod, int rate, void* audioData, int32_t offset, int32_t count, int32_t numChannels, int32_t bytesPerSample) {
+  if (bytesPerSample == 2 && numChannels == 2) {
+    auto* out = static_cast<int16_t*>(audioData) + static_cast<size_t>(offset) * 2;
+    return static_cast<int32_t>(openmpt_module_read_interleaved_stereo(mod, rate, count, out));
+  }
+  int32_t frames = 0;
+  while (frames < count) {
+    const int32_t want = std::min(count - frames, SCRATCH_FRAMES);
+    const size_t at = static_cast<size_t>(offset) + frames;
+    int32_t got;
+    if (bytesPerSample == 2) {
+      got = static_cast<int32_t>(openmpt_module_read_interleaved_stereo(mod, rate, want, g_scratch.data()));
+      auto* out = static_cast<int16_t*>(audioData) + at;
+      for (int32_t i = 0; i < got; i++) out[i] = static_cast<int16_t>((g_scratch[i * 2] + g_scratch[i * 2 + 1]) / 2);
+    } else {
+      got = static_cast<int32_t>(openmpt_module_read_interleaved_float_stereo(mod, rate, want, g_scratch_float.data()));
+      if (numChannels == 1) {
+        auto* out = static_cast<int32_t*>(audioData) + at;
+        for (int32_t i = 0; i < got; i++) out[i] = floatToInt32((g_scratch_float[i * 2] + g_scratch_float[i * 2 + 1]) * 0.5f);
+      } else {
+        auto* out = static_cast<int32_t*>(audioData) + at * 2;
+        for (int32_t i = 0; i < got * 2; i++) out[i] = floatToInt32(g_scratch_float[i]);
+      }
+    }
+    frames += got;
+    if (got < want) break;
+  }
+  return frames;
+}
+
 static int renderOpenMpt(void* audioData, int32_t numFrames, int32_t numChannels, int32_t bytesPerSample) {
   OpenMptState& state = OpenMptState::instance();
   const size_t frameBytes = static_cast<size_t>(numChannels) * bytesPerSample;
   const size_t numBytes = static_cast<size_t>(numFrames) * frameBytes;
 
-  std::lock_guard<std::mutex> lock(state.mutex);
-  if (!state.mod || !state.playing) {
+  openmpt_module* mod = state.mod.load(std::memory_order_acquire);
+  if (!mod || !state.playing.load(std::memory_order_acquire)) {
     memset(audioData, 0, numBytes);
     return 0;
   }
+  const int rate = state.actual_rate.load(std::memory_order_relaxed);
+  const bool loop = state.loop.load(std::memory_order_relaxed);
 
-  int32_t frames = 0;
-  if (bytesPerSample == 2 && numChannels == 2) {
-    frames = static_cast<int32_t>(openmpt_module_read_interleaved_stereo(state.mod, state.actual_rate, numFrames, static_cast<int16_t*>(audioData)));
-  } else {
-    while (frames < numFrames) {
-      const int32_t want = std::min(numFrames - frames, SCRATCH_FRAMES);
-      const auto got = static_cast<int32_t>(openmpt_module_read_interleaved_stereo(state.mod, state.actual_rate, want, g_scratch.data()));
-      if (bytesPerSample == 2) {
-        auto* out = static_cast<int16_t*>(audioData) + frames;
-        for (int32_t i = 0; i < got; i++) out[i] = static_cast<int16_t>((g_scratch[i * 2] + g_scratch[i * 2 + 1]) / 2);
-      } else if (numChannels == 1) {
-        auto* out = static_cast<int32_t*>(audioData) + frames;
-        for (int32_t i = 0; i < got; i++) out[i] = static_cast<int32_t>((g_scratch[i * 2] + g_scratch[i * 2 + 1]) / 2) * 65536;
-      } else {
-        auto* out = static_cast<int32_t*>(audioData) + static_cast<size_t>(frames) * 2;
-        for (int32_t i = 0; i < got; i++) {
-          out[i * 2] = static_cast<int32_t>(g_scratch[i * 2]) * 65536;
-          out[i * 2 + 1] = static_cast<int32_t>(g_scratch[i * 2 + 1]) * 65536;
-        }
-      }
-      frames += got;
-      if (got < want) break;
-    }
+  int32_t frames = readFrames(mod, rate, audioData, 0, numFrames, numChannels, bytesPerSample);
+  if (frames < numFrames && loop) {
+    // Repeat-one. libopenmpt's own repeat never rewinds its position counter, so the loop is
+    // done here: jump to the module's restart point and fill the rest of this buffer from it.
+    openmpt_module_set_position_order_row(mod, state.restart_order.load(std::memory_order_relaxed), state.restart_row.load(std::memory_order_relaxed));
+    state.loop_count++;
+    frames += readFrames(mod, rate, audioData, frames, numFrames - frames, numChannels, bytesPerSample);
   }
 
   bool ended = false;
   if (frames < numFrames) {
     memset(static_cast<char*>(audioData) + frames * frameBytes, 0, (numFrames - frames) * frameBytes);
-    if (state.loop) {
-      openmpt_module_set_position_seconds(state.mod, 0.0);
-      state.loop_count++;
-    } else {
-      ended = true;
-    }
+    // The caller silences the whole buffer on "ended", so a short read that still holds the
+    // last frames of the module is played out; the next read is empty and reports the end.
+    ended = !loop && frames == 0;
   }
 
   OpenMptFrame f;
   f.valid = true;
-  f.order = openmpt_module_get_current_order(state.mod);
-  f.pattern = openmpt_module_get_current_pattern(state.mod);
-  f.row = openmpt_module_get_current_row(state.mod);
-  f.numRows = openmpt_module_get_pattern_num_rows(state.mod, f.pattern);
-  f.speed = openmpt_module_get_current_speed(state.mod);
-  f.bpm = static_cast<int>(std::round(openmpt_module_get_current_tempo2(state.mod)));
-  f.timeMs = static_cast<int>(std::round(openmpt_module_get_position_seconds(state.mod) * 1000.0));
-  f.totalMs = static_cast<int>(std::round(state.duration * 1000.0));
-  f.channels = openmpt_module_get_num_channels(state.mod);
-  f.playingChannels = openmpt_module_get_current_playing_channels(state.mod);
-  f.sequence = state.selected_subsong;
+  f.order = openmpt_module_get_current_order(mod);
+  f.pattern = openmpt_module_get_current_pattern(mod);
+  f.row = openmpt_module_get_current_row(mod);
+  f.numRows = openmpt_module_get_pattern_num_rows(mod, f.pattern);
+  f.speed = openmpt_module_get_current_speed(mod);
+  f.bpm = static_cast<int>(std::round(openmpt_module_get_current_tempo2(mod)));
+  f.timeMs = static_cast<int>(std::round(openmpt_module_get_position_seconds(mod) * 1000.0));
+  f.totalMs = static_cast<int>(std::round(state.duration.load(std::memory_order_relaxed) * 1000.0));
+  f.channels = openmpt_module_get_num_channels(mod);
+  f.playingChannels = openmpt_module_get_current_playing_channels(mod);
+  f.sequence = state.selected_subsong.load(std::memory_order_relaxed);
   f.loopCount = state.loop_count;
   g_frame.update([&](OpenMptFrame& d) { d = f; });
+
+  state.frames_since_channels += numFrames;
+  if (state.frames_since_channels >= rate / CHANNEL_SNAPSHOT_HZ) {
+    state.frames_since_channels = 0;
+    OpenMptChannels& c = g_channels_scratch;
+    c.count = std::min<int>(MAX_CHANNELS, f.channels);
+    for (int i = 0; i < c.count; i++) c.ok[i] = openmpt_module_get_current_channel_state(mod, i, &c.ch[i]) != 0;
+    g_channels.update([&](OpenMptChannels& d) { d = c; });
+  }
 
   return ended ? -1 : 0;
 }
 
+// The loop point of the selected subsong (the start, for most modules).
+static void setRestartPoint(OpenMptState& state, openmpt_module* mod) {
+  const int subsong = state.selected_subsong;
+  state.restart_order = std::max(0, openmpt_module_get_restart_order(mod, subsong));
+  state.restart_row = std::max(0, openmpt_module_get_restart_row(mod, subsong));
+}
+
+static void resetSnapshots() {
+  g_frame.reset();
+  g_channels.reset();
+}
+
 // Callers hold state.mutex and have the callback drained (RenderPause or set_playing(0)).
 static void destroyModule(OpenMptState& state) {
-  if (state.mod) {
-    openmpt_module_destroy(state.mod);
-    state.mod = nullptr;
-  }
-  state.mod_is_loaded = false;
+  if (openmpt_module* mod = state.mod.exchange(nullptr, std::memory_order_acq_rel)) openmpt_module_destroy(mod);
   state.playing = false;
   state.duration = 0.0;
   state.selected_subsong = 0;
   state.loop_count = 0;
+  state.frames_since_channels = 0;
+  state.subsongs.clear();
+  state.muted.fill(false);
   state.base_periods.fill(0);
   state.prev_keys.fill(-1);
-  g_frame.reset();
+  resetSnapshots();
   clear_module_ended();
+}
+
+// Length and starting speed/tempo of every subsong. Only for a module the renderer does not
+// have yet: selecting a subsong moves the play position.
+static std::vector<SubsongInfo> measureSubsongs(openmpt_module* mod) {
+  const int selected = openmpt_module_get_selected_subsong(mod);
+  std::vector<SubsongInfo> subsongs(std::max(1, openmpt_module_get_num_subsongs(mod)));
+  for (int i = 0; i < static_cast<int>(subsongs.size()); i++) {
+    openmpt_module_select_subsong(mod, i); // on failure the current selection is measured instead
+    subsongs[i].ms = static_cast<int>(std::round(openmpt_module_get_duration_seconds(mod) * 1000.0));
+    subsongs[i].speed = openmpt_module_get_current_speed(mod);
+    subsongs[i].bpm = static_cast<int>(std::round(openmpt_module_get_current_tempo2(mod)));
+  }
+  openmpt_module_select_subsong(mod, selected);
+  return subsongs;
 }
 
 static jbyte readSampleByte(const openmpt_module_sample_state& sample, int frame) {
@@ -204,12 +300,6 @@ jboolean openmpt_init(JNIEnv* env, jint rate, jint ms, jint mode, jint channels,
   OpenMptState& state = OpenMptState::instance();
   int actual_rate = open_audio(rate, ms, mode, channels, api, flags);
   if (actual_rate < 0) return JNI_FALSE;
-  initAudioStatsFields(env);
-  initChannelInfoFields(env);
-  initFrameInfoFields(env);
-  initModInfoFields(env);
-  initModVarsFields(env);
-  initSequenceFields(env);
   {
     std::lock_guard<std::mutex> lock(state.mutex);
     state.actual_rate = actual_rate;
@@ -227,15 +317,15 @@ jboolean openmpt_setSequence(JNIEnv* env, jint seq) {
   if (openmpt_module_select_subsong(state.mod, seq) == 0) return JNI_FALSE;
   state.selected_subsong = seq;
   state.duration = openmpt_module_get_duration_seconds(state.mod);
+  setRestartPoint(state, state.mod);
   clear_module_ended();
   return JNI_TRUE;
 }
 
 jboolean openmpt_testFd(JNIEnv* env, jint fd, jobject modInfo) {
-  initModInfoFields(env);
+  UniqueFd owned(fd); // ownership was transferred by ParcelFileDescriptor.detachFd()
   lseek(fd, 0, SEEK_SET);
   std::vector<unsigned char> data = readFd(fd);
-  close(fd); // ownership was transferred by ParcelFileDescriptor.detachFd()
   if (data.empty()) return JNI_FALSE;
 
   const size_t probe_size = std::min(data.size(), openmpt_probe_file_header_get_recommended_size());
@@ -252,16 +342,15 @@ jboolean openmpt_testFd(JNIEnv* env, jint fd, jobject modInfo) {
   };
   int error = OPENMPT_ERROR_OK;
   const char* error_message = nullptr;
-  openmpt_module* mod = openmpt_module_create_from_memory2(data.data(), data.size(), nullptr, nullptr, nullptr, nullptr, &error, &error_message, ctls);
+  ModulePtr mod(openmpt_module_create_from_memory2(data.data(), data.size(), nullptr, nullptr, nullptr, nullptr, &error, &error_message, ctls));
 
   if (!mod) {
     openmpt_free_string(error_message);
     return JNI_FALSE;
   }
 
-  std::string title = metadata(mod, "title");
-  std::string type_long = metadata(mod, "type_long");
-  openmpt_module_destroy(mod);
+  std::string title = metadata(mod.get(), "title");
+  std::string type_long = metadata(mod.get(), "type_long");
 
   jstring name = env->NewStringUTF(title.c_str());
   jstring typeStr = env->NewStringUTF(type_long.c_str());
@@ -289,7 +378,7 @@ jint openmpt_endPlayer(JNIEnv* env) {
   OpenMptState& state = OpenMptState::instance();
   std::lock_guard<std::mutex> lock(state.mutex);
   state.playing = false;
-  g_frame.reset();
+  resetSnapshots();
   return 0;
 }
 
@@ -305,23 +394,30 @@ jint openmpt_getPlayer(JNIEnv* env, jint parm) {
 }
 
 jint openmpt_loadFd(JNIEnv* env, jint fd, jobject modInfo) {
-  initModInfoFields(env);
-  std::vector<unsigned char> data = readFd(fd);
-  close(fd);
+  std::vector<unsigned char> data;
+  {
+    UniqueFd owned(fd);
+    data = readFd(fd);
+  }
   if (data.empty()) return -1;
 
   int error = OPENMPT_ERROR_OK;
   const char* error_message = nullptr;
-  openmpt_module* mod = openmpt_module_create_from_memory2(data.data(), data.size(), nullptr, nullptr, nullptr, nullptr, &error, &error_message, nullptr);
+  ModulePtr loaded(openmpt_module_create_from_memory2(data.data(), data.size(), nullptr, nullptr, nullptr, nullptr, &error, &error_message, nullptr));
 
-  if (!mod) {
+  if (!loaded) {
     LOG_WARN("loadModuleFd failed: %d %s", error, error_message ? error_message : "");
     openmpt_free_string(error_message);
     return error != 0 ? error : -2;
   }
 
-  std::string title = metadata(mod, "title");
-  std::string type = metadata(mod, "type");
+  // Everything that can fail or is slow happens before the module is handed to the renderer.
+  std::string title = metadata(loaded.get(), "title");
+  std::string type = metadata(loaded.get(), "type");
+  std::vector<SubsongInfo> subsongs = measureSubsongs(loaded.get());
+  std::array<bool, MAX_CHANNELS> muted{}; // a module can come with channels muted
+  const int channels = std::min<int>(MAX_CHANNELS, openmpt_module_get_num_channels(loaded.get()));
+  for (int i = 0; i < channels; i++) muted[i] = openmpt_module_channel_mute(loaded.get(), i, -1) > 0;
 
   OpenMptState& state = OpenMptState::instance();
   {
@@ -329,11 +425,13 @@ jint openmpt_loadFd(JNIEnv* env, jint fd, jobject modInfo) {
     pause.stay_stopped(); // Kotlin restarts via startPlayer
     std::lock_guard<std::mutex> lock(state.mutex);
     destroyModule(state);
-    state.mod = mod;
-    state.mod_is_loaded = true;
+    openmpt_module* mod = loaded.release();
+    state.subsongs = std::move(subsongs);
+    state.muted = muted;
     state.selected_subsong = std::max(0, openmpt_module_get_selected_subsong(mod));
     state.duration = openmpt_module_get_duration_seconds(mod);
-    openmpt_module_set_repeat_count(mod, state.loop ? -1 : 0); // honour repeat-one across loads like libxmp
+    setRestartPoint(state, mod);
+    state.mod = mod;
   }
 
   jstring name = env->NewStringUTF(title.c_str());
@@ -348,10 +446,18 @@ jint openmpt_loadFd(JNIEnv* env, jint fd, jobject modInfo) {
 
 jint openmpt_mute(JNIEnv* env, jint chn, jint status) {
   OpenMptState& state = OpenMptState::instance();
+  if (chn < 0 || chn >= MAX_CHANNELS) return -1;
+  if (status < 0) {
+    // A query is answered from our record: asking the module means silencing the renderer first.
+    std::lock_guard<std::mutex> lock(state.mutex);
+    return state.mod ? (state.muted[chn] ? 1 : 0) : -1;
+  }
   RenderPause pause;
   std::lock_guard<std::mutex> lock(state.mutex);
   if (!state.mod) return -1;
-  return openmpt_module_channel_mute(state.mod, chn, status);
+  const int previous = openmpt_module_channel_mute(state.mod, chn, status);
+  if (previous >= 0) state.muted[chn] = status != 0;
+  return previous;
 }
 
 jint openmpt_playAudio(JNIEnv* env) {
@@ -419,10 +525,10 @@ jint openmpt_startPlayer(JNIEnv* env, jint rate, jint format) {
     LOG_ERROR("startPlayer - no module loaded");
     return -1;
   }
-  LOG_INFO("startPlayer: rate=%d loop=%d repeat_count=%d duration=%.2fs",
-    state.actual_rate, state.loop ? 1 : 0, openmpt_module_get_repeat_count(state.mod), state.duration);
+  LOG_INFO("startPlayer: rate=%d loop=%d duration=%.2fs",
+    state.actual_rate.load(), state.loop ? 1 : 0, state.duration.load());
   state.playing = true;
-  g_frame.reset();
+  resetSnapshots();
   set_render_callback(renderOpenMpt);
   set_playing(1);
   return 0;
@@ -451,7 +557,6 @@ jobjectArray openmpt_getFormats(JNIEnv* env) {
 }
 
 void openmpt_getAudioStats(JNIEnv* env, jobject info) {
-  initAudioStatsFields(env);
   struct AudioStats stats{};
   get_audio_stats(&stats);
   env->SetIntField(info, g_audioStats.xrunCount, stats.xrun_count);
@@ -475,7 +580,6 @@ void openmpt_getAudioStats(JNIEnv* env, jobject info) {
 }
 
 void openmpt_getChannelData(JNIEnv* env, jobject channelInfo) {
-  initChannelInfoFields(env);
   OpenMptState& state = OpenMptState::instance();
 
   int channels = 0;
@@ -495,11 +599,13 @@ void openmpt_getChannelData(JNIEnv* env, jobject channelInfo) {
   {
     std::lock_guard<std::mutex> lock(state.mutex);
     if (!state.mod) return;
-    channels = std::min<int>(MAX_CHANNELS, openmpt_module_get_num_channels(state.mod));
+    static thread_local OpenMptChannels snap; // 3.6 KB; keep it off the stack of UI threads
+    if (!g_channels.read(snap)) return;
+    channels = snap.count;
 
     for (int i = 0; i < channels; i++) {
-      openmpt_module_current_channel_state ch{};
-      if (openmpt_module_get_current_channel_state(state.mod, i, &ch) == 0) continue;
+      if (!snap.ok[i]) continue;
+      const openmpt_module_current_channel_state& ch = snap.ch[i];
       volumes[i] = ch.volume;
       finalVols[i] = ch.final_volume;
       pans[i] = ch.pan;
@@ -539,7 +645,6 @@ void openmpt_getChannelData(JNIEnv* env, jobject channelInfo) {
 }
 
 void openmpt_getFrameInfo(JNIEnv* env, jobject frameInfo) {
-  initFrameInfoFields(env);
   OpenMptFrame f;
   if (!g_frame.read(f) || !f.valid) return;
   env->SetIntField(frameInfo, g_frameInfo.pos, f.order);
@@ -562,12 +667,11 @@ void openmpt_getFrameInfo(JNIEnv* env, jobject frameInfo) {
 }
 
 void openmpt_getModVars(JNIEnv* env, jobject modVars) {
-  initModVarsFields(env);
-  initSequenceFields(env);
   OpenMptState& state = OpenMptState::instance();
 
   std::string title, type, message;
-  int channels, subsongs, durationMs, instruments, samples, patterns, orders, speed, bpm;
+  int channels, subsongs, instruments, samples, patterns, orders, speed, bpm;
+  std::vector<SubsongInfo> subsongInfo;
   std::vector<std::string> instrNames;
 
   {
@@ -578,20 +682,23 @@ void openmpt_getModVars(JNIEnv* env, jobject modVars) {
     type = metadata(state.mod, "type");
     message = metadata(state.mod, "message");
     channels = openmpt_module_get_num_channels(state.mod);
-    subsongs = std::max(1, openmpt_module_get_num_subsongs(state.mod));
-    durationMs = static_cast<int>(std::round(state.duration * 1000.0));
+    subsongInfo = state.subsongs;
+    subsongs = static_cast<int>(subsongInfo.size());
+    const int current = std::min(std::max(0, state.selected_subsong.load()), subsongs - 1);
     instruments = openmpt_module_get_num_instruments(state.mod);
     samples = openmpt_module_get_num_samples(state.mod);
     patterns = openmpt_module_get_num_patterns(state.mod);
     orders = openmpt_module_get_num_orders(state.mod);
-    speed = openmpt_module_get_current_speed(state.mod);
-    bpm = static_cast<int>(std::round(openmpt_module_get_current_tempo2(state.mod)));
+    speed = subsongs > 0 ? subsongInfo[current].speed : 0;
+    bpm = subsongs > 0 ? subsongInfo[current].bpm : 0;
 
     int displayInstruments = instruments > 0 ? instruments : samples;
     instrNames.reserve(displayInstruments);
     for (int i = 0; i < displayInstruments; i++) {
       std::string raw = instruments > 0 ? openmptString(openmpt_module_get_instrument_name(state.mod, i)) : openmptString(openmpt_module_get_sample_name(state.mod, i));
-      instrNames.push_back((i + 1 < 16 ? "0" : "") + std::to_string(i + 1) + " " + raw);
+      std::array<char, 8> index{}; // two hex digits, like libxmp; the UI relies on the width
+      snprintf(index.data(), index.size(), "%02X ", i + 1);
+      instrNames.push_back(index.data() + raw);
     }
   }
 
@@ -617,7 +724,7 @@ void openmpt_getModVars(JNIEnv* env, jobject modVars) {
   for (int i = 0; i < subsongs; i++) {
     jobject seqObj = env->AllocObject(seqCls);
     env->SetIntField(seqObj, g_sequence.entryPoint, 0);
-    env->SetIntField(seqObj, g_sequence.duration, durationMs);
+    env->SetIntField(seqObj, g_sequence.duration, subsongInfo[i].ms);
     env->SetObjectArrayElement(seqArray, i, seqObj);
     env->DeleteLocalRef(seqObj);
   }
@@ -695,9 +802,12 @@ void openmpt_getSampleData(JNIEnv* env, jboolean trigger, jint ins, jint key, ji
     std::lock_guard<std::mutex> lock(state.mutex);
     if (!state.mod || chn < 0 || chn >= MAX_CHANNELS) return;
 
-    openmpt_module_current_channel_state channel{};
-    if (openmpt_module_get_current_channel_state(state.mod, chn, &channel) == 0 || channel.sample <= 0 || channel.increment == 0) return;
+    static thread_local OpenMptChannels snap;
+    if (!g_channels.read(snap) || chn >= snap.count || !snap.ok[chn]) return;
+    const openmpt_module_current_channel_state& channel = snap.ch[chn];
+    if (channel.sample <= 0 || channel.increment == 0) return;
 
+    // Sample data and its loop points do not change after load, so this is safe beside the renderer.
     openmpt_module_sample_state sample{};
     if (openmpt_module_get_sample_state(state.mod, channel.sample, &sample) == 0 || sample.length <= 0 || !sample.data) return;
 
@@ -716,11 +826,8 @@ void openmpt_getSampleData(JNIEnv* env, jboolean trigger, jint ins, jint key, ji
 }
 
 void openmpt_setLoopMode(JNIEnv* env, jboolean loop) {
-  OpenMptState& state = OpenMptState::instance();
-  RenderPause pause;
-  std::lock_guard<std::mutex> lock(state.mutex);
-  state.loop = loop == JNI_TRUE;
-  if (state.mod) openmpt_module_set_repeat_count(state.mod, state.loop ? -1 : 0);
+  // The render callback does the looping itself, so this is all it needs.
+  OpenMptState::instance().loop = loop == JNI_TRUE;
 }
 
 void openmpt_setPlaying(JNIEnv* env, jboolean value) {

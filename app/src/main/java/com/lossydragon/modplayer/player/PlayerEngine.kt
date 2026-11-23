@@ -357,15 +357,12 @@ class PlayerEngine(
     }
 
     private fun applyPreLoadSettings(p: EnginePrefs) {
-        val preLoadMask =
-            Player.XMP_FLAGS_VBLANK or Player.XMP_FLAGS_FX9BUG or Player.XMP_FLAGS_FIXLOOP
-        Player.setPlayer(Player.XMP_PLAYER_FLAGS, p.playerFlags and preLoadMask)
         Player.setPlayer(Player.XMP_PLAYER_DEFPAN, p.defaultPan)
     }
 
     private fun applyRuntimeSettings(p: EnginePrefs) {
         Player.setPlayer(Player.XMP_PLAYER_AMP, p.volumeBoost)
-        applyA500Flag(p.playerFlags)
+        applyPlayerFlags(p.playerFlags)
         Player.setPlayer(Player.XMP_PLAYER_DSP, p.dsp)
         Player.setResampler(ResamplerMode.fromId(p.interpolation).id)
         Player.setPlayer(Player.XMP_PLAYER_MIX, p.stereoMix)
@@ -377,16 +374,29 @@ class PlayerEngine(
         Player.setPlayer(Player.XMP_PLAYER_VOLUME, volume)
     }
 
-    /** Mirrors the A500 filter bit into CFLAGS (libxmp backend only). */
-    private fun applyA500Flag(playerFlags: Int) {
+    /**
+     * libxmp only accepts player flags while a module is playing, and copies FLAGS into a
+     * module as it loads. So they are stored here for the next load and switched on in
+     * CFLAGS for the one playing. A500 is per-module only and follows the setting both ways.
+     */
+    private fun applyPlayerFlags(playerFlags: Int) {
         if (Player.renderingBackend != RenderingBackend.LIBXMP) return
         val cflags = Player.getPlayer(Player.XMP_PLAYER_CFLAGS)
-        val newCflags = if (playerFlags and Player.XMP_FLAGS_A500 != 0) {
-            cflags or Player.XMP_FLAGS_A500
-        } else {
-            cflags and Player.XMP_FLAGS_A500.inv()
-        }
+        if (cflags < 0) return // not playing; the next start applies them
+
+        val a500 = Player.XMP_FLAGS_A500
+        val wanted = playerFlags and
+            (Player.XMP_FLAGS_VBLANK or Player.XMP_FLAGS_FX9BUG or Player.XMP_FLAGS_FIXLOOP)
+        Player.setPlayer(Player.XMP_PLAYER_FLAGS, wanted)
+
+        // Only added: a flag libxmp chose for this module itself must survive.
+        val newCflags = ((cflags or wanted) and a500.inv()) or (playerFlags and a500)
+        if (newCflags == cflags) return
         Player.setPlayer(Player.XMP_PLAYER_CFLAGS, newCflags)
+        // VBlank timing changes the length of every sequence.
+        if ((newCflags xor cflags) and Player.XMP_FLAGS_VBLANK != 0) {
+            modVarsFlow.value = readModVars()
+        }
     }
 
     /** Never throws; the stream stays open on failure so the next load reuses it. */
