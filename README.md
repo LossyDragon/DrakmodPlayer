@@ -17,47 +17,59 @@ A spiritual successor to [cmatsuoka/xmp-android](https://github.com/cmatsuoka/xm
   <img src="docs/images/PlayerSearch.png" width="24%" alt="Search" />
 </p>
 
-#### (Light theme still a WIP. Dark theme is primarily targeted)
+*Light theme is still a work in progress; the dark theme is the primary target.*
+
 ---
 ## Features
 
-*UI and Features are still in a Work in Progress, but the app is in a usable state.*
-
 ### Playback
 - **Supports 90+ tracker formats** via [libxmp](https://github.com/libxmp/libxmp) and [libopenmpt](https://github.com/OpenMPT/openmpt/) (MOD, XM, IT, S3M, MTM, STM, OKT, FAR, and more)
+- **Selectable rendering backend** — switch between libxmp and libopenmpt
 - **Low-latency audio** via Google's [Oboe](https://github.com/google/oboe) library
 - **Gapless track transitions**
 - **Background playback** with Media3 foreground service
 - **Configurable audio settings**: sample rate, buffer size, amplification, stereo mixing, pan separation, interpolation, lowpass filter, and per-format player flags
 - **Repeat modes and Shuffle**
 - **Seek, queue navigation, and sub-song playback** for modules with multiple sequences
-- **Queue persistence** (WIP) — your playback state survives app restarts, with optional auto-resume
+
+### Library
+- **File browser** — browse your module folders, filter by name, and sort by name, type, or size
+- **Playlists** — create, reorder, and edit playlists, with JSON import and export
+- **Mod Archive downloads** — search [The Mod Archive](https://modarchive.org/), view module details, and download straight into your library, with a history of viewed modules
 
 ### Interface
 - **Material 3 Expressive** UI with dynamic theming
-- **Custom seed color picker** — recolor the entire app on the fly. AMOLED (dark mode) available too
-- **Playback view** - (WIP) Module pattern view and channel visualization
+- **Custom seed color picker** — recolor the entire app on the fly
+- **AMOLED mode** — pure black backgrounds
 - **Module info, instrument list, and song messages** viewable per track
 
 ### Integration
-- **Android Auto support** (WIP, usable) — browse files and playlists, search, and play from your car
+- **Android Auto support** — browse files and playlists, search, and play from your car
+- **Voice playback** — ask for a playlist or track by name
 - **Media session integration** — lock screen, watch, and notification controls
-- **System playback resumption** (WIP, not working)
-- **Voice search** (WIP, not started)
 
-### Under the Hood
-- Made in **Kotlin** with **Jetpack Compose**
-- **Koin** for dependency injection
-- **DataStore** for preferences
-- **Room** for playlists
-- **Navigation 3** for screen routing
-- **Native C++ JNI bridge** to libxmp and libopenmpt
+### In Progress
+*The app is in a usable state, but these are still being worked on:*
+- **Playback view** — module pattern view and channel visualization
+- **Queue persistence** — your playback state survives app restarts, with optional auto-resume
+- **System playback resumption** — not working yet
+- **Android Auto** — usable, still being polished
 
 ---
 
 ## Requirements
 - Android 8.0 (API 26) or higher
 - Architectures: arm64-v8a, armeabi-v7a
+
+---
+
+## Tech Stack
+- Made in **Kotlin** with **Jetpack Compose**
+- **Koin** for dependency injection
+- **DataStore** for preferences
+- **Room** for playlists
+- **Navigation 3** for screen routing
+- **Native C++ JNI bridge** to libxmp and libopenmpt
 
 ---
 
@@ -75,7 +87,7 @@ A spiritual successor to [cmatsuoka/xmp-android](https://github.com/cmatsuoka/xm
 ---
 
 ## Featured Acknowledgements
-- [libxmp](https://github.com/libxmp/libxmp) & and [libopenmpt](https://github.com/OpenMPT/openmpt/) — the hearts of this player
+- [libxmp](https://github.com/libxmp/libxmp) and [libopenmpt](https://github.com/OpenMPT/openmpt/) — the hearts of this player
 - [cmatsuoka/xmp-android](https://github.com/cmatsuoka/xmp-android) — the original inspiration
 - [Oboe](https://github.com/google/oboe) — Google's low-latency Android audio library
 - [Material 3](https://m3.material.io/) and [MaterialKolor](https://github.com/jordond/MaterialKolor) for theming
