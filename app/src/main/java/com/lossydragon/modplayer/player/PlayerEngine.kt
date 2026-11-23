@@ -1,6 +1,7 @@
 package com.lossydragon.modplayer.player
 
 import android.content.Context
+import com.lossydragon.modplayer.R
 import com.lossydragon.modplayer.db.AppPreferences
 import com.lossydragon.modplayer.db.entity.ModuleEntity
 import com.lossydragon.modplayer.player.model.NoteCell
@@ -36,7 +37,7 @@ import timber.log.Timber
 
 /**
  * Wraps the libxmp / libopenmpt / Oboe JNI layer. Every native call that mutates state runs
- * on [executor]; the render loop only polls read-only snapshots.
+ * on [executor]; the poll thread only reads read-only snapshots.
  */
 class PlayerEngine(
     private val context: Context,
@@ -52,8 +53,8 @@ class PlayerEngine(
     private val executor = Executors.newSingleThreadExecutor { Thread(it, "ModPlayerEngine") }
     private val scope = CoroutineScope(Dispatchers.Default + SupervisorJob())
 
-    /** The dedicated thread running [renderLoop]. Null when stopped. */
-    private var renderThread: Thread? = null
+    /** The dedicated thread running [pollLoop]. Null when stopped. */
+    private var pollThread: Thread? = null
 
     override val frameInfoFlow: StateFlow<FrameInfo>
         field = MutableStateFlow(FrameInfo())
@@ -82,7 +83,7 @@ class PlayerEngine(
     @Volatile
     private var ducked = false
 
-    /** Set to make the render thread exit. */
+    /** Set to make the poll thread exit. */
     @Volatile
     private var stopRequest = false
 
@@ -173,18 +174,8 @@ class PlayerEngine(
         Timber.d("load: '${file.filename}' backend=${p.backend} initialized=$initialized")
         selectBackend(p.backend)
         reopenAudioIfConfigChanged(p.audioConfig)
-        if (initialized) {
-            joinRenderThread()
-            Player.endPlayer()
-            Player.releaseModule()
-        } else if (!initAudio(p)) {
-            return LoadResult.NO_AUDIO
-        }
-        paused = false
-        playingFlow.value = false
-        positionMs.value = 0L
-        currentSequenceFlow.value = 0
-        clearModuleState()
+        stop()
+        if (!initialized && !initAudio(p)) return LoadResult.NO_AUDIO
         applyPreLoadSettings(p)
         return if (loadModule(file)) LoadResult.OK else LoadResult.UNPLAYABLE
     }
@@ -198,20 +189,21 @@ class PlayerEngine(
             signalDisconnected("play")
             return false
         }
-        if (renderThread?.isAlive == true) {
+        if (pollThread?.isAlive == true) {
             paused = false
             Player.setPlaying(true)
             playingFlow.value = true
             return true
         }
 
-        stopRequest = false
         paused = false
         Player.setLoopMode(isRepeatOne)
         val p = prefs()
         if (Player.startPlayer(p.sampleRate, p.format) != 0) {
             Timber.e("${Player.renderingBackend}.startPlayer() failed")
-            events.tryEmit(EngineEvent.Error("Could not start ${Player.renderingBackend}"))
+            val backend = Player.renderingBackend.toString()
+            val message = context.getString(R.string.error_backend_start, backend)
+            events.tryEmit(EngineEvent.Error(message))
             return false
         }
         for (i in 0 until MAX_CHANNELS) Player.mute(i, 0)
@@ -223,7 +215,7 @@ class PlayerEngine(
             return false
         }
         playingFlow.value = true
-        startRenderThread()
+        startPollThread()
         return true
     }
 
@@ -243,7 +235,7 @@ class PlayerEngine(
     /** Keeps the Oboe stream open and silent so the DAC never deactivates (no pop). */
     override fun stop() {
         Timber.d("stop: initialized=$initialized")
-        joinRenderThread()
+        joinPollThread()
         if (initialized) {
             Player.endPlayer()
             Player.releaseModule()
@@ -256,7 +248,7 @@ class PlayerEngine(
 
     override fun recoverFromDisconnect() {
         Timber.w("recoverFromDisconnect: initialized=$initialized")
-        joinRenderThread()
+        joinPollThread()
         deinit()
         playingFlow.value = false
         clearModuleState()
@@ -309,9 +301,9 @@ class PlayerEngine(
             val fx2t = ByteArray(MAX_CHANNELS)
             val fx2p = ByteArray(MAX_CHANNELS)
 
-            val cells = Array(numRows) { row ->
+            val cells = List(numRows) { row ->
                 Player.getPatternRow(patternIndex, row, notes, ins, fxt, fxp, fx2t, fx2p)
-                Array(numCh) { ch ->
+                List(numCh) { ch ->
                     NoteCell(
                         note = notes[ch].toInt() and 0xFF,
                         instrument = ins[ch].toInt() and 0xFF,
@@ -320,8 +312,8 @@ class PlayerEngine(
                         fx2Type = fx2t[ch].toInt(),
                         fx2Param = fx2p[ch].toInt() and 0xFF,
                     )
-                }.toList().toImmutableList()
-            }.toList().toImmutableList()
+                }.toImmutableList()
+            }.toImmutableList()
 
             PatternData(
                 cells = cells,
@@ -338,18 +330,14 @@ class PlayerEngine(
     private fun selectBackend(selected: RenderingBackend) {
         if (selected == Player.renderingBackend) return
         Timber.i("backend switch ${Player.renderingBackend} -> $selected")
-        if (initialized) {
-            stop()
-            deinit()
-        }
+        if (initialized) release()
         Player.switchBackend(selected)
     }
 
     private fun reopenAudioIfConfigChanged(wanted: AudioConfig) {
         if (!initialized || wanted == activeAudioConfig) return
         Timber.i("audio config changed $activeAudioConfig -> $wanted, reopening stream")
-        stop()
-        deinit()
+        release()
     }
 
     private fun initAudio(p: EnginePrefs): Boolean {
@@ -429,22 +417,22 @@ class PlayerEngine(
         events.tryEmit(EngineEvent.Disconnected)
     }
 
-    private fun startRenderThread() {
+    private fun startPollThread() {
         stopRequest = false
-        renderThread = Thread(::renderLoop, "ModPlayerPoll").also {
+        pollThread = Thread(::pollLoop, "ModPlayerPoll").also {
             it.priority = Thread.MAX_PRIORITY
             it.start()
         }
     }
 
-    /** Signals the render thread to exit and waits for it. */
-    private fun joinRenderThread() {
+    /** Signals the poll thread to exit and waits for it. */
+    private fun joinPollThread() {
         stopRequest = true
-        renderThread?.let {
+        pollThread?.let {
             it.interrupt()
             it.join(2_000)
         }
-        renderThread = null
+        pollThread = null
     }
 
     private fun deinit() {
@@ -456,6 +444,7 @@ class PlayerEngine(
 
     private fun clearModuleState() {
         patternCache.clear()
+        currentSequenceFlow.value = 0
         modVarsFlow.value = ModVars()
         frameInfoFlow.value = FrameInfo()
     }
@@ -471,7 +460,7 @@ class PlayerEngine(
             if (setSequence(nextSeq)) {
                 Timber.i("onModuleEnded: sequence $nextSeq / ${modVarsFlow.value.miNumSequences}")
                 Player.setPlaying(true) // clears the native end flag
-                startRenderThread()
+                startPollThread()
                 return
             }
         }
@@ -482,14 +471,14 @@ class PlayerEngine(
     }
 
     /** Poll thread: read-only snapshots only; anything that mutates is posted to [executor]. */
-    private fun renderLoop() {
+    private fun pollLoop() {
         while (!stopRequest) {
             try {
                 Thread.sleep(POLL_MS)
 
                 // Before the pause gate: a route change while paused must not go unnoticed.
                 if (Player.hasAudioDisconnected()) {
-                    signalDisconnected("renderLoop")
+                    signalDisconnected("pollLoop")
                     break
                 }
                 if (paused || stopRequest) continue

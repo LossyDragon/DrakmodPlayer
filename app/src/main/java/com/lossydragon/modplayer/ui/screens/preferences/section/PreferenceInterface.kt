@@ -20,7 +20,8 @@ import com.github.skydoves.colorpicker.compose.HsvColorPicker
 import com.github.skydoves.colorpicker.compose.SaturationSlider
 import com.github.skydoves.colorpicker.compose.rememberColorPickerController
 import com.lossydragon.modplayer.R
-import com.lossydragon.modplayer.db.AppPreferences
+import com.lossydragon.modplayer.ui.components.collectPref
+import com.lossydragon.modplayer.ui.components.rememberAppPreferences
 import com.lossydragon.modplayer.ui.screens.preferences.components.PreferenceItem
 import com.lossydragon.modplayer.ui.screens.preferences.components.PreferenceSection
 import com.lossydragon.modplayer.ui.screens.preferences.components.SingleChoiceAlertDialog
@@ -32,7 +33,6 @@ import com.materialkolor.ktx.toHex
 import kotlinx.collections.immutable.persistentListOf
 import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.launch
-import org.koin.compose.koinInject
 
 private val styleItems = persistentListOf(
     PreferenceItem(
@@ -88,17 +88,13 @@ fun PreferenceInterface(
     colors: ListItemColors
 ) {
     val scope = rememberCoroutineScope()
-    val prefs = if (LocalView.current.isInEditMode) {
-        AppPreferences(LocalContext.current)
-    } else {
-        koinInject<AppPreferences>()
-    }
+    val prefs = rememberAppPreferences()
 
     val style by remember(prefs) {
         prefs.getAppThemeStyleFlow().map(::paletteStyleOf)
     }.collectAsStateWithLifecycle(PaletteStyle.Vibrant)
 
-    val amoled by prefs.getAppThemeAmoledFlow().collectAsStateWithLifecycle(false)
+    val amoled by prefs.collectPref(false) { getAppThemeAmoledFlow() }
 
     val color by remember(prefs) {
         prefs.getThemeColorFlow().map { Color(it) }
@@ -225,7 +221,10 @@ fun PreferenceInterface(
         content = {
             SettingsMenuLink(
                 title = { Text(text = stringResource(R.string.pref_scheme_style)) },
-                subtitle = { Text(text = style.name) },
+                subtitle = {
+                    val title = styleItems.find { it.key == style.name }?.title
+                    Text(text = title?.let { stringResource(it) } ?: style.name)
+                },
                 colors = colors,
                 shapes = ListItemDefaults.segmentedShapes(0, 3),
                 onClick = { isThemeStyleShowing = true }

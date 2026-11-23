@@ -22,6 +22,7 @@ import com.lossydragon.modplayer.R
 import com.lossydragon.modplayer.di.appModule
 import com.lossydragon.modplayer.player.PlayerViewModel
 import com.lossydragon.modplayer.ui.components.AppSnackbarHostState
+import com.lossydragon.modplayer.ui.components.PlayerErrorEffect
 import com.lossydragon.modplayer.ui.screens.browser.FileBrowserScreen
 import com.lossydragon.modplayer.ui.screens.downloads.NavDownloads
 import com.lossydragon.modplayer.ui.screens.player.components.MiniPlayerBar
@@ -86,9 +87,7 @@ fun MainNavigation(
 
     BackHandler(enabled = currentTab != MainTab.Browser) { selectTab(MainTab.Browser) }
 
-    LaunchedEffect(playerState.errorMessage) {
-        playerState.errorMessage?.let { snackbarHostState.showSnackbar(it) }
-    }
+    PlayerErrorEffect(playerState.errorMessage, snackbarHostState)
 
     Scaffold(
         snackbarHost = { SnackbarHost(hostState = snackbarHostState) },

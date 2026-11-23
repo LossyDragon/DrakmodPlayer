@@ -11,12 +11,14 @@ import androidx.datastore.preferences.core.intPreferencesKey
 import androidx.datastore.preferences.core.longPreferencesKey
 import androidx.datastore.preferences.core.stringPreferencesKey
 import androidx.datastore.preferences.preferencesDataStore
+import com.lossydragon.modplayer.db.entity.ModuleEntity
 import com.lossydragon.native.Player
 import com.lossydragon.native.RenderingBackend
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.distinctUntilChanged
-import kotlinx.coroutines.flow.firstOrNull
+import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.map
+import kotlinx.serialization.json.Json
 import timber.log.Timber
 
 /** The cheap, frequently-updated half of the persisted queue. */
@@ -27,13 +29,9 @@ data class PlaybackState(
     val shuffle: Boolean
 )
 
-data class QueueState(
-    val index: Int,
-    val json: String,
-    val positionMs: Long,
-    val repeat: Int,
-    val shuffle: Boolean
-)
+data class QueueState(val json: String, val playback: PlaybackState) {
+    fun decodeModules(): List<ModuleEntity> = Json.decodeFromString(json)
+}
 
 // On-disk identifier: renaming it resets every setting and forgets the music folder unless migrated.
 private val Context.dataStore by preferencesDataStore(
@@ -42,6 +40,12 @@ private val Context.dataStore by preferencesDataStore(
         Timber.e("Preferences corrupted, resetting.")
         emptyPreferences()
     }
+)
+
+/** Own file: an edit rewrites its whole store, and playback state is saved every few seconds. */
+private val Context.queueStore by preferencesDataStore(
+    name = "queue",
+    corruptionHandler = ReplaceFileCorruptionHandler { emptyPreferences() }
 )
 
 /** materialkolor PaletteStyle names in the enum order older builds persisted as an ordinal. */
@@ -63,6 +67,7 @@ open class AppPreferences(context: Context) {
     }
 
     private val dataStore: DataStore<Preferences> = context.dataStore
+    private val queueStore: DataStore<Preferences> = context.queueStore
 
     private fun <T> flow(key: Preferences.Key<T>, default: T): Flow<T> =
         dataStore.data.map { it[key] ?: default }.distinctUntilChanged()
@@ -71,12 +76,15 @@ open class AppPreferences(context: Context) {
         dataStore.data.map { it[key] }.distinctUntilChanged()
 
     private suspend fun <T> get(key: Preferences.Key<T>, default: T): T =
-        dataStore.data.map { it[key] ?: default }.firstOrNull() ?: default
+        dataStore.data.first()[key] ?: default
 
     private suspend fun <T> set(key: Preferences.Key<T>, value: T) =
         dataStore.edit { it[key] = value }
 
-    suspend fun resetAll() = dataStore.edit { it.clear() }
+    suspend fun resetAll() {
+        dataStore.edit { it.clear() }
+        queueStore.edit { it.clear() }
+    }
 
     /* Debug */
     private val fileLogging = booleanPreferencesKey("file_logging")
@@ -198,10 +206,12 @@ open class AppPreferences(context: Context) {
 
     /** Stores the serialized queue contents. Call only when the queue itself changes. */
     open suspend fun saveQueueList(json: String) {
-        dataStore.edit { it[queueJson] = json }
+        queueStore.edit { it[queueJson] = json }
+        // Drop the copy older builds kept in the main store.
+        if (queueJson in dataStore.data.first()) dataStore.edit { it.remove(queueJson) }
     }
 
-    /** Stores index / position / modes. Cheap enough to call periodically. */
+    /** Stores index / position / modes; small, so fine to call periodically. */
     open suspend fun savePlaybackState(state: PlaybackState) {
         dataStore.edit {
             it[queueIndex] = state.index
@@ -212,18 +222,23 @@ open class AppPreferences(context: Context) {
     }
 
     open suspend fun getQueueState(): QueueState? {
-        val data = dataStore.data.firstOrNull() ?: return null
-        val json = data[queueJson]?.takeIf { it.isNotBlank() } ?: return null
+        val data = dataStore.data.first()
+        // Older builds kept the JSON in the main store.
+        val json = (queueStore.data.first()[queueJson] ?: data[queueJson])
+            ?.takeIf { it.isNotBlank() } ?: return null
         return QueueState(
-            json = json,
-            index = data[queueIndex] ?: 0,
-            shuffle = data[queueShuffle] ?: false,
-            repeat = data[queueRepeat] ?: 0,
-            positionMs = data[queuePositionMs] ?: 0L,
+            json,
+            PlaybackState(
+                index = data[queueIndex] ?: 0,
+                positionMs = data[queuePositionMs] ?: 0L,
+                repeat = data[queueRepeat] ?: 0,
+                shuffle = data[queueShuffle] ?: false,
+            ),
         )
     }
 
     open suspend fun clearQueueState() {
+        queueStore.edit { it.remove(queueJson) }
         dataStore.edit {
             it.remove(queueJson)
             it.remove(queueIndex)

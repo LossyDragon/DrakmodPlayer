@@ -15,13 +15,27 @@ import com.lossydragon.native.model.FrameInfo
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 
-/** Collects the 50 Hz frame flow itself so only this row recomposes per frame. */
+private data class RowInfo(
+    val pos: Int,
+    val pattern: Int,
+    val row: Int,
+    val numRows: Int,
+    val speed: Int,
+    val bpm: Int
+)
+
+/** Collects the 50 Hz frame flow itself, but only recomposes when a shown value changes. */
 @Composable
 internal fun PatternInfoRow(
     frameInfo: StateFlow<FrameInfo>,
     modifier: Modifier = Modifier
 ) {
-    val fi by frameInfo.collectAsStateWithLifecycle()
+    val frame = frameInfo.collectAsStateWithLifecycle()
+    val fi by remember(frame) {
+        derivedStateOf {
+            frame.value.run { RowInfo(pos, pattern, row, numRows, speed, bpm) }
+        }
+    }
 
     Row(
         modifier = modifier

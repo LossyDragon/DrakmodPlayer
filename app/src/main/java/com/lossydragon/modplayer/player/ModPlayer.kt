@@ -21,6 +21,9 @@ import com.lossydragon.modplayer.db.AppPreferences
 import com.lossydragon.modplayer.db.PlaybackState
 import com.lossydragon.modplayer.db.entity.ModuleEntity
 import kotlin.time.Duration.Companion.milliseconds
+import kotlinx.collections.immutable.ImmutableList
+import kotlinx.collections.immutable.persistentListOf
+import kotlinx.collections.immutable.toImmutableList
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
@@ -53,12 +56,42 @@ class ModPlayer(
     private companion object {
         /** The disconnect itself plus one failed restart. */
         const val MAX_RECOVERIES = 2
+
+        val COMMANDS: Player.Commands = Player.Commands.Builder().addAll(
+            Player.COMMAND_PLAY_PAUSE,
+            Player.COMMAND_PREPARE,
+            Player.COMMAND_STOP,
+            Player.COMMAND_SEEK_IN_CURRENT_MEDIA_ITEM,
+            Player.COMMAND_SEEK_TO_MEDIA_ITEM,
+            Player.COMMAND_SEEK_TO_PREVIOUS,
+            Player.COMMAND_SEEK_TO_PREVIOUS_MEDIA_ITEM,
+            Player.COMMAND_SEEK_TO_NEXT,
+            Player.COMMAND_SEEK_TO_NEXT_MEDIA_ITEM,
+            Player.COMMAND_SEEK_FORWARD,
+            Player.COMMAND_SEEK_BACK,
+            Player.COMMAND_GET_CURRENT_MEDIA_ITEM,
+            Player.COMMAND_GET_METADATA,
+            Player.COMMAND_GET_TIMELINE,
+            Player.COMMAND_SET_MEDIA_ITEM,
+            Player.COMMAND_CHANGE_MEDIA_ITEMS,
+            Player.COMMAND_SET_REPEAT_MODE,
+            Player.COMMAND_SET_SHUFFLE_MODE,
+        ).build()
     }
 
     private val queue = QueueController<ModuleEntity>()
 
     /** [QueueController.items] as [MediaItem]s for [getState]; the loaded one has real metadata. */
     private val playlist = mutableListOf<MediaItem>()
+
+    /** Real-metadata item of the loaded module; survives [syncPlaylist]. */
+    private var loadedItem: MediaItem? = null
+
+    /** Last [getState] result; its timeline is reused until [playlist], index or duration change. */
+    private var cachedState: State? = null
+    private var playlistDirty = true
+    private var cachedIndex = -1
+    private var cachedDurationMs = -1L
 
     private var phase = Phase.IDLE
 
@@ -81,16 +114,17 @@ class ModPlayer(
     private var pendingSeekPositionMs = -1L
 
     /** Snapshot of the playback queue; emitted when the queue changes. */
-    val queueFlow: StateFlow<List<ModuleEntity>>
-        field = MutableStateFlow(emptyList())
+    val queueFlow: StateFlow<ImmutableList<ModuleEntity>>
+        field = MutableStateFlow<ImmutableList<ModuleEntity>>(persistentListOf())
 
-    val modVarsFlow by engine::modVarsFlow
-    val currentSequenceFlow by engine::currentSequenceFlow
-
-    private val audioFocus = AudioFocusHandler(context)
+    private val audioFocus =
+        AudioFocusHandler(context, ::onFocusGain, ::onFocusLoss, engine::setDucked)
     private val mainHandler = Handler(Looper.getMainLooper())
     private val scope = CoroutineScope(Dispatchers.Main + SupervisorJob())
     private var positionUpdateJob: Job? = null
+
+    /** Module files carry no artwork, so the notification gets a static drawable. */
+    private val artworkUri = context.drawableUri(R.drawable.aa_album_art)
 
     init {
         scope.launch {
@@ -113,7 +147,7 @@ class ModPlayer(
                 when (event) {
                     EngineEvent.Ended -> onEnded()
                     EngineEvent.Disconnected -> onDisconnected()
-                    is EngineEvent.Error -> failPlayback(event.message)
+                    is EngineEvent.Error -> onEngineError(event.message)
                 }
             }
         }
@@ -139,8 +173,7 @@ class ModPlayer(
         acquireFocus()
 
         val step = queue.load(files, startAt, shuffle = shuffleMode, repeatMode = repeat)
-        syncPlaylist()
-        persistQueueList()
+        queueChanged()
         perform(step, startPositionMs)
     }
 
@@ -148,9 +181,7 @@ class ModPlayer(
 
     /** Previous item, or back to the start of this one after more than 3 seconds. */
     fun previous() {
-        if (currentPositionForUi() >
-            3_000L
-        ) {
+        if (currentPositionForUi() > 3_000L) {
             perform(QueueStep.Restart)
         } else {
             perform(queue.previous())
@@ -160,22 +191,15 @@ class ModPlayer(
     fun jumpToIndex(index: Int, startPositionMs: Long = 0L) =
         perform(queue.jumpTo(index), startPositionMs)
 
-    /** Releases audio focus. Called from [PlayerService.onDestroy]. */
-    fun abandonAudioFocus() = audioFocus.abandon()
-
     /**
-     * Flushes the playback position and tears down the engine. Called from
-     * [PlayerService.onDestroy]. The player is a process singleton shared by the UI and
-     * every service instance, so [scope] and the Media3 base are left alone.
+     * Releases audio focus, flushes the playback position and tears down the engine.
+     * Called from [PlayerService.onDestroy]. The player is a process singleton shared by
+     * the UI and every service instance, so [scope] and the Media3 base are left alone.
      */
     fun releaseEngine() {
-        stopPositionUpdates()
+        audioFocus.abandon()
         // The queue outlives the service; the next play resumes from here.
-        val position = if (phase == Phase.ENDED) 0L else currentPositionForUi()
-        loadGeneration++
-        phase = Phase.IDLE
-        resumePositionMs = position
-        pendingSeekPositionMs = -1L
+        goIdle(if (phase == Phase.ENDED) 0L else currentPositionForUi())
         if (!queue.isEmpty) persistPlaybackState()
         engine.post { engine.release() }
         invalidateState()
@@ -189,12 +213,11 @@ class ModPlayer(
      */
     suspend fun restoreQueue(): Boolean {
         if (!queue.isEmpty) return false
-        val state = prefs.getQueueState() ?: return false
+        val saved = prefs.getQueueState() ?: return false
+        val state = saved.playback
         val autoResume = prefs.getAutoResume()
         val files = try {
-            withContext(Dispatchers.Default) {
-                Json.decodeFromString<List<ModuleEntity>>(state.json)
-            }
+            withContext(Dispatchers.Default) { saved.decodeModules() }
         } catch (e: Exception) {
             Timber.e(e, "Failed to restore queue")
             prefs.clearQueueState()
@@ -212,7 +235,7 @@ class ModPlayer(
         if (autoResume) {
             setPlayWhenReadyInternal(true, PLAY_WHEN_READY_CHANGE_REASON_USER_REQUEST)
             acquireFocus()
-            perform(QueueStep.Play(queue.currentIndex), resumePositionMs)
+            loadCurrent()
         } else {
             invalidateState()
         }
@@ -222,30 +245,49 @@ class ModPlayer(
     // --- Media3 ---------------------------------------------------------------------------
 
     override fun getState(): State {
-        val commands = Player.Commands.Builder().addAll(
-            COMMAND_PLAY_PAUSE,
-            COMMAND_PREPARE,
-            COMMAND_STOP,
-            COMMAND_SEEK_IN_CURRENT_MEDIA_ITEM,
-            COMMAND_SEEK_TO_MEDIA_ITEM,
-            COMMAND_SEEK_TO_PREVIOUS,
-            COMMAND_SEEK_TO_PREVIOUS_MEDIA_ITEM,
-            COMMAND_SEEK_TO_NEXT,
-            COMMAND_SEEK_TO_NEXT_MEDIA_ITEM,
-            COMMAND_SEEK_FORWARD,
-            COMMAND_SEEK_BACK,
-            COMMAND_GET_CURRENT_MEDIA_ITEM,
-            COMMAND_GET_METADATA,
-            COMMAND_GET_TIMELINE,
-            COMMAND_SET_MEDIA_ITEM,
-            COMMAND_CHANGE_MEDIA_ITEMS,
-            COMMAND_SET_REPEAT_MODE,
-            COMMAND_SET_SHUFFLE_MODE,
-        ).build()
-
         val currentIndex = queue.currentIndex
-        val durationMs = engine.modVarsFlow.value.sequenceDuration(engine.currentSequenceFlow.value)
-        val playlistItems = playlist.mapIndexed { i, item ->
+        val durationMs =
+            engine.modVarsFlow.value.sequenceDuration(engine.currentSequenceFlow.value).toLong()
+
+        val cached = cachedState
+        val builder = if (cached != null && !playlistDirty &&
+            currentIndex == cachedIndex && durationMs == cachedDurationMs
+        ) {
+            cached.buildUpon()
+        } else {
+            playlistDirty = false
+            cachedIndex = currentIndex
+            cachedDurationMs = durationMs
+            State.Builder()
+                .setAvailableCommands(COMMANDS)
+                .setSeekForwardIncrementMs(10_000L)
+                .setSeekBackIncrementMs(10_000L)
+                .setPlaylist(playlistData(currentIndex, durationMs))
+        }
+
+        val playbackState = when {
+            playlist.isEmpty() -> STATE_IDLE
+            phase == Phase.IDLE -> STATE_IDLE
+            phase == Phase.LOADING -> STATE_BUFFERING
+            phase == Phase.ENDED -> STATE_ENDED
+            else -> STATE_READY
+        }
+
+        return builder
+            .setShuffleModeEnabled(queue.shuffle)
+            .setRepeatMode(queue.repeatMode.toMedia3())
+            .setCurrentMediaItemIndex(if (playlist.isEmpty()) C.INDEX_UNSET else currentIndex)
+            .setPlayWhenReady(playWhenReady, playWhenReadyReason)
+            .setPlaybackSuppressionReason(suppressionReason)
+            .setPlaybackState(playbackState)
+            .setPlayerError(playerError)
+            .setContentPositionMs(currentPositionForUi())
+            .build()
+            .also { cachedState = it }
+    }
+
+    private fun playlistData(currentIndex: Int, durationMs: Long) =
+        playlist.mapIndexed { i, item ->
             // Original index + path: unique even when a file is queued twice, stable across shuffle.
             val uid = "${queue.originalIndexAt(i)}:${item.mediaId}"
             val durationUs =
@@ -257,36 +299,8 @@ class ModPlayer(
                 .build()
         }
 
-        val playbackState = when {
-            playlist.isEmpty() -> STATE_IDLE
-            phase == Phase.IDLE -> STATE_IDLE
-            phase == Phase.LOADING -> STATE_BUFFERING
-            phase == Phase.ENDED -> STATE_ENDED
-            else -> STATE_READY
-        }
-
-        return State.Builder()
-            .setAvailableCommands(commands)
-            .setPlaylist(playlistItems)
-            .setShuffleModeEnabled(queue.shuffle)
-            .setRepeatMode(queue.repeatMode.toMedia3())
-            .setCurrentMediaItemIndex(if (playlist.isEmpty()) C.INDEX_UNSET else currentIndex)
-            .setPlayWhenReady(playWhenReady, playWhenReadyReason)
-            .setPlaybackSuppressionReason(suppressionReason)
-            .setPlaybackState(playbackState)
-            .setPlayerError(playerError)
-            .setContentPositionMs(currentPositionForUi())
-            .setSeekForwardIncrementMs(10_000L)
-            .setSeekBackIncrementMs(10_000L)
-            .build()
-    }
-
     override fun handlePrepare(): ListenableFuture<*> {
-        if (phase == Phase.IDLE &&
-            !queue.isEmpty
-        ) {
-            perform(QueueStep.Play(queue.currentIndex), resumePositionMs)
-        }
+        if (phase == Phase.IDLE) loadCurrent()
         return Futures.immediateVoidFuture()
     }
 
@@ -303,16 +317,11 @@ class ModPlayer(
         setPlayWhenReadyInternal(true, PLAY_WHEN_READY_CHANGE_REASON_USER_REQUEST)
         if (!acquireFocus()) return Futures.immediateVoidFuture()
         when (phase) {
-            Phase.IDLE -> if (!queue.isEmpty) {
-                perform(
-                    QueueStep.Play(queue.currentIndex),
-                    resumePositionMs
-                )
-            }
-
-            Phase.LOADING -> Unit
+            Phase.IDLE -> loadCurrent()
 
             // the load completion starts the engine
+            Phase.LOADING -> Unit
+
             Phase.READY -> startEngineIfWanted()
 
             Phase.PLAYING -> Unit
@@ -332,11 +341,10 @@ class ModPlayer(
         return Futures.immediateVoidFuture()
     }
 
-    /** Rebuilds the order; the loaded item stays current and keeps its real metadata. */
+    /** Rebuilds the order; the loaded item stays current. */
     override fun handleSetShuffleModeEnabled(shuffleModeEnabled: Boolean): ListenableFuture<*> {
-        val currentItem = playlist.getOrNull(queue.currentIndex)
         queue.setShuffle(shuffleModeEnabled)
-        syncPlaylist(retainCurrentItem = currentItem)
+        syncPlaylist()
         persistPlaybackState()
         return Futures.immediateVoidFuture()
     }
@@ -372,11 +380,7 @@ class ModPlayer(
     /** Media3 contract: stop playback, keep the timeline. The queue is cleared only via the queue commands. */
     override fun handleStop(): ListenableFuture<*> {
         setPlayWhenReadyInternal(false, PLAY_WHEN_READY_CHANGE_REASON_USER_REQUEST)
-        loadGeneration++
-        phase = Phase.IDLE
-        resumePositionMs = 0L
-        pendingSeekPositionMs = -1L
-        stopPositionUpdates()
+        goIdle(0L)
         engine.post { engine.stop() }
         persistPlaybackState(positionOverride = 0L)
         invalidateState()
@@ -403,8 +407,7 @@ class ModPlayer(
 
     override fun handleAddMediaItems(index: Int, mediaItems: List<MediaItem>): ListenableFuture<*> {
         queue.add(index, mediaItems.toModules())
-        syncPlaylist()
-        persistQueueList()
+        queueChanged()
         return Futures.immediateVoidFuture()
     }
 
@@ -419,8 +422,7 @@ class ModPlayer(
         newIndex: Int
     ): ListenableFuture<*> {
         queue.move(fromIndex, toIndex, newIndex)
-        syncPlaylist()
-        persistQueueList()
+        queueChanged()
         return Futures.immediateVoidFuture()
     }
 
@@ -446,34 +448,32 @@ class ModPlayer(
 
     /** Applies the result of a queue edit (remove/replace). */
     private fun applyEdit(step: QueueStep) {
-        when (step) {
-            QueueStep.Clear -> clearQueue()
-
-            // The playing item was removed: move on only if something was playing/loaded.
-            is QueueStep.Play -> {
-                syncPlaylist()
-                persistQueueList()
-                if (phase != Phase.IDLE) perform(step)
-            }
-
-            else -> {
-                syncPlaylist()
-                persistQueueList()
-            }
-        }
+        if (step == QueueStep.Clear) return clearQueue()
+        queueChanged()
+        // The playing item was removed: move on only if something was playing/loaded.
+        if (step is QueueStep.Play && phase != Phase.IDLE) perform(step)
     }
 
     private fun clearQueue() {
-        loadGeneration++
+        goIdle(0L)
         queue.clear()
-        phase = Phase.IDLE
-        resumePositionMs = 0L
-        pendingSeekPositionMs = -1L
+        loadedItem = null
         setPlayWhenReadyInternal(false, PLAY_WHEN_READY_CHANGE_REASON_USER_REQUEST)
-        stopPositionUpdates()
         engine.post { engine.stop() }
-        syncPlaylist()
-        persistQueueList()
+        queueChanged()
+    }
+
+    /** Invalidates in-flight engine results and parks at [resumeMs] with nothing loaded. */
+    private fun goIdle(resumeMs: Long) {
+        loadGeneration++
+        phase = Phase.IDLE
+        resumePositionMs = resumeMs
+        pendingSeekPositionMs = -1L
+        stopPositionUpdates()
+    }
+
+    private fun loadCurrent(positionMs: Long = resumePositionMs) {
+        if (!queue.isEmpty) perform(QueueStep.Play(queue.currentIndex), positionMs)
     }
 
     /** Carries out a [QueueStep]. Always on the main thread. */
@@ -506,6 +506,7 @@ class ModPlayer(
         val generation = ++loadGeneration
         phase = Phase.LOADING
         playerError = null
+        loadedItem = null
         pendingSeekPositionMs = -1L
         resumePositionMs = startPositionMs.coerceAtLeast(0L)
         stopPositionUpdates()
@@ -514,16 +515,11 @@ class ModPlayer(
 
         engine.post {
             val result = engine.load(file)
-            mainHandler.post { onLoadFinished(generation, index, file, result) }
+            mainHandler.post { onLoadFinished(generation, file, result) }
         }
     }
 
-    private fun onLoadFinished(
-        generation: Int,
-        index: Int,
-        file: ModuleEntity,
-        result: LoadResult
-    ) {
+    private fun onLoadFinished(generation: Int, file: ModuleEntity, result: LoadResult) {
         if (generation != loadGeneration) return // superseded
         when (result) {
             LoadResult.OK -> Unit
@@ -535,16 +531,22 @@ class ModPlayer(
 
             // Not the file's fault: keep the queue rather than skipping through it.
             LoadResult.NO_AUDIO -> {
-                failPlayback("Could not open the audio output")
+                failPlayback(context.getString(R.string.error_audio_open))
                 return
             }
         }
         queue.onLoadSucceeded()
         phase = Phase.READY
 
-        val duration = engine.modVarsFlow.value.sequenceDuration(engine.currentSequenceFlow.value)
-        val realItem = file.toMediaItem(file.toRealMetadata(duration.toLong()))
-        if (playlist.getOrNull(index)?.mediaId == realItem.mediaId) playlist[index] = realItem
+        val mv = engine.modVarsFlow.value
+        loadedItem = file.toMediaItem(
+            buildMetadata(
+                title = mv.modName.ifBlank { file.filename },
+                artist = mv.modType.ifBlank { file.fileExtension.uppercase() },
+                durationMs = mv.sequenceDuration(engine.currentSequenceFlow.value).toLong(),
+            )
+        )
+        applyLoadedItem()
 
         startEngineIfWanted()
         invalidateState()
@@ -566,11 +568,7 @@ class ModPlayer(
             if (started && seekMs > 0L) engine.seek(seekMs.toInt())
             mainHandler.post {
                 if (started) recoveries = 0
-                if (generation == loadGeneration &&
-                    pendingSeekPositionMs == seekMs
-                ) {
-                    pendingSeekPositionMs = -1L
-                }
+                clearPendingSeek(generation, seekMs)
             }
         }
     }
@@ -579,24 +577,25 @@ class ModPlayer(
         when (phase) {
             Phase.IDLE, Phase.LOADING -> resumePositionMs = targetMs
 
-            Phase.ENDED -> perform(QueueStep.Play(queue.currentIndex), targetMs)
+            Phase.ENDED -> loadCurrent(targetMs)
 
             Phase.READY, Phase.PLAYING -> {
                 pendingSeekPositionMs = targetMs
                 val generation = loadGeneration
                 engine.post {
                     engine.seek(targetMs.toInt())
-                    mainHandler.post {
-                        if (generation == loadGeneration &&
-                            pendingSeekPositionMs == targetMs
-                        ) {
-                            pendingSeekPositionMs = -1L
-                        }
-                    }
+                    mainHandler.post { clearPendingSeek(generation, targetMs) }
                 }
             }
         }
         invalidateState()
+    }
+
+    /** The engine applied the seek to [ms], unless a newer load or seek replaced it. */
+    private fun clearPendingSeek(generation: Int, ms: Long) {
+        if (generation == loadGeneration && pendingSeekPositionMs == ms) {
+            pendingSeekPositionMs = -1L
+        }
     }
 
     /** READY counts too: a start may already be posted and the phase not caught up yet. */
@@ -613,6 +612,12 @@ class ModPlayer(
         invalidateState()
     }
 
+    /** A start is only posted from READY; in any other phase the error is from a superseded one. */
+    private fun onEngineError(message: String) {
+        if (phase == Phase.IDLE || phase == Phase.LOADING) return
+        failPlayback(message)
+    }
+
     private fun onEnded() {
         if (phase == Phase.IDLE || phase == Phase.LOADING) return
         perform(queue.next())
@@ -622,15 +627,12 @@ class ModPlayer(
         if (phase == Phase.IDLE) return
         Timber.w("Audio route lost; reopening on the next start")
         val position = currentPositionForUi()
-        val generation = ++loadGeneration
-        phase = Phase.IDLE
-        resumePositionMs = position
-        pendingSeekPositionMs = -1L
-        stopPositionUpdates()
+        goIdle(position)
+        val generation = loadGeneration
         if (++recoveries > MAX_RECOVERIES) {
             // The stream keeps failing to start; stop instead of reloading forever.
             playerError = PlaybackException(
-                "Could not start the audio output",
+                context.getString(R.string.error_audio_start),
                 null,
                 PlaybackException.ERROR_CODE_UNSPECIFIED,
             )
@@ -640,8 +642,7 @@ class ModPlayer(
         engine.post {
             engine.recoverFromDisconnect()
             mainHandler.post {
-                if (generation != loadGeneration || queue.isEmpty) return@post
-                if (playWhenReady) perform(QueueStep.Play(queue.currentIndex), position)
+                if (generation == loadGeneration && playWhenReady) loadCurrent(position)
             }
         }
     }
@@ -652,53 +653,43 @@ class ModPlayer(
      * Requests focus. Returns true when the engine may start now. A delayed grant leaves
      * [playWhenReady] set and suppressed until GAIN; a refusal clears it.
      */
-    private fun acquireFocus(): Boolean {
-        val result = audioFocus.request(
-            onGain = {
-                suppressionReason = PLAYBACK_SUPPRESSION_REASON_NONE
-                if (playWhenReady) {
-                    when (phase) {
-                        Phase.READY -> startEngineIfWanted()
+    private fun acquireFocus(): Boolean = when (audioFocus.request()) {
+        FocusResult.GRANTED -> {
+            suppressionReason = PLAYBACK_SUPPRESSION_REASON_NONE
+            true
+        }
 
-                        Phase.IDLE -> if (!queue.isEmpty) {
-                            perform(
-                                QueueStep.Play(queue.currentIndex),
-                                resumePositionMs
-                            )
-                        }
+        FocusResult.DELAYED -> {
+            suppressionReason = PLAYBACK_SUPPRESSION_REASON_TRANSIENT_AUDIO_FOCUS_LOSS
+            false
+        }
 
-                        else -> Unit
-                    }
-                }
-                invalidateState()
-            },
-            onLoss = { transient ->
-                if (transient) {
-                    suppressionReason = PLAYBACK_SUPPRESSION_REASON_TRANSIENT_AUDIO_FOCUS_LOSS
-                } else {
-                    setPlayWhenReadyInternal(false, PLAY_WHEN_READY_CHANGE_REASON_AUDIO_FOCUS_LOSS)
-                }
-                pauseEngine()
-                invalidateState()
-            },
-            onDuck = engine::setDucked,
-        )
-        return when (result) {
-            FocusResult.GRANTED -> {
-                suppressionReason = PLAYBACK_SUPPRESSION_REASON_NONE
-                true
-            }
+        FocusResult.FAILED -> {
+            setPlayWhenReadyInternal(false, PLAY_WHEN_READY_CHANGE_REASON_AUDIO_FOCUS_LOSS)
+            false
+        }
+    }
 
-            FocusResult.DELAYED -> {
-                suppressionReason = PLAYBACK_SUPPRESSION_REASON_TRANSIENT_AUDIO_FOCUS_LOSS
-                false
-            }
-
-            FocusResult.FAILED -> {
-                setPlayWhenReadyInternal(false, PLAY_WHEN_READY_CHANGE_REASON_AUDIO_FOCUS_LOSS)
-                false
+    private fun onFocusGain() {
+        suppressionReason = PLAYBACK_SUPPRESSION_REASON_NONE
+        if (playWhenReady) {
+            when (phase) {
+                Phase.READY -> startEngineIfWanted()
+                Phase.IDLE -> loadCurrent()
+                else -> Unit
             }
         }
+        invalidateState()
+    }
+
+    private fun onFocusLoss(transient: Boolean) {
+        if (transient) {
+            suppressionReason = PLAYBACK_SUPPRESSION_REASON_TRANSIENT_AUDIO_FOCUS_LOSS
+        } else {
+            setPlayWhenReadyInternal(false, PLAY_WHEN_READY_CHANGE_REASON_AUDIO_FOCUS_LOSS)
+        }
+        pauseEngine()
+        invalidateState()
     }
 
     private fun setPlayWhenReadyInternal(value: Boolean, reason: Int) {
@@ -729,25 +720,35 @@ class ModPlayer(
         val uri = item.localConfiguration?.uri ?: return@mapNotNull null
         MediaItemExtras.moduleFrom(item) ?: ModuleEntity(
             filePath = uri.toString(),
-            filename = item.mediaMetadata.title?.toString() ?: uri.lastPathSegment ?: "Unknown",
+            filename = item.mediaMetadata.title?.toString()
+                ?: uri.lastPathSegment
+                ?: context.getString(R.string.unknown),
             fileSize = 0L,
             fileExtension = uri.lastPathSegment?.substringAfterLast('.', "") ?: "",
         )
     }
 
-    /**
-     * Rebuilds [playlist] and publishes [queueFlow].
-     * @param retainCurrentItem Real-metadata item to keep at the current index across a
-     *   reorder; the engine's metadata belongs to the loaded file, not to the index.
-     */
-    private fun syncPlaylist(retainCurrentItem: MediaItem? = null) {
+    /** The queue contents or order changed. */
+    private fun queueChanged() {
+        syncPlaylist()
+        persistQueueList()
+    }
+
+    /** Rebuilds [playlist] and publishes [queueFlow]. */
+    private fun syncPlaylist() {
         playlist.clear()
-        playlist.addAll(queue.items.map { it.toMediaItem() })
-        retainCurrentItem?.let { item ->
-            if (queue.currentIndex in playlist.indices) playlist[queue.currentIndex] = item
-        }
-        queueFlow.value = queue.items.toList()
+        queue.items.mapTo(playlist) { it.toMediaItem() }
+        applyLoadedItem()
+        queueFlow.value = queue.items.toImmutableList()
         invalidateState()
+    }
+
+    /** Puts [loadedItem] at the current index while that is still the loaded file. */
+    private fun applyLoadedItem() {
+        playlistDirty = true
+        val item = loadedItem ?: return
+        val index = queue.currentIndex
+        if (playlist.getOrNull(index)?.mediaId == item.mediaId) playlist[index] = item
     }
 
     private fun startPositionUpdates() {
@@ -800,10 +801,6 @@ class ModPlayer(
         positionMs = positionOverride ?: currentPositionForUi(),
     )
 
-    private fun drawableUri(resId: Int): Uri =
-        "android.resource://${context.packageName}/$resId".toUri()
-
-    /** Module files carry no artwork, so the notification gets a static drawable. */
     private fun buildMetadata(
         title: String,
         artist: String,
@@ -812,7 +809,7 @@ class ModPlayer(
         .setTitle(title)
         .setArtist(artist)
         .apply { durationMs?.let { setDurationMs(it) } }
-        .setArtworkUri(drawableUri(R.drawable.aa_album_art))
+        .setArtworkUri(artworkUri)
         .setIsPlayable(true)
         .build()
 
@@ -824,13 +821,9 @@ class ModPlayer(
         .setMediaId(AutoMediaId.file(filePath)) // same id scheme as the Auto browse tree
         .setMediaMetadata(metadata)
         .build()
-
-    private fun ModuleEntity.toRealMetadata(durationMs: Long): MediaMetadata = buildMetadata(
-        title = modVarsFlow.value.modName.ifBlank { filename },
-        artist = modVarsFlow.value.modType.ifBlank { fileExtension.uppercase() },
-        durationMs = durationMs,
-    )
 }
+
+internal fun Context.drawableUri(resId: Int): Uri = "android.resource://$packageName/$resId".toUri()
 
 private fun RepeatMode.toMedia3(): Int = when (this) {
     RepeatMode.OFF -> Player.REPEAT_MODE_OFF

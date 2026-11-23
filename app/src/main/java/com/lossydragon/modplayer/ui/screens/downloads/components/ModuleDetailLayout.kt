@@ -152,14 +152,14 @@ internal fun ModuleDetailLayout(
             HeaderText(text = stringResource(R.string.module_detail_song_message))
             Spacer(modifier = Modifier.height(10.dp))
             // Song Message Content
-            MonoSpaceText(text = module.formattedComment)
+            MonoSpaceText(text = remember(module) { module.formattedComment })
             Spacer(modifier = Modifier.height(10.dp))
         }
         // Instruments
         HeaderText(text = stringResource(R.string.module_detail_instruments))
         Spacer(modifier = Modifier.height(10.dp))
         // Instruments Content
-        MonoSpaceText(text = module.formattedInstruments)
+        MonoSpaceText(text = remember(module) { module.formattedInstruments })
         Spacer(modifier = Modifier.height(10.dp))
         // Sponsor
         if (moduleResult.hasSponsor) {

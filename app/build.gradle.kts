@@ -117,7 +117,7 @@ dependencies {
     implementation(platform(libs.compose.bom))
     implementation(platform(libs.koin.bom))
 
-    debugImplementation(libs.compose.ui.tooling.preview)
+    debugImplementation(libs.compose.ui.tooling)
 
     ksp(libs.room.compiler)
 

@@ -12,14 +12,16 @@ import androidx.compose.ui.tooling.preview.*
 import androidx.compose.ui.unit.*
 import com.lossydragon.modplayer.R
 import com.lossydragon.modplayer.db.entity.ModuleEntity
-import com.lossydragon.modplayer.ui.screens.browser.BrowserUiState
 import com.lossydragon.modplayer.ui.screens.browser.FileItem
 import com.lossydragon.modplayer.ui.theme.AppTheme
+import kotlinx.collections.immutable.ImmutableList
+import kotlinx.collections.immutable.persistentListOf
 import kotlinx.collections.immutable.toImmutableList
 
 @Composable
 internal fun ModuleList(
-    state: BrowserUiState,
+    directories: ImmutableList<FileItem>,
+    files: ImmutableList<ModuleEntity>,
     padding: PaddingValues,
     listState: LazyListState,
     onDir: (FileItem) -> Unit,
@@ -38,7 +40,7 @@ internal fun ModuleList(
         ),
         content = {
             items(
-                items = state.directories,
+                items = directories,
                 key = { it.uri.toString() },
                 itemContent = { dir ->
                     BrowserListItem(
@@ -51,7 +53,7 @@ internal fun ModuleList(
                 }
             )
             items(
-                items = state.files,
+                items = files,
                 key = { it.filePath },
                 itemContent = { file ->
                     BrowserListItem(
@@ -72,16 +74,15 @@ internal fun ModuleList(
 private fun Preview() {
     AppTheme {
         ModuleList(
-            state = BrowserUiState(
-                files = List(10) {
-                    ModuleEntity(
-                        filePath = "content://preview/$it",
-                        filename = "Item $it",
-                        fileExtension = "669",
-                        fileSize = it + 1L * it,
-                    )
-                }.toImmutableList(),
-            ),
+            directories = persistentListOf(),
+            files = List(10) {
+                ModuleEntity(
+                    filePath = "content://preview/$it",
+                    filename = "Item $it",
+                    fileExtension = "669",
+                    fileSize = it + 1L * it,
+                )
+            }.toImmutableList(),
             padding = PaddingValues(),
             listState = LazyListState(),
             onDir = {},

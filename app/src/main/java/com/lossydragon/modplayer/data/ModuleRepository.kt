@@ -41,6 +41,7 @@ class ModuleRepository(
     private companion object {
         /** How long the index is trusted before a cold start walks the tree again. */
         const val INDEX_MAX_AGE_MS = 15 * 60 * 1000L
+        const val SQL_CHUNK = 900
     }
 
     private val _indexState = MutableStateFlow<IndexState>(IndexState.Idle)
@@ -68,17 +69,12 @@ class ModuleRepository(
 
     /** @param restart Cancel a running index (of the old root) instead of deferring to it. */
     fun indexDirectory(uri: Uri, restart: Boolean = false) =
-        startIndex(uri, IndexKind.FULL, restart) {
-            indexInternal(uri, dao.getAllFilePaths().toHashSet())
-            true
-        }
+        startIndex(uri, IndexKind.FULL, restart) { fullIndex(uri) }
 
     /** [indexDirectory], unless one ran within [INDEX_MAX_AGE_MS] and the table is non-empty. */
     fun indexDirectoryIfStale(uri: Uri) = startIndex(uri, IndexKind.INITIAL) {
         val fresh = System.currentTimeMillis() - prefs.getLastIndexedAt() < INDEX_MAX_AGE_MS
-        if (fresh && dao.count() > 0) return@startIndex false
-        indexInternal(uri, dao.getAllFilePaths().toHashSet())
-        true
+        if (fresh && dao.count() > 0) false else fullIndex(uri)
     }
 
     fun reindexDirectory(uri: Uri) = startIndex(uri, IndexKind.REFRESH) {
@@ -86,9 +82,18 @@ class ModuleRepository(
         val seenPaths = HashSet<String>()
         indexInternal(uri, dao.getConfirmedPaths().toHashSet(), seenPaths)
         val removed = allPaths - seenPaths
-        if (removed.isNotEmpty()) dao.deleteByFilePaths(removed.toList())
+        deletePaths(removed)
         true
     }
+
+    private suspend fun fullIndex(uri: Uri): Boolean {
+        indexInternal(uri, dao.getAllFilePaths().toHashSet())
+        return true
+    }
+
+    /** Chunked: older SQLite caps a statement at 999 bound variables. */
+    private suspend fun deletePaths(paths: Collection<String>) =
+        paths.chunked(SQL_CHUNK).forEach { dao.deleteByFilePaths(it) }
 
     /**
      * Runs [block] on the app scope unless an index is already running; with [restart] the
@@ -136,7 +141,7 @@ class ModuleRepository(
      */
     suspend fun indexDirectoryShallow(rootUri: Uri, dirUri: Uri) {
         val parentPath = dirUri.toString()
-        if (dao.getByFilePaths(listOf(parentPath)).isEmpty()) {
+        if (!dao.exists(parentPath)) {
             indexDirectory(rootUri)
             return
         }
@@ -147,7 +152,7 @@ class ModuleRepository(
         val entries = saf.queryDirectoryEntries(rootUri, DocumentsContract.getDocumentId(dirUri))
         upsertEntries(entries, parentPath, skip)
         val gone = known.map { it.filePath } - entries.map { it.childUri.toString() }.toSet()
-        if (gone.isNotEmpty()) dao.deleteByFilePaths(gone)
+        deletePaths(gone)
     }
 
     private suspend fun indexInternal(

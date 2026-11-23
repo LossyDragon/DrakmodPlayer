@@ -5,6 +5,7 @@ import androidx.compose.material.icons.*
 import androidx.compose.material.icons.filled.*
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
+import androidx.compose.runtime.saveable.*
 import androidx.compose.ui.*
 import androidx.compose.ui.platform.*
 import androidx.compose.ui.res.*
@@ -16,9 +17,11 @@ import com.lossydragon.modplayer.R
 import com.lossydragon.modplayer.model.Module
 import com.lossydragon.modplayer.model.ModuleResult
 import com.lossydragon.modplayer.ui.components.BackButton
+import com.lossydragon.modplayer.ui.components.ConfirmDialog
 import com.lossydragon.modplayer.ui.components.MessageBox
 import com.lossydragon.modplayer.ui.components.ProgressbarIndicator
 import com.lossydragon.modplayer.ui.screens.downloads.DownloadStatus
+import com.lossydragon.modplayer.ui.screens.downloads.DownloadsEvent
 import com.lossydragon.modplayer.ui.screens.downloads.DownloadsViewModel
 import com.lossydragon.modplayer.ui.screens.downloads.ModuleResultState
 import com.lossydragon.modplayer.ui.screens.downloads.components.ModuleDetailLayout
@@ -41,49 +44,37 @@ internal fun DownloadModuleScreen(
 
     var showDeleteDialog by remember { mutableStateOf(false) }
 
+    // Once per entry (the ViewModel is shared, so its result may be another entry's),
+    // and again if the result was lost with the process.
+    var requested by rememberSaveable { mutableStateOf(false) }
     LaunchedEffect(moduleId) {
-        // Only fetch if we don't already have a module loaded
-        // or if the requested ID differs from what's currently loaded
-        if (state.result == null || (moduleId >= 0 && state.result?.module?.id != moduleId)) {
+        if (!requested || state.result == null) {
+            requested = true
             viewModel.getModuleById(moduleId)
         }
     }
 
-    LaunchedEffect(state.downloadStatus) {
-        val status = state.downloadStatus
-        if (status is DownloadStatus.Error) {
-            snackbarHostState.showSnackbar(
-                status.message.asString(context)
-            )
+    LaunchedEffect(viewModel) {
+        viewModel.events.collect { event ->
+            when (event) {
+                is DownloadsEvent.Error -> snackbarHostState.showSnackbar(
+                    event.message.asString(context)
+                )
+            }
         }
     }
 
     if (showDeleteDialog) {
-        AlertDialog(
-            onDismissRequest = { showDeleteDialog = false },
-            icon = { Icon(Icons.Default.Delete, null) },
-            title = { Text(text = stringResource(R.string.dialog_title_delete_module)) },
-            text = {
-                val name = state.result?.module?.filename
-                    .orEmpty()
-                    .ifEmpty { stringResource(R.string.untitled) }
-                Text(text = stringResource(R.string.dialog_message_delete_module, name))
-            },
-            confirmButton = {
-                TextButton(
-                    onClick = {
-                        state.result?.module?.let { viewModel.deleteModule(it) }
-                        showDeleteDialog = false
-                    },
-                    content = { Text(text = stringResource(R.string.delete)) }
-                )
-            },
-            dismissButton = {
-                TextButton(
-                    onClick = { showDeleteDialog = false },
-                    content = { Text(text = stringResource(R.string.cancel)) }
-                )
-            }
+        val name = state.result?.module?.filename
+            .orEmpty()
+            .ifEmpty { stringResource(R.string.untitled) }
+        ConfirmDialog(
+            icon = Icons.Default.Delete,
+            title = stringResource(R.string.dialog_title_delete_module),
+            text = stringResource(R.string.dialog_message_delete_module, name),
+            confirmLabel = stringResource(R.string.delete),
+            onConfirm = { state.result?.module?.let { viewModel.deleteModule(it) } },
+            onDismiss = { showDeleteDialog = false },
         )
     }
 
@@ -193,7 +184,9 @@ private fun DownloadModuleContent(
                                 state.isLoading -> stringResource(R.string.loading)
 
                                 isDownloading -> when (val s = state.downloadStatus) {
-                                    is DownloadStatus.Progress -> "%.0f%%".format(s.percent)
+                                    is DownloadStatus.Progress ->
+                                        stringResource(R.string.value_percent, s.percent.toInt())
+
                                     else -> stringResource(R.string.downloading)
                                 }
 
@@ -244,14 +237,7 @@ private fun DownloadModuleContent(
 
                         state.softError != null -> MessageBox(
                             text = state.softError,
-                            actions = {
-                                TextButton(
-                                    onClick = onBack,
-                                    content = {
-                                        Text(text = stringResource(R.string.desc_back_button))
-                                    }
-                                )
-                            }
+                            onBack = onBack,
                         )
 
                         result != null -> ModuleDetailLayout(

@@ -7,7 +7,6 @@ import androidx.compose.material.icons.filled.Edit
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.*
-import androidx.compose.ui.platform.LocalResources
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.*
@@ -18,24 +17,16 @@ import com.lossydragon.modplayer.ui.theme.AppTheme
 internal fun NewPlaylistDialog(
     onDismiss: () -> Unit,
     onCreate: (String, String) -> Unit,
-    onError: (String) -> Unit,
     initialName: String = "",
     initialComment: String = ""
 ) {
-    val resource = LocalResources.current
     val isEditing = initialName.isNotBlank()
 
     var name by remember { mutableStateOf(initialName) }
     var comment by remember { mutableStateOf(initialComment) }
 
-    val dismiss: () -> Unit = {
-        name = ""
-        comment = ""
-        onDismiss()
-    }
-
     AlertDialog(
-        onDismissRequest = dismiss,
+        onDismissRequest = onDismiss,
         icon = {
             Icon(
                 imageVector = if (isEditing) {
@@ -75,14 +66,10 @@ internal fun NewPlaylistDialog(
         },
         confirmButton = {
             TextButton(
+                enabled = name.isNotBlank(),
                 onClick = {
-                    if (name.isBlank()) {
-                        val text = resource.getString(R.string.error_playlist_no_name)
-                        onError(text)
-                    } else {
-                        onCreate(name, comment)
-                    }
-                    dismiss()
+                    onCreate(name, comment)
+                    onDismiss()
                 },
                 content = {
                     Text(
@@ -99,7 +86,7 @@ internal fun NewPlaylistDialog(
         },
         dismissButton = {
             TextButton(
-                onClick = dismiss,
+                onClick = onDismiss,
                 content = { Text(text = stringResource(R.string.cancel)) }
             )
         }
@@ -114,7 +101,6 @@ private fun Preview_Edit() {
             NewPlaylistDialog(
                 onDismiss = {},
                 onCreate = { _, _ -> },
-                onError = {},
                 initialName = stringResource(R.string.app_name),
                 initialComment = stringResource(R.string.app_name)
             )
@@ -130,7 +116,6 @@ private fun Preview_New() {
             NewPlaylistDialog(
                 onDismiss = {},
                 onCreate = { _, _ -> },
-                onError = {},
             )
         }
     }

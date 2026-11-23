@@ -24,6 +24,8 @@ import kotlin.time.Duration.Companion.milliseconds
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 
+private const val MIN_QUERY = 3
+
 @OptIn(ExperimentalMaterial3ExpressiveApi::class, ExperimentalMaterial3Api::class)
 @Composable
 fun DownloadSearchScreen(
@@ -45,6 +47,20 @@ fun DownloadSearchScreen(
     var hasInteracted by rememberSaveable { mutableStateOf(false) }
     var hasAutoFocused by rememberSaveable { mutableStateOf(false) }
 
+    val submit: () -> Unit = {
+        val error = when {
+            !hasApiKey -> R.string.snack_no_api
+            query.length < MIN_QUERY -> R.string.snack_query_too_short
+            else -> null
+        }
+        if (error == null) {
+            onSearch(query, type)
+            focusManager.clearFocus()
+        } else {
+            scope.launch { snackbarHostState.showSnackbar(resource.getString(error)) }
+        }
+    }
+
     // Open the keyboard on the first visit only, not every time the user comes back.
     LaunchedEffect(Unit) {
         if (hasAutoFocused) return@LaunchedEffect
@@ -64,22 +80,7 @@ fun DownloadSearchScreen(
         floatingActionButton = {
             ExtendedFloatingActionButton(
                 shape = MaterialTheme.shapes.small,
-                onClick = {
-                    scope.launch {
-                        if (!hasApiKey) {
-                            snackbarHostState.showSnackbar(
-                                message = resource.getString(R.string.snack_no_api)
-                            )
-                        } else if (query.length < 3) {
-                            snackbarHostState.showSnackbar(
-                                message = resource.getString(R.string.snack_query_too_short)
-                            )
-                        } else {
-                            onSearch(query, type)
-                            focusManager.clearFocus()
-                        }
-                    }
-                },
+                onClick = submit,
                 text = { Text(text = stringResource(R.string.search)) },
                 icon = {
                     Icon(
@@ -133,23 +134,12 @@ fun DownloadSearchScreen(
                         query = it
                         hasInteracted = true
                     },
-                    isError = hasInteracted && query.length < 3,
+                    isError = hasInteracted && query.length < MIN_QUERY,
                     singleLine = true,
                     label = { Text(text = stringResource(R.string.search)) },
                     keyboardOptions = KeyboardOptions(imeAction = ImeAction.Search),
                     keyboardActions = KeyboardActions(
-                        onSearch = {
-                            if (query.length >= 3) {
-                                onSearch(query, type)
-                                focusManager.clearFocus()
-                            } else {
-                                scope.launch {
-                                    snackbarHostState.showSnackbar(
-                                        message = resource.getString(R.string.snack_query_too_short)
-                                    )
-                                }
-                            }
-                        }
+                        onSearch = { submit() }
                     ),
                 )
 

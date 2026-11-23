@@ -15,11 +15,8 @@ import com.lossydragon.modplayer.ui.theme.AppTheme
 @Composable
 fun ProgressbarIndicator(
     modifier: Modifier = Modifier,
-    isLoading: Boolean = true,
     text: String? = null
 ) {
-    if (!isLoading) return
-
     Box(
         modifier = modifier,
         contentAlignment = Alignment.Center,
@@ -52,7 +49,6 @@ private fun ProgressbarIndicatorPreview() {
     AppTheme {
         ProgressbarIndicator(
             modifier = Modifier.fillMaxSize(),
-            isLoading = true,
             text = stringResource(R.string.loading)
         )
     }

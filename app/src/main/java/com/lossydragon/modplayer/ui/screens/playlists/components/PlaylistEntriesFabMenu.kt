@@ -25,28 +25,9 @@ internal fun PlaylistEntriesFabMenu(
     onPlayAll: () -> Unit,
     onShuffle: () -> Unit
 ) {
-    FloatingActionButtonMenu(
-        modifier = Modifier.offset(x = 16.dp, y = 16.dp),
+    PlaylistFabMenu(
         expanded = expanded,
-        button = {
-            FloatingActionButton(
-                onClick = onExpand,
-                shape = MaterialTheme.shapes.small,
-                content = {
-                    if (expanded) {
-                        Icon(
-                            imageVector = Icons.Default.PlaylistRemove,
-                            contentDescription = stringResource(R.string.desc_menu_collapse),
-                        )
-                    } else {
-                        Icon(
-                            imageVector = Icons.AutoMirrored.Filled.PlaylistPlay,
-                            contentDescription = stringResource(R.string.desc_menu_expand),
-                        )
-                    }
-                }
-            )
-        },
+        onExpand = onExpand,
         content = {
             FloatingActionButtonMenuItem(
                 onClick = onShuffle,

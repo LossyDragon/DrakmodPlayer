@@ -6,11 +6,11 @@ import androidx.compose.runtime.*
 import androidx.compose.ui.graphics.*
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalView
-import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.lossydragon.modplayer.db.AppPreferences
+import com.lossydragon.modplayer.ui.components.collectPref
+import com.lossydragon.modplayer.ui.components.rememberAppPreferences
 import com.materialkolor.PaletteStyle
 import com.materialkolor.rememberDynamicColorScheme
-import org.koin.compose.koinInject
 
 val seed = Color(AppPreferences.DEFAULT_THEME_COLOR)
 
@@ -23,20 +23,16 @@ fun AppTheme(
     darkTheme: Boolean = isSystemInDarkTheme(),
     content: @Composable () -> Unit
 ) {
-    val prefs = if (LocalView.current.isInEditMode) {
-        AppPreferences(LocalContext.current)
-    } else {
-        koinInject<AppPreferences>()
-    }
+    val prefs = rememberAppPreferences()
 
-    val styleName by prefs.getAppThemeStyleFlow()
-        .collectAsStateWithLifecycle(AppPreferences.DEFAULT_THEME_STYLE)
+    val styleName by prefs.collectPref(AppPreferences.DEFAULT_THEME_STYLE) {
+        getAppThemeStyleFlow()
+    }
     val style = remember(styleName) { paletteStyleOf(styleName) }
 
-    val amoled by prefs.getAppThemeAmoledFlow().collectAsStateWithLifecycle(false)
+    val amoled by prefs.collectPref(false) { getAppThemeAmoledFlow() }
 
-    val prefColor by prefs.getThemeColorFlow()
-        .collectAsStateWithLifecycle(AppPreferences.DEFAULT_THEME_COLOR)
+    val prefColor by prefs.collectPref(AppPreferences.DEFAULT_THEME_COLOR) { getThemeColorFlow() }
     val color = remember(prefColor) { Color(prefColor) }
 
     // AMOLED is the only pref that forces dark; otherwise follow the system.

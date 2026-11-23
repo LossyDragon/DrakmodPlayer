@@ -14,8 +14,9 @@ import androidx.compose.ui.tooling.preview.*
 import androidx.compose.ui.unit.*
 import com.lossydragon.modplayer.R
 import com.lossydragon.modplayer.core.FileLoggingTree
-import com.lossydragon.modplayer.db.AppPreferences
 import com.lossydragon.modplayer.ui.components.BackButton
+import com.lossydragon.modplayer.ui.components.ConfirmDialog
+import com.lossydragon.modplayer.ui.components.rememberAppPreferences
 import com.lossydragon.modplayer.ui.screens.preferences.section.PreferenceBrowser
 import com.lossydragon.modplayer.ui.screens.preferences.section.PreferenceInfo
 import com.lossydragon.modplayer.ui.screens.preferences.section.PreferenceInterface
@@ -40,11 +41,7 @@ internal fun PreferencesScreen(
 ) {
     val scope = rememberCoroutineScope()
     val resource = LocalResources.current
-    val prefs = if (LocalView.current.isInEditMode) {
-        AppPreferences(LocalContext.current)
-    } else {
-        koinInject<AppPreferences>()
-    }
+    val prefs = rememberAppPreferences()
     val fileLoggingTree = if (LocalView.current.isInEditMode) {
         FileLoggingTree(LocalContext.current)
     } else {
@@ -53,35 +50,19 @@ internal fun PreferencesScreen(
 
     var isShowingResetDialog by remember { mutableStateOf(false) }
     if (isShowingResetDialog) {
-        AlertDialog(
-            onDismissRequest = { isShowingResetDialog = false },
-            icon = {
-                Icon(
-                    imageVector = Icons.Default.RestartAlt,
-                    contentDescription = null
-                )
+        ConfirmDialog(
+            icon = Icons.Default.RestartAlt,
+            title = stringResource(R.string.dialog_title_pref_reset),
+            text = stringResource(R.string.dialog_message_pref_reset),
+            confirmLabel = stringResource(R.string.confirm),
+            onConfirm = {
+                scope.launch {
+                    val text = resource.getString(R.string.snack_pref_reset_ok)
+                    prefs.resetAll()
+                    snackbarHostState.showSnackbar(text)
+                }
             },
-            title = { Text(text = stringResource(R.string.dialog_title_pref_reset)) },
-            text = { Text(text = stringResource(R.string.dialog_message_pref_reset)) },
-            confirmButton = {
-                TextButton(
-                    onClick = {
-                        scope.launch {
-                            val text = resource.getString(R.string.snack_pref_reset_ok)
-                            prefs.resetAll()
-                            snackbarHostState.showSnackbar(text)
-                        }
-                        isShowingResetDialog = false
-                    },
-                    content = { Text(text = stringResource(R.string.confirm)) }
-                )
-            },
-            dismissButton = {
-                TextButton(
-                    onClick = { isShowingResetDialog = false },
-                    content = { Text(text = stringResource(R.string.cancel)) }
-                )
-            }
+            onDismiss = { isShowingResetDialog = false },
         )
     }
 
@@ -125,18 +106,19 @@ internal fun PreferencesScreen(
                         onXmpFormats = onXmpFormats,
                         onAbout = onAbout,
                         onExportLogs = {
-                            scope.launch(Dispatchers.IO) {
-                                val success = fileLoggingTree.exportToDownloads()
-                                val msg = resource.getString(
-                                    if (success) {
-                                        R.string.snack_export_logs_ok
-                                    } else {
-                                        R.string.snack_export_logs_fail
-                                    }
-                                )
-                                withContext(Dispatchers.Main) {
-                                    snackbarHostState.showSnackbar(msg)
+                            scope.launch {
+                                val success = withContext(Dispatchers.IO) {
+                                    fileLoggingTree.exportToDownloads()
                                 }
+                                snackbarHostState.showSnackbar(
+                                    resource.getString(
+                                        if (success) {
+                                            R.string.snack_export_logs_ok
+                                        } else {
+                                            R.string.snack_export_logs_fail
+                                        }
+                                    )
+                                )
                             }
                         }
                     )

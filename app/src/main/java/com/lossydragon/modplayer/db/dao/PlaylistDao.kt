@@ -16,6 +16,9 @@ abstract class PlaylistDao {
     @Query("SELECT * FROM playlist_entries WHERE playlistId = :id ORDER BY position")
     abstract suspend fun getEntries(id: Long): List<PlaylistEntryEntity>
 
+    @Query("SELECT * FROM playlist_entries ORDER BY playlistId, position")
+    abstract suspend fun getAllEntries(): List<PlaylistEntryEntity>
+
     @Query("SELECT uri FROM playlist_entries WHERE playlistId = :id")
     abstract suspend fun getEntryUris(id: Long): List<String>
 
@@ -24,9 +27,6 @@ abstract class PlaylistDao {
 
     @Insert
     abstract suspend fun createPlaylist(playlist: PlaylistEntity): Long
-
-    @Insert
-    abstract suspend fun addEntry(entry: PlaylistEntryEntity)
 
     @Insert
     abstract suspend fun addEntries(entries: List<PlaylistEntryEntity>)

@@ -37,7 +37,7 @@ abstract class AppDatabase : RoomDatabase() {
 
         /**
          * 7 → 8: `modules` gains a unique index on `filePath` and an index on `parentPath`.
-         * Older versions could accumulate duplicate rows per path (see [ModuleDao.upsert]),
+         * Older versions could accumulate duplicate rows per path (see [ModuleDao.upsertAll]),
          * so those are collapsed first or the unique index would fail to build.
          */
         val MIGRATION_7_8 = object : Migration(7, 8) {

@@ -29,6 +29,7 @@ room = "2.8.5" # https://mvnrepository.com/artifact/androidx.room/room-runtime
 sqlite = "2.7.1" # https://mvnrepository.com/artifact/androidx.sqlite/sqlite (keep in step with Room)
 stability = "0.15.0" # https://mvnrepository.com/artifact/com.github.skydoves.compose.stability.analyzer/com.github.skydoves.compose.stability.analyzer.gradle.plugin
 timber = "5.0.1" # https://mvnrepository.com/artifact/com.jakewharton.timber/timber
+xmlutil = "0.91.3" # https://mvnrepository.com/artifact/io.github.pdvrieze.xmlutil/serialization
 
 [libraries]
 colorpicker-compose = { module = "com.github.skydoves:colorpicker-compose", version.ref = "colorpickerCompose" }
@@ -54,10 +55,8 @@ koin-androidx-compose = { module = "io.insert-koin:koin-androidx-compose" }
 koin-bom = { module = "io.insert-koin:koin-bom", version.ref = "koin-bom" }
 kotlinx-immutable = { module = "org.jetbrains.kotlinx:kotlinx-collections-immutable", version.ref = "kotlinXImmutable" }
 kotlinx-serialization-json = { module = "org.jetbrains.kotlinx:kotlinx-serialization-json", version.ref = "kotlinxSerialization" }
-kotlinx-serialization-xml = { module = "org.jetbrains.kotlinx:kotlinx-serialization-core", version.ref = "kotlinxSerialization" }
+kotlinx-serialization-core = { module = "org.jetbrains.kotlinx:kotlinx-serialization-core", version.ref = "kotlinxSerialization" }
 ktor-client-android = { module = "io.ktor:ktor-client-android", version.ref = "ktor" }
-ktor-client-negotiation = { module = "io.ktor:ktor-client-content-negotiation", version.ref = "ktor" }
-ktor-serialization-xml = { module = "io.ktor:ktor-serialization-kotlinx-xml", version.ref = "ktor" }
 materialKolor = { module = "com.materialkolor:material-kolor", version.ref = "materialKolor" }
 media3-common = { module = "androidx.media3:media3-common", version.ref = "media3" }
 media3-session = { module = "androidx.media3:media3-session", version.ref = "media3" }
@@ -68,6 +67,7 @@ room-compiler = { module = "androidx.room:room-compiler", version.ref = "room" }
 room-runtime = { module = "androidx.room:room-runtime", version.ref = "room" }
 sqlite = { module = "androidx.sqlite:sqlite", version.ref = "sqlite" }
 timber = { module = "com.jakewharton.timber:timber", version.ref = "timber" }
+xmlutil-serialization = { module = "io.github.pdvrieze.xmlutil:serialization", version.ref = "xmlutil" }
 
 # Testing
 junit-jupiter-api = { module = "org.junit.jupiter:junit-jupiter-api", version.ref = "junit" }
@@ -88,7 +88,7 @@ compose = [
     "compose-runtime",
     "compose-settings-ui",
     "compose-settings-ui-expressive",
-    "compose-ui-tooling",
+    "compose-ui-tooling-preview",
     "compose-ui-ui",
 ]
 media3 = [
@@ -101,14 +101,13 @@ room = [
 ]
 serialization = [
     "kotlinx-immutable",
+    "kotlinx-serialization-core",
     "kotlinx-serialization-json",
     "datastore-preferences",
 ]
 ktor = [
-    "kotlinx-serialization-xml",
     "ktor-client-android",
-    "ktor-client-negotiation",
-    "ktor-serialization-xml",
+    "xmlutil-serialization",
 ]
 koin = [
     "koin-androidx-compose",

@@ -33,6 +33,7 @@ class FileLoggingTree(private val context: Context) : Timber.Tree() {
     // Only touched from the executor thread.
     private var writer: BufferedWriter? = null
     private var written = 0L
+    private val timeFormat = SimpleDateFormat("HH:mm:ss.SSS", Locale.getDefault())
 
     init {
         executor.scheduleWithFixedDelay(
@@ -55,12 +56,13 @@ class FileLoggingTree(private val context: Context) : Timber.Tree() {
             else -> "?"
         }
 
-        val entry = buildString {
-            append("${timestamp()} $level/${tag ?: "?"}: $message")
+        val now = System.currentTimeMillis()
+        val body = buildString {
+            append(" $level/${tag ?: "?"}: $message")
             if (t != null) append("\n${Log.getStackTraceString(t)}")
             appendLine()
         }
-        executor.execute { append(entry) }
+        executor.execute { append(timeFormat.format(Date(now)) + body) }
     }
 
     private fun append(entry: String) {
@@ -114,7 +116,7 @@ class FileLoggingTree(private val context: Context) : Timber.Tree() {
                 appendLine("---------- Logcat ----------")
                 appendLine(CrashHandler.recentLogcat())
             }
-            val fileName = "drakmod_log_${CrashHandler.timestamp}.txt"
+            val fileName = "${Constants.LOG_FILE_PREFIX}${CrashHandler.timestamp}.txt"
             context.writeToDownloads(fileName, content)
             true
         } catch (e: Exception) {
@@ -127,8 +129,5 @@ class FileLoggingTree(private val context: Context) : Timber.Tree() {
         private const val LOG_FILE_NAME = "drakmod_debug.log"
         private const val MAX_FILE_SIZE = 4 * 1024 * 1024L // 4MB
         private const val FLUSH_INTERVAL_S = 2L
-
-        private fun timestamp(): String =
-            SimpleDateFormat("HH:mm:ss.SSS", Locale.getDefault()).format(Date())
     }
 }

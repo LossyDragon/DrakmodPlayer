@@ -101,6 +101,8 @@ data class Module(
         get() = format.lowercase() !in Constants.UNSUPPORTED_EXTENSIONS
     val downloadUrl: String
         get() = url.trim()
+    val downloadFilename: String
+        get() = url.substringAfterLast('#')
     val artist: String
         get() = artistInfo.artist.firstOrNull()
             ?.alias

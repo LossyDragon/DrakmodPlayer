@@ -7,8 +7,11 @@ import com.lossydragon.modplayer.model.Module
 val Module.sizeKb: Int
     get() = bytes / 1024
 
+/** Parses HTML per line; remember the result when reading it in composition. */
 val Module.formattedComment: String
-    get() = comment.lineSequence().joinToString("\n") { it.fromHtml() }
+    get() = comment.htmlLines()
 
 val Module.formattedInstruments: String
-    get() = instruments.lineSequence().joinToString("\n") { it.fromHtml() }
+    get() = instruments.htmlLines()
+
+private fun String.htmlLines(): String = lineSequence().joinToString("\n") { it.fromHtml() }

@@ -76,9 +76,9 @@ private typealias TextCache = HashMap<String, TextLayoutResult>
 
 /** Lazily measured per index; recreated with the font size so no string keys are built per frame. */
 private class LayoutTable(size: Int) {
-    private val slots = arrayOfNulls<TextLayoutResult>(size)
+    val slots = arrayOfNulls<TextLayoutResult>(size)
 
-    fun get(index: Int, measure: () -> TextLayoutResult): TextLayoutResult =
+    inline fun get(index: Int, measure: () -> TextLayoutResult): TextLayoutResult =
         slots[index] ?: measure().also { slots[index] = it }
 }
 
@@ -100,7 +100,7 @@ fun PatternView(
         userOffset = Offset.Zero
     }
 
-    val renderState = remember(pattern.patternIndex, pattern.numRows, pattern.numChannels) {
+    val renderState = remember(pattern.numRows, pattern.numChannels) {
         buildRenderState(pattern)
     }
 

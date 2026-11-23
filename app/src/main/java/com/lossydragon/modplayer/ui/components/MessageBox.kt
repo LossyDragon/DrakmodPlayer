@@ -22,8 +22,18 @@ fun MessageBox(
     modifier: Modifier = Modifier,
     icon: ImageVector? = null,
     title: String? = null,
+    onBack: (() -> Unit)? = null,
     actions: (@Composable RowScope.() -> Unit)? = null
 ) {
+    val actionRow: (@Composable RowScope.() -> Unit)? = actions ?: onBack?.let { back ->
+        {
+            TextButton(
+                onClick = back,
+                content = { Text(text = stringResource(R.string.desc_back_button)) }
+            )
+        }
+    }
+
     Box(
         modifier = modifier.fillMaxSize(),
         contentAlignment = Alignment.Center,
@@ -65,7 +75,7 @@ fun MessageBox(
                         color = MaterialTheme.colorScheme.onSurfaceVariant,
                     )
 
-                    actions?.let { item ->
+                    actionRow?.let { item ->
                         Spacer(modifier = Modifier.height(24.dp))
                         Row(
                             modifier = Modifier.fillMaxWidth(),

@@ -97,7 +97,7 @@ class PlayerViewModel(
             state.update { it.copy(playAllSequences = subsongs) }
         }.launchIn(viewModelScope)
 
-        player.modVarsFlow.onEach { mv ->
+        engine.modVarsFlow.onEach { mv ->
             state.update {
                 it.copy(
                     modVars = mv,
@@ -107,7 +107,7 @@ class PlayerViewModel(
             }
         }.launchIn(viewModelScope)
 
-        player.currentSequenceFlow.onEach { seq ->
+        engine.currentSequenceFlow.onEach { seq ->
             state.update { it.copy(currentSequence = seq) }
         }.launchIn(viewModelScope)
 
@@ -127,7 +127,7 @@ class PlayerViewModel(
         val repeat = player.repeatMode
         state.update {
             it.copy(
-                queue = queue.toImmutableList(),
+                queue = queue,
                 currentModule = queue.getOrNull(index),
                 currentQueueIndex = index.coerceAtLeast(0),
                 status = status,
@@ -205,8 +205,6 @@ class PlayerViewModel(
     }
 
     fun getPatternData(patternIndex: Int) = engine.getPatternData(patternIndex)
-
-    suspend fun getLastDirectoryUri(): String? = prefs.getLastDirectoryUri()
 
     /** Only the pref changes here; the engine switches backends before its next load. */
     fun selectBackend(backend: RenderingBackend) {

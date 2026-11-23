@@ -7,31 +7,24 @@ import androidx.room.Query
 import com.lossydragon.modplayer.db.entity.ModuleEntity
 import kotlinx.coroutines.flow.Flow
 
+private const val CHILDREN_SQL =
+    "SELECT * FROM modules WHERE parentPath = :parentPath ORDER BY isDirectory DESC, filename ASC"
+
 @Dao
 interface ModuleDao {
 
     /**
-     * Insert-or-replace keyed on the unique `filePath` index. (`@Upsert` would key on the
-     * auto-generated `id`, which is always 0 for a freshly scanned entity, and so always
-     * inserts a duplicate.) REPLACE assigns a new `id`; nothing references it.
+     * Insert-or-replace keyed on the unique `filePath` index, in one transaction. (`@Upsert`
+     * would key on the auto-generated `id`, which is always 0 for a freshly scanned entity,
+     * and so always inserts a duplicate.) REPLACE assigns a new `id`; nothing references it.
      */
-    @Insert(onConflict = OnConflictStrategy.REPLACE)
-    suspend fun upsert(item: ModuleEntity)
-
-    /** Batch form of [upsert]; Room runs the whole list in one transaction. */
     @Insert(onConflict = OnConflictStrategy.REPLACE)
     suspend fun upsertAll(items: List<ModuleEntity>)
 
-    @Query(
-        "SELECT * FROM modules WHERE parentPath = :parentPath " +
-            "ORDER BY isDirectory DESC, filename ASC"
-    )
+    @Query(CHILDREN_SQL)
     fun getChildren(parentPath: String): Flow<List<ModuleEntity>>
 
-    @Query(
-        "SELECT * FROM modules WHERE parentPath = :parentPath " +
-            "ORDER BY isDirectory DESC, filename ASC"
-    )
+    @Query(CHILDREN_SQL)
     suspend fun getChildrenOnce(parentPath: String): List<ModuleEntity>
 
     /**
@@ -55,21 +48,26 @@ interface ModuleDao {
     @Query("SELECT COUNT(*) FROM modules")
     suspend fun count(): Int
 
+    @Query("SELECT EXISTS(SELECT 1 FROM modules WHERE filePath = :path)")
+    suspend fun exists(path: String): Boolean
+
     @Query("SELECT filePath FROM modules")
     suspend fun getAllFilePaths(): List<String>
 
     @Query("SELECT filePath FROM modules WHERE isDirectory = 1 OR isValidModule = 1")
     suspend fun getConfirmedPaths(): List<String>
 
+    /** Callers chunk [paths]; one statement binds one variable per path. */
     @Query("DELETE FROM modules WHERE filePath IN (:paths)")
     suspend fun deleteByFilePaths(paths: List<String>)
 
     @Query("SELECT * FROM modules WHERE filePath IN (:paths)")
     suspend fun getByFilePaths(paths: List<String>): List<ModuleEntity>
 
+    /** Valid modules whose title or filename contains [query]. */
     @Query(
-        "SELECT * FROM modules WHERE moduleName LIKE " +
-            "'%' || :query || '%' OR fileName LIKE '%' || :query || '%'"
+        "SELECT * FROM modules WHERE isValidModule = 1 AND isDirectory = 0 AND " +
+            "(moduleName LIKE '%' || :query || '%' OR filename LIKE '%' || :query || '%')"
     )
     suspend fun searchBy(query: String): List<ModuleEntity>
 }

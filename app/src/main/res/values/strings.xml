@@ -14,6 +14,7 @@
     <string name="backend_libopenmpt">libopenmpt</string>
     <string name="backend_libxmp">libxmp</string>
     <string name="cancel">Cancel</string>
+    <string name="channel_muted">%1$s Muted</string>
     <string name="chip_audio_info">Audio Info (Oboe)</string>
     <string name="chip_mod_info">Mod Info</string>
     <string name="chip_mod_instruments">Mod Instruments</string>
@@ -66,7 +67,7 @@
     <string name="desc_stop">Swipe to stop playing</string>
     <string name="desc_unmute_channel">Unmute channel %d</string>
     <string name="desc_unsolo">Unsolo all channels</string>
-    <string name="desk_sort_button">Sort items button</string>
+    <string name="desc_sort_button">Sort items button</string>
     <string name="dialog_message_clear_history">Clear your module search history?</string>
     <string name="dialog_message_delete_module">Delete %s?</string>
     <string name="dialog_message_delete_playlist">Are you sure you want to delete \'%s\'?\nThis cannot be undone!</string>
@@ -90,7 +91,9 @@
     <string name="download">Download</string>
     <string name="downloading">Downloading…</string>
     <string name="eight_bit">8-bit</string>
-    <string name="error_playlist_no_name">No name given for playlist.</string>
+    <string name="error_audio_open">Could not open the audio output</string>
+    <string name="error_audio_start">Could not start the audio output</string>
+    <string name="error_backend_start">Could not start %1$s</string>
     <string name="fab_export_playlists">Export Playlists</string>
     <string name="fab_import_playlists">Import Playlists</string>
     <string name="fab_new_playlist">New Playlist</string>
@@ -104,11 +107,6 @@
     <string name="info_pos">Pos</string>
     <string name="info_row">Row</string>
     <string name="info_spd">Spd</string>
-    <string name="interp_linear">Linear</string>
-    <string name="interp_nearest">Nearest</string>
-    <string name="interp_openmpt_amiga_a1200">Amiga A1200</string>
-    <string name="interp_openmpt_amiga_a500">Amiga A500</string>
-    <string name="interp_spline">Spline</string>
     <string name="loading">Loading…</string>
     <string name="message_no_artists">No artists found.</string>
     <string name="message_no_history">No items stored in history</string>

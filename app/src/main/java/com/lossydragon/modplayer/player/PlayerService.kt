@@ -36,7 +36,7 @@ class PlayerService : MediaLibraryService() {
     private val player: ModPlayer by inject()
     private val prefs: AppPreferences by inject()
     private val playlistDao: PlaylistDao by inject()
-    private val metadataDao: ModuleDao by inject()
+    private val modulesDao: ModuleDao by inject()
 
     private lateinit var mediaLibrarySession: MediaLibrarySession
 
@@ -53,7 +53,7 @@ class PlayerService : MediaLibraryService() {
         )
 
         mediaLibrarySession = MediaLibrarySession
-            .Builder(this, player, AutoBrowseCallback(this, prefs, playlistDao, metadataDao, scope))
+            .Builder(this, player, AutoBrowseCallback(this, prefs, playlistDao, modulesDao, scope))
             .setId(getString(R.string.app_name) + "_session")
             .setSessionActivity(sessionActivity)
             .build()
@@ -77,7 +77,6 @@ class PlayerService : MediaLibraryService() {
 
     override fun onDestroy() {
         mediaLibrarySession.release()
-        player.abandonAudioFocus()
         // [player] is a process singleton reused by the next service instance, so only the
         // native engine is torn down here — see [ModPlayer.releaseEngine].
         player.releaseEngine()

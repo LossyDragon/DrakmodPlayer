@@ -7,6 +7,7 @@ object Constants {
     /** Subfolder of Downloads/ for crash reports and exported logs. */
     const val DOWNLOADS_FOLDER: String = "Drakmod"
     const val CRASH_FILE_PREFIX: String = "drakmod_crash_"
+    const val LOG_FILE_PREFIX: String = "drakmod_log_"
     const val HTTP_BASE_URL: String = "https://api.modarchive.org"
     const val TMA_BASE_URL: String = "https://modarchive.org/"
 

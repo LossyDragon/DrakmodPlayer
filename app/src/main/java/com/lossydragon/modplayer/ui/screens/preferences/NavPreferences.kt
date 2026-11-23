@@ -24,7 +24,7 @@ private sealed interface NavKeyPreferences : NavKey {
     data object About : NavKeyPreferences
 
     @Serializable
-    data class Formats(val format: String) : NavKeyPreferences
+    data class Formats(val backendId: Int) : NavKeyPreferences
 }
 
 @Composable
@@ -48,8 +48,12 @@ fun NavPreferences(
                     modifier = modifier,
                     snackbarHostState = snackbarHostState,
                     onBack = onBack,
-                    onMptFormats = { backStack.add(NavKeyPreferences.Formats("mpt")) },
-                    onXmpFormats = { backStack.add(NavKeyPreferences.Formats("xmp")) },
+                    onMptFormats = {
+                        backStack.add(NavKeyPreferences.Formats(RenderingBackend.OPENMPT.id))
+                    },
+                    onXmpFormats = {
+                        backStack.add(NavKeyPreferences.Formats(RenderingBackend.LIBXMP.id))
+                    },
                     onAbout = { backStack.add(NavKeyPreferences.About) }
                 )
             }
@@ -61,17 +65,15 @@ fun NavPreferences(
             }
             entry<NavKeyPreferences.Formats> {
                 val context = LocalContext.current
-                val formats = remember(it.format) {
-                    val backend = when (it.format) {
-                        "mpt" -> RenderingBackend.OPENMPT
-                        else -> RenderingBackend.LIBXMP
-                    }
-                    Player.getFormats(backend).sorted()
+                val formats = remember(it.backendId) {
+                    Player.getFormats(RenderingBackend.fromId(it.backendId))
+                        .sorted()
+                        .toPersistentList()
                 }
                 PreferencesFormats(
                     modifier = modifier,
                     onBack = backStack::removeLastOrNull,
-                    formatList = formats.toPersistentList(),
+                    formatList = formats,
                     onClick = context::shareLink
                 )
             }

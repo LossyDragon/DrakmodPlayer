@@ -31,35 +31,11 @@ internal fun DurationsSheet(
 ) {
     val listState = rememberLazyListState()
 
-    ModalBottomSheet(
-        onDismissRequest = onDismiss,
+    PlayerSheet(
+        title = stringResource(R.string.title_subsong_sheet, seqData.size),
         sheetState = sheetState,
-        sheetGesturesEnabled = false,
-        dragHandle = null,
-        shape = MaterialTheme.shapes.small,
+        onDismiss = onDismiss,
         content = {
-            Box(
-                modifier = Modifier.fillMaxWidth(),
-                contentAlignment = Alignment.Center,
-                content = {
-                    Text(
-                        text = stringResource(R.string.title_subsong_sheet, seqData.size),
-                        style = MaterialTheme.typography.titleMedium,
-                    )
-                    IconButton(
-                        modifier = Modifier
-                            .padding(end = 6.dp)
-                            .align(Alignment.CenterEnd),
-                        onClick = onDismiss,
-                        content = {
-                            Icon(
-                                imageVector = Icons.Default.Close,
-                                contentDescription = stringResource(R.string.close)
-                            )
-                        }
-                    )
-                }
-            )
             LazyColumn(
                 state = listState,
                 modifier = Modifier.fillMaxWidth(),

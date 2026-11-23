@@ -62,12 +62,7 @@ class MainActivity : ComponentActivity() {
 
     private var controllerFuture: ListenableFuture<MediaController>? = null
 
-    private val notificationPermission = registerForActivityResult(
-        contract = ActivityResultContracts.RequestPermission(),
-        callback = { /* No-Op */ }
-    )
-
-    private val storagePermission = registerForActivityResult(
+    private val permissionRequest = registerForActivityResult(
         contract = ActivityResultContracts.RequestPermission(),
         callback = { /* No-Op */ }
     )
@@ -139,10 +134,10 @@ class MainActivity : ComponentActivity() {
 
         requestNotificationPermission {
             @SuppressLint("InlinedApi")
-            notificationPermission.launch(Manifest.permission.POST_NOTIFICATIONS)
+            permissionRequest.launch(Manifest.permission.POST_NOTIFICATIONS)
         }
         requestWriteStoragePermission {
-            storagePermission.launch(Manifest.permission.WRITE_EXTERNAL_STORAGE)
+            permissionRequest.launch(Manifest.permission.WRITE_EXTERNAL_STORAGE)
         }
 
         handleViewIntent(intent)
@@ -150,6 +145,11 @@ class MainActivity : ComponentActivity() {
         setContent {
             AppTheme {
                 val backStack = rememberNavBackStack(NavKeyRoot.Main)
+                fun openPlayer() {
+                    if (backStack.lastOrNull() !is NavKeyRoot.Player) {
+                        backStack.add(NavKeyRoot.Player)
+                    }
+                }
 
                 val playerViewModel = activityViewModel<PlayerViewModel>()
 
@@ -185,9 +185,7 @@ class MainActivity : ComponentActivity() {
                     pendingPlayerModule.collect { module ->
                         if (module != null) {
                             playerViewModel.play(module)
-                            if (backStack.lastOrNull() !is NavKeyRoot.Player) {
-                                backStack.add(NavKeyRoot.Player)
-                            }
+                            openPlayer()
                             pendingPlayerModule.value = null
                         }
                     }
@@ -203,11 +201,7 @@ class MainActivity : ComponentActivity() {
                     entryProvider = entryProvider {
                         entry<NavKeyRoot.Main> {
                             MainNavigation(
-                                onNavigateToPlayer = {
-                                    if (backStack.lastOrNull() !is NavKeyRoot.Player) {
-                                        backStack.add(NavKeyRoot.Player)
-                                    }
-                                },
+                                onNavigateToPlayer = ::openPlayer,
                                 onBack = ::finish,
                             )
                         }

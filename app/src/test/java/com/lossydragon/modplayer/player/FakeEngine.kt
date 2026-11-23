@@ -25,7 +25,9 @@ class FakeEngine : Engine {
     @Volatile
     override var playAllSequences = false
 
-    private val executor = Executors.newSingleThreadExecutor()
+    private val executor = Executors.newSingleThreadExecutor {
+        Thread(it, "FakeEngine").apply { isDaemon = true }
+    }
 
     /** Every engine command, in order, e.g. `load:content://a`, `play`, `seek:5000`. */
     val calls: MutableList<String> = Collections.synchronizedList(mutableListOf())
@@ -73,6 +75,11 @@ class FakeEngine : Engine {
         executor.execute(block)
     }
 
+    /** Blocks until everything posted so far has run. */
+    fun drain() {
+        executor.submit {}.get()
+    }
+
     override fun load(file: ModuleEntity): LoadResult {
         calls += "load:${file.filePath}"
         if (loadDelayMs > 0) Thread.sleep(loadDelayMs)
@@ -106,20 +113,14 @@ class FakeEngine : Engine {
         positionMs.value = posMs.toLong()
     }
 
-    override fun stop() {
-        calls += "stop"
-        loaded = false
-        playingFlow.value = false
-    }
+    override fun stop() = unload("stop")
 
-    override fun recoverFromDisconnect() {
-        calls += "recover"
-        loaded = false
-        playingFlow.value = false
-    }
+    override fun recoverFromDisconnect() = unload("recover")
 
-    override fun release() {
-        calls += "release"
+    override fun release() = unload("release")
+
+    private fun unload(call: String) {
+        calls += call
         loaded = false
         playingFlow.value = false
     }

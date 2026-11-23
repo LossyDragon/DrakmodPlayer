@@ -8,15 +8,14 @@ import androidx.compose.ui.platform.LocalView
 import androidx.compose.ui.res.*
 import androidx.compose.ui.tooling.preview.*
 import androidx.compose.ui.unit.*
-import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.alorma.compose.settings.ui.expressive.SettingsMenuLink
 import com.alorma.compose.settings.ui.expressive.SettingsSwitch
 import com.lossydragon.modplayer.R
-import com.lossydragon.modplayer.db.AppPreferences
+import com.lossydragon.modplayer.ui.components.collectPref
+import com.lossydragon.modplayer.ui.components.rememberAppPreferences
 import com.lossydragon.modplayer.ui.screens.preferences.components.PreferenceSection
 import com.lossydragon.modplayer.ui.theme.AppTheme
 import kotlinx.coroutines.launch
-import org.koin.compose.koinInject
 
 @OptIn(ExperimentalMaterial3ExpressiveApi::class)
 @Composable
@@ -28,12 +27,8 @@ fun PreferenceInfo(
     onExportLogs: () -> Unit
 ) {
     val scope = rememberCoroutineScope()
-    val prefs = if (LocalView.current.isInEditMode) {
-        AppPreferences(LocalContext.current)
-    } else {
-        koinInject<AppPreferences>()
-    }
-    val fileLogging by prefs.getFileLoggingFlow().collectAsStateWithLifecycle(false)
+    val prefs = rememberAppPreferences()
+    val fileLogging by prefs.collectPref(false) { getFileLoggingFlow() }
 
     PreferenceSection(
         title = {

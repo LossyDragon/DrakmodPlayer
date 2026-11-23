@@ -62,9 +62,8 @@ fun FileBrowserScreen(
     }.collectAsStateWithLifecycle(playerViewModel.state.value.repeatMode)
     val playlists by browserViewModel.playlists.collectAsStateWithLifecycle()
 
-    // Pending "add to playlist" target: a single file, or null meaning the current folder.
-    var pendingAdd by remember { mutableStateOf<ModuleEntity?>(null) }
-    var pendingFolderAdd by remember { mutableStateOf<FileItem?>(null) }
+    // Pending "add to playlist" target: a file ([ModuleEntity]) or a folder ([FileItem]).
+    var pendingAdd by remember { mutableStateOf<Any?>(null) }
 
     // setRootFolder persists the grant itself.
     val folderPicker = rememberLauncherForActivityResult(
@@ -102,24 +101,16 @@ fun FileBrowserScreen(
         }
     }
 
-    val dialogTarget = pendingAdd ?: if (pendingFolderAdd != null) pendingFolderAdd else null
-    if (dialogTarget != null) {
+    pendingAdd?.let { target ->
         PlaylistPickerDialog(
             playlists = playlists,
-            onDismiss = {
-                pendingAdd = null
-                pendingFolderAdd = null
-            },
+            onDismiss = { pendingAdd = null },
             onPick = { playlist ->
-                val file = pendingAdd
-                val folder = pendingFolderAdd
-                if (file != null) {
-                    browserViewModel.addFileToPlaylist(playlist, file)
-                } else if (folder != null) {
-                    browserViewModel.addFolderToPlaylist(playlist, folder)
+                when (target) {
+                    is ModuleEntity -> browserViewModel.addFileToPlaylist(playlist, target)
+                    is FileItem -> browserViewModel.addFolderToPlaylist(playlist, target)
                 }
                 pendingAdd = null
-                pendingFolderAdd = null
             },
         )
     }
@@ -166,7 +157,7 @@ fun FileBrowserScreen(
         },
         onDir = browserViewModel::navigateInto,
         onAddToPlaylist = { pendingAdd = it },
-        onAddFolderToPlaylist = { pendingFolderAdd = it },
+        onAddFolderToPlaylist = { pendingAdd = it },
     )
 }
 
@@ -216,7 +207,6 @@ private fun FileBrowserScreenContent(
             sortOrder = browserState.sortOrder,
             onSortOrder = onSortOrder,
             onFolderPick = onFolderPick,
-            onFilter = onFilter,
         )
     }
 
@@ -272,12 +262,10 @@ private fun FileBrowserScreenContent(
                     }
                 )
                 if (browserState.breadcrumbs.isNotEmpty()) {
-                    Surface(color = MaterialTheme.colorScheme.surface) {
-                        BreadCrumbs(
-                            breadcrumbs = browserState.breadcrumbs,
-                            onCrumbClick = onBreadcrumb,
-                        )
-                    }
+                    BreadCrumbs(
+                        breadcrumbs = browserState.breadcrumbs,
+                        onCrumbClick = onBreadcrumb,
+                    )
                     HorizontalDivider()
                 }
             }
@@ -396,7 +384,8 @@ private fun FileBrowserScreenContent(
                     )
 
                     else -> ModuleList(
-                        state = browserState,
+                        directories = browserState.directories,
+                        files = browserState.files,
                         padding = PaddingValues(
                             bottom = padding.calculateBottomPadding(),
                             start = padding.calculateStartPadding(layoutDirection),
@@ -526,7 +515,6 @@ private class BrowserPreviewParameter : PreviewParameterProvider<BrowserPreviewS
     )
 
     private val baseBrowserState = BrowserUiState(
-        currentPath = "primary:Xmp/Modules",
         hasStorageAccess = true,
         isLoading = false,
         isShuffle = false,

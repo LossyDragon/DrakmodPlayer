@@ -9,6 +9,7 @@ import androidx.media3.common.MediaItem
 import androidx.media3.common.MediaMetadata
 import androidx.media3.common.util.UnstableApi
 import androidx.media3.session.LibraryResult
+import androidx.media3.session.MediaConstants
 import androidx.media3.session.MediaLibraryService.LibraryParams
 import androidx.media3.session.MediaLibraryService.MediaLibrarySession
 import androidx.media3.session.MediaSession
@@ -27,7 +28,6 @@ import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.launch
-import kotlinx.serialization.json.Json
 import timber.log.Timber
 
 /**
@@ -44,9 +44,13 @@ class AutoBrowseCallback(
 ) : MediaLibrarySession.Callback {
 
     private val contentStyleExtras = Bundle().apply {
-        putInt("android.media.browse.CONTENT_STYLE_BROWSABLE_HINT", 2)
-        putInt("android.media.browse.CONTENT_STYLE_PLAYABLE_HINT", 2)
+        val grid = MediaConstants.EXTRAS_VALUE_CONTENT_STYLE_GRID_ITEM
+        putInt(MediaConstants.EXTRAS_KEY_CONTENT_STYLE_BROWSABLE, grid)
+        putInt(MediaConstants.EXTRAS_KEY_CONTENT_STYLE_PLAYABLE, grid)
     }
+
+    private val fileArtwork = context.drawableUri(R.drawable.aa_file)
+    private val folderArtwork = context.drawableUri(R.drawable.aa_folder)
 
     /** Results of the most recent searches, served page by page from [onGetSearchResult]. */
     private val searchResultsCache = object : LinkedHashMap<String, List<MediaItem>>() {
@@ -92,7 +96,7 @@ class AutoBrowseCallback(
                 AutoMediaId.isDir(parentId) -> getDirectoryChildren(parentId)
                 else -> ImmutableList.of()
             }
-            LibraryResult.ofItemList(items, params)
+            LibraryResult.ofItemList(items.page(page, pageSize), params)
         }
     }
 
@@ -187,9 +191,7 @@ class AutoBrowseCallback(
                         module = entry.toModuleEntity(),
                     )
                 }
-                val fileItems = modulesDao.searchBy(query)
-                    .filter { it.isValidModule }
-                    .map { fileItem(it) }
+                val fileItems = modulesDao.searchBy(query).map { fileItem(it) }
 
                 val seen = mutableSetOf<String>()
                 val items = (playlistItems + fileItems).filter { seen.add(it.mediaId) }
@@ -223,9 +225,8 @@ class AutoBrowseCallback(
     ): ListenableFuture<LibraryResult<ImmutableList<MediaItem>>> {
         Timber.d("onGetSearchResult: query='$query' page=$page pageSize=$pageSize")
         val results = synchronized(searchResultsCache) { searchResultsCache[query] } ?: emptyList()
-        val paged = results.drop(page * pageSize).take(pageSize)
         return Futures.immediateFuture(
-            LibraryResult.ofItemList(ImmutableList.copyOf(paged), params)
+            LibraryResult.ofItemList(results.page(page, pageSize), params)
         )
     }
 
@@ -236,9 +237,10 @@ class AutoBrowseCallback(
     ): ListenableFuture<MediaSession.MediaItemsWithStartPosition> {
         Timber.d("onPlaybackResumption: isForPlayback=$isForPlayback")
         return ioFuture {
-            val state = prefs.getQueueState()
+            val saved = prefs.getQueueState()
                 ?: throw UnsupportedOperationException("No saved queue")
-            val files = Json.decodeFromString<List<ModuleEntity>>(state.json)
+            val state = saved.playback
+            val files = saved.decodeModules()
             if (files.isEmpty()) throw UnsupportedOperationException("Queue is empty")
 
             val mediaItems = files.map { file ->
@@ -246,7 +248,7 @@ class AutoBrowseCallback(
                     id = AutoMediaId.file(file.filePath),
                     title = file.filename,
                     uri = file.uri,
-                    artworkUri = drawableUri(R.drawable.aa_file),
+                    artworkUri = fileArtwork,
                     module = file,
                 )
             }
@@ -260,20 +262,20 @@ class AutoBrowseCallback(
             title = context.getString(R.string.auto_home),
             type = MediaMetadata.MEDIA_TYPE_FOLDER_MIXED,
             extras = contentStyleExtras,
-            artworkUri = drawableUri(R.drawable.aa_home)
+            artworkUri = context.drawableUri(R.drawable.aa_home)
         ),
         buildBrowsableItem(
             id = AutoMediaId.PLAYLISTS,
             title = context.getString(R.string.auto_playlists),
             type = MediaMetadata.MEDIA_TYPE_FOLDER_PLAYLISTS,
             extras = contentStyleExtras,
-            artworkUri = drawableUri(R.drawable.aa_playlists)
+            artworkUri = context.drawableUri(R.drawable.aa_playlists)
         ),
         buildBrowsableItem(
             id = AutoMediaId.FILE_BROWSER,
             title = context.getString(R.string.auto_file_browser),
             type = MediaMetadata.MEDIA_TYPE_FOLDER_MIXED,
-            artworkUri = drawableUri(R.drawable.aa_browser)
+            artworkUri = context.drawableUri(R.drawable.aa_browser)
         ),
     )
 
@@ -295,7 +297,7 @@ class AutoBrowseCallback(
                     id = AutoMediaId.playlist(playlist.id),
                     title = playlist.name,
                     type = MediaMetadata.MEDIA_TYPE_PLAYLIST,
-                    artworkUri = drawableUri(R.drawable.aa_playlists),
+                    artworkUri = context.drawableUri(R.drawable.aa_playlists),
                 )
             }
         )
@@ -313,7 +315,7 @@ class AutoBrowseCallback(
                 id = AutoMediaId.playlistEntry(playlistId, entry.uri),
                 title = entry.name,
                 uri = entry.uri.toUri(),
-                artworkUri = drawableUri(R.drawable.aa_file),
+                artworkUri = fileArtwork,
                 module = entry.toModuleEntity(),
             )
         }
@@ -322,12 +324,12 @@ class AutoBrowseCallback(
         buildPlayableItem(
             id = AutoMediaId.SHUFFLE_ALL,
             title = context.getString(R.string.auto_shuffle_all),
-            artworkUri = drawableUri(R.drawable.aa_shuffle)
+            artworkUri = context.drawableUri(R.drawable.aa_shuffle)
         ),
         buildPlayableItem(
             id = AutoMediaId.PLAY_ALL,
             title = context.getString(R.string.auto_play_all),
-            artworkUri = drawableUri(R.drawable.aa_play_all)
+            artworkUri = context.drawableUri(R.drawable.aa_play_all)
         )
     )
 
@@ -351,16 +353,10 @@ class AutoBrowseCallback(
                         id = AutoMediaId.dir(entity.filePath),
                         title = entity.filename,
                         type = MediaMetadata.MEDIA_TYPE_FOLDER_MIXED,
-                        artworkUri = drawableUri(R.drawable.aa_folder)
+                        artworkUri = folderArtwork
                     )
 
-                    entity.isValidModule -> buildPlayableItem(
-                        id = AutoMediaId.file(entity.filePath),
-                        title = entity.name,
-                        uri = entity.uri,
-                        artworkUri = drawableUri(R.drawable.aa_file),
-                        module = entity,
-                    )
+                    entity.isValidModule -> fileItem(entity, fileArtwork)
 
                     else -> null
                 }
@@ -393,8 +389,13 @@ class AutoBrowseCallback(
         return future
     }
 
-    private fun drawableUri(resId: Int): Uri =
-        "android.resource://${context.packageName}/$resId".toUri()
+    /** [pageSize] is Int.MAX_VALUE for browsers that do not page. */
+    private fun List<MediaItem>.page(page: Int, pageSize: Int): ImmutableList<MediaItem> {
+        val from = page.toLong() * pageSize
+        if (from >= size) return ImmutableList.of()
+        val to = minOf(size.toLong(), from + pageSize)
+        return ImmutableList.copyOf(subList(from.toInt(), to.toInt()))
+    }
 
     private fun buildBrowsableItem(
         id: String,
@@ -416,12 +417,14 @@ class AutoBrowseCallback(
         )
         .build()
 
-    private fun fileItem(entity: ModuleEntity): MediaItem = buildPlayableItem(
-        id = AutoMediaId.file(entity.filePath),
-        title = entity.name,
-        uri = entity.uri,
-        module = entity,
-    )
+    private fun fileItem(entity: ModuleEntity, artworkUri: Uri? = null): MediaItem =
+        buildPlayableItem(
+            id = AutoMediaId.file(entity.filePath),
+            title = entity.name,
+            uri = entity.uri,
+            artworkUri = artworkUri,
+            module = entity,
+        )
 
     private fun buildPlayableItem(
         id: String,

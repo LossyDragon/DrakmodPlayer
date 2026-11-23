@@ -7,6 +7,8 @@ import androidx.compose.animation.*
 import androidx.compose.animation.core.*
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.*
+import androidx.compose.material.icons.*
+import androidx.compose.material.icons.filled.*
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.*
@@ -28,9 +30,9 @@ import com.lossydragon.modplayer.db.entity.PlaylistEntity
 import com.lossydragon.modplayer.player.PlayerViewModel
 import com.lossydragon.modplayer.ui.activityViewModel
 import com.lossydragon.modplayer.ui.components.BackButton
+import com.lossydragon.modplayer.ui.components.ConfirmDialog
 import com.lossydragon.modplayer.ui.components.MessageBox
 import com.lossydragon.modplayer.ui.components.ProgressbarIndicator
-import com.lossydragon.modplayer.ui.screens.playlists.components.DeletePlaylistDialog
 import com.lossydragon.modplayer.ui.screens.playlists.components.NewPlaylistDialog
 import com.lossydragon.modplayer.ui.screens.playlists.components.PlaylistEntriesFabMenu
 import com.lossydragon.modplayer.ui.screens.playlists.components.PlaylistEntryItem
@@ -45,14 +47,13 @@ import kotlinx.serialization.Serializable
 import sh.calvin.reorderable.ReorderableItem
 import sh.calvin.reorderable.rememberReorderableLazyListState
 
+private const val EXPORT_FILE_NAME = "dragon_player_playlists.json"
+
 private sealed interface NavKeyPlaylists : NavKey {
     @Serializable data object List : NavKeyPlaylists
 
-    @Serializable data class Entries(
-        val playlistId: Long,
-        val playlistName: String,
-        val playlistComment: String
-    ) : NavKeyPlaylists
+    @Serializable data class Entries(val playlistId: Long, val playlistName: String) :
+        NavKeyPlaylists
 }
 
 @Composable
@@ -63,6 +64,7 @@ fun NavPlaylists(
     onNavigateToPlayer: () -> Unit
 ) {
     val context = LocalContext.current
+    val resource = LocalResources.current
     val playerViewModel = activityViewModel<PlayerViewModel>()
     val playlistsViewModel = activityViewModel<PlaylistsViewModel>()
 
@@ -75,6 +77,24 @@ fun NavPlaylists(
             when (event) {
                 is PlaylistsEvent.Error -> snackbarHostState.showSnackbar(
                     event.message.asString(context)
+                )
+
+                is PlaylistsEvent.Imported -> snackbarHostState.showSnackbar(
+                    message = if (event.skipped > 0) {
+                        resource.getString(
+                            R.string.snack_import_ok_skipped,
+                            event.playlists,
+                            event.entries,
+                            event.skipped
+                        )
+                    } else {
+                        resource.getString(R.string.snack_import_ok, event.playlists, event.entries)
+                    },
+                    actionLabel = resource.getString(R.string.close)
+                )
+
+                PlaylistsEvent.Exported -> snackbarHostState.showSnackbar(
+                    resource.getString(R.string.snack_export_ok)
                 )
             }
         }
@@ -95,20 +115,12 @@ fun NavPlaylists(
                     snackbarHostState = snackbarHostState,
                     onBack = onBack,
                     onSelectPlaylist = { playlist ->
-                        val entry = NavKeyPlaylists.Entries(
-                            playlistId = playlist.id,
-                            playlistName = playlist.name,
-                            playlistComment = playlist.comment,
-                        )
-                        playlistsViewModel.selectPlaylist(playlist)
-                        backStack.add(entry)
+                        backStack.add(NavKeyPlaylists.Entries(playlist.id, playlist.name))
                     },
                     onCreatePlaylist = playlistsViewModel::createPlaylist,
                     onDeletePlaylist = playlistsViewModel::deletePlaylist,
                     onExport = playlistsViewModel::exportPlaylists,
                     onImport = playlistsViewModel::importPlaylists,
-                    onDismissImport = playlistsViewModel::dismissImportResult,
-                    onDismissExport = playlistsViewModel::dismissExportSuccess,
                     onRenamePlaylist = { playlist, name, comment ->
                         playlistsViewModel.renamePlaylist(playlist, name, comment)
                     },
@@ -116,6 +128,10 @@ fun NavPlaylists(
             }
 
             entry<NavKeyPlaylists.Entries> { key ->
+                // Also reloads on re-entry, so adds made from the browser tab show up.
+                LaunchedEffect(key.playlistId) {
+                    playlistsViewModel.selectPlaylist(key.playlistId)
+                }
                 PlaylistEntriesScreen(
                     modifier = modifier,
                     playlistName = key.playlistName,
@@ -167,8 +183,6 @@ private fun PlaylistListScreen(
     onDeletePlaylist: (PlaylistEntity) -> Unit,
     onExport: (Uri) -> Unit,
     onImport: (Uri) -> Unit,
-    onDismissImport: () -> Unit,
-    onDismissExport: () -> Unit,
     onRenamePlaylist: (PlaylistEntity, String, String) -> Unit
 ) {
     val scope = rememberCoroutineScope()
@@ -180,57 +194,25 @@ private fun PlaylistListScreen(
         scope.launch { snackbarHostState.showSnackbar(message = it) }
     }
 
-    // Import result snackbar
-    LaunchedEffect(state.importResult) {
-        state.importResult?.let { result ->
-            val message = if (result.skipped > 0) {
-                resource.getString(
-                    R.string.snack_import_ok_skipped,
-                    result.playlistsImported,
-                    result.entriesImported,
-                    result.skipped
-                )
-            } else {
-                resource.getString(
-                    R.string.snack_import_ok,
-                    result.playlistsImported,
-                    result.entriesImported
-                )
-            }
-            snackbarHostState.showSnackbar(
-                message = message,
-                actionLabel = resource.getString(R.string.close)
-            )
-            onDismissImport()
-        }
-    }
-
-    // Export success snackbar
-    LaunchedEffect(state.exportSuccess) {
-        if (state.exportSuccess) {
-            val text = resource.getString(R.string.snack_export_ok)
-            snackbarHostState.showSnackbar(text)
-            onDismissExport()
-        }
-    }
-
     // New Playlist
     var isNewPlaylistDialog by remember { mutableStateOf(false) }
     if (isNewPlaylistDialog) {
         NewPlaylistDialog(
             onDismiss = { isNewPlaylistDialog = false },
             onCreate = onCreatePlaylist,
-            onError = showSnackBar
         )
     }
 
     // Delete Playlist
     var deletePlaylistItem by remember { mutableStateOf<PlaylistEntity?>(null) }
     deletePlaylistItem?.let { item ->
-        DeletePlaylistDialog(
-            playlist = item,
-            onDismiss = { deletePlaylistItem = null },
+        ConfirmDialog(
+            icon = Icons.Default.DeleteForever,
+            title = stringResource(R.string.dialog_title_delete_playlist),
+            text = stringResource(R.string.dialog_message_delete_playlist, item.name),
+            confirmLabel = stringResource(R.string.delete),
             onConfirm = { onDeletePlaylist(item) },
+            onDismiss = { deletePlaylistItem = null },
         )
     }
 
@@ -242,7 +224,6 @@ private fun PlaylistListScreen(
             initialComment = item.comment,
             onDismiss = { renamePlaylistItem = null },
             onCreate = { name, comment -> onRenamePlaylist(item, name, comment) },
-            onError = showSnackBar,
         )
     }
 
@@ -295,7 +276,7 @@ private fun PlaylistListScreen(
                             isFabExpanded = false
                         },
                         onExport = {
-                            exportLauncher.launch("dragon_player_playlists.json")
+                            exportLauncher.launch(EXPORT_FILE_NAME)
                             isFabExpanded = false
                         },
                         onNewPlaylist = {
@@ -424,15 +405,10 @@ private fun PlaylistEntriesScreen(
 
                 state.error != null -> MessageBox(
                     text = state.error,
-                    actions = {
-                        TextButton(
-                            onClick = {
-                                onDismissError()
-                                onBack()
-                            },
-                            content = { Text(text = stringResource(R.string.desc_back_button)) }
-                        )
-                    }
+                    onBack = {
+                        onDismissError()
+                        onBack()
+                    },
                 )
 
                 state.entries.isEmpty() -> MessageBox(
@@ -590,7 +566,7 @@ private class PlaylistEntriesPreviewParameter : PreviewParameterProvider<Playlis
             description = "Loading",
             playlistsState = PlaylistsUiState(
                 playlists = samplePlaylists,
-                selectedPlaylist = samplePlaylists[0],
+                selectedPlaylistId = samplePlaylists[0].id,
                 isLoading = true,
             ),
         ),
@@ -598,7 +574,7 @@ private class PlaylistEntriesPreviewParameter : PreviewParameterProvider<Playlis
             description = "Entries",
             playlistsState = PlaylistsUiState(
                 playlists = samplePlaylists,
-                selectedPlaylist = samplePlaylists[0],
+                selectedPlaylistId = samplePlaylists[0].id,
                 entries = sampleEntries,
             ),
         ),
@@ -606,7 +582,7 @@ private class PlaylistEntriesPreviewParameter : PreviewParameterProvider<Playlis
             description = "Empty playlist",
             playlistsState = PlaylistsUiState(
                 playlists = samplePlaylists,
-                selectedPlaylist = samplePlaylists[2],
+                selectedPlaylistId = samplePlaylists[2].id,
                 entries = persistentListOf(),
             ),
         ),
@@ -614,7 +590,7 @@ private class PlaylistEntriesPreviewParameter : PreviewParameterProvider<Playlis
             description = "Load error",
             playlistsState = PlaylistsUiState(
                 playlists = samplePlaylists,
-                selectedPlaylist = samplePlaylists[2],
+                selectedPlaylistId = samplePlaylists[2].id,
                 error = "Failed to load.",
             ),
         ),
@@ -640,8 +616,6 @@ private fun PreviewPlaylistListScreen(
             onDeletePlaylist = {},
             onExport = {},
             onImport = {},
-            onDismissImport = {},
-            onDismissExport = {},
             onRenamePlaylist = { _, _, _ -> }
         )
     }
@@ -655,7 +629,7 @@ private fun PreviewPlaylistEntriesScreen(
     AppTheme {
         PlaylistEntriesScreen(
             modifier = Modifier,
-            playlistName = params.playlistsState.selectedPlaylist?.name ?: "AAAAA",
+            playlistName = samplePlaylists.first().name,
             state = params.playlistsState,
             onBack = {},
             onDismissError = {},

@@ -36,11 +36,12 @@ import kotlinx.coroutines.withContext
 
 private const val WAVEFORM_SAMPLES = 256
 
-// Packed Long key: [type:4][ch:8][extra:20][fontSizeBits:32]
+private val HAIRLINE = Stroke(1f)
+
+// Packed Long key: [type:32][extra:32]
 // type: 0=ch number, 1=instrument, 2="L [", 3="] R", 4=muted instrument
-private fun textKey(type: Int, ch: Int, extra: Int, fontSizeBits: Int): Long =
-    (type.toLong() shl 60) or (ch.toLong() shl 52) or (extra.toLong() shl 32) or
-        fontSizeBits.toLong()
+private fun textKey(type: Int, extra: Int): Long =
+    (type.toLong() shl 32) or (extra.toLong() and 0xFFFFFFFFL)
 
 data class ChannelViewColors(
     val background: Color,
@@ -203,14 +204,14 @@ fun ChannelView(
 
     val fontSize = 11.sp * zoom
     val textMeasurer = rememberTextMeasurer()
-    val textCache = remember { HashMap<Long, TextLayoutResult>(64) }
-
-    LaunchedEffect(fontSize) { textCache.clear() }
+    val textCache = remember(fontSize, instrumentNames) { HashMap<Long, TextLayoutResult>(64) }
 
     val textStyle = remember(fontSize) {
         TextStyle(fontSize = fontSize, fontFamily = FontFamily.Monospace)
     }
-    val fontSizeBits = remember(fontSize) { fontSize.value.toBits() }
+    val waveStroke = remember(zoom) {
+        Stroke((1.5f * zoom).coerceAtLeast(1f), cap = StrokeCap.Butt)
+    }
 
     val rowHeight = baseRowHeight * zoom
     val accessibilityActions = remember(numChannels, muteVersion, soloChannel) {
@@ -343,6 +344,9 @@ fun ChannelView(
 
         drawRect(color = colors.background, size = size)
 
+        val lLayout = textCache.getOrPut(textKey(2, 0)) { textMeasurer.measure("L [", textStyle) }
+        val rLayout = textCache.getOrPut(textKey(3, 0)) { textMeasurer.measure("] R", textStyle) }
+
         clipRect(left = 0f, top = 0f, right = size.width, bottom = size.height) {
             for (ch in 0 until numChannels) {
                 val rowTop = ch * rowHeight - scroll
@@ -367,7 +371,7 @@ fun ChannelView(
                 }
 
                 // channel number
-                val chLayout = textCache.getOrPut(textKey(0, ch, 0, fontSizeBits)) {
+                val chLayout = textCache.getOrPut(textKey(0, ch)) {
                     textMeasurer.measure((ch + 1).toString(), textStyle)
                 }
                 drawText(
@@ -391,7 +395,7 @@ fun ChannelView(
                     color = colors.waveformBorder,
                     topLeft = Offset(chNumWidth, waveTop),
                     size = Size(waveWidth, waveH),
-                    style = Stroke(1f)
+                    style = HAIRLINE
                 )
                 val midY = waveTop + waveH / 2f
                 drawLine(
@@ -415,7 +419,7 @@ fun ChannelView(
                     drawPath(
                         path = waveformPath,
                         color = colors.waveformLine.copy(alpha = alpha),
-                        style = Stroke((1.5f * zoom).coerceAtLeast(1f), cap = StrokeCap.Butt)
+                        style = waveStroke
                     )
                 }
 
@@ -424,11 +428,14 @@ fun ChannelView(
                 val lineH = rowHeight / 3f
 
                 // instrument name
-                val insLayout = textCache.getOrPut(
-                    textKey(if (muted) 4 else 1, ch, instrument, fontSizeBits)
-                ) {
+                val insLayout = textCache.getOrPut(textKey(if (muted) 4 else 1, instrument)) {
                     val raw = instrumentNames.getOrNull(instrument) ?: ".."
-                    textMeasurer.measure(if (muted) "${raw.take(2)} Muted" else raw, textStyle)
+                    val text = if (muted) {
+                        resources.getString(R.string.channel_muted, raw.take(2))
+                    } else {
+                        raw
+                    }
+                    textMeasurer.measure(text, textStyle)
                 }
                 drawText(
                     textLayoutResult = insLayout,
@@ -464,12 +471,7 @@ fun ChannelView(
                 // pan
                 val panCenterY = rowTop + lineH * 2.5f
                 val panFrac = (pan / 255f).coerceIn(0f, 1f)
-                val lLayout = textCache.getOrPut(textKey(2, 0, 0, fontSizeBits)) {
-                    textMeasurer.measure("L [", textStyle)
-                }
-                val rLayout = textCache.getOrPut(textKey(3, 0, 0, fontSizeBits)) {
-                    textMeasurer.measure("] R", textStyle)
-                }
+
                 val gap = pad * 0.5f
                 val railX0 = infoX + lLayout.size.width + gap
                 val railX1 = infoX + infoWidth - rLayout.size.width - gap

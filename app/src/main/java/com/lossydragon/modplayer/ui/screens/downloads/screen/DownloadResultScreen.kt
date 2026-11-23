@@ -118,14 +118,7 @@ private fun DownloadScreenContent(
                     (pagingItems.itemCount == 0 && state.activeType != SearchResultType.NONE) -> {
                     val text = (pagingItems.loadState.refresh as? LoadState.Error)
                         ?.error?.message ?: noResultsText
-                    MessageBox(
-                        text = text,
-                        actions = {
-                            TextButton(onClick = onBack) {
-                                Text(text = stringResource(R.string.desc_back_button))
-                            }
-                        }
-                    )
+                    MessageBox(text = text, onBack = onBack)
                 }
 
                 else -> LazyColumn(modifier = Modifier.fillMaxSize()) {

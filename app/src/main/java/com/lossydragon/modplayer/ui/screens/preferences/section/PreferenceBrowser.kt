@@ -13,7 +13,7 @@ import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.alorma.compose.settings.ui.expressive.SettingsMenuLink
 import com.lossydragon.modplayer.R
 import com.lossydragon.modplayer.data.ModuleRepository
-import com.lossydragon.modplayer.db.AppPreferences
+import com.lossydragon.modplayer.ui.components.rememberAppPreferences
 import com.lossydragon.modplayer.ui.screens.preferences.components.PreferenceSection
 import com.lossydragon.modplayer.ui.theme.AppTheme
 import kotlinx.coroutines.flow.map
@@ -26,11 +26,7 @@ fun PreferenceBrowser(colors: ListItemColors) {
     val scope = rememberCoroutineScope()
     val isPreview = LocalView.current.isInEditMode
 
-    val prefs = if (isPreview) {
-        AppPreferences(LocalContext.current)
-    } else {
-        koinInject<AppPreferences>()
-    }
+    val prefs = rememberAppPreferences()
     val repo = if (isPreview) null else koinInject<ModuleRepository>()
 
     // setRootFolder persists the grant, stores the uri and starts the index.

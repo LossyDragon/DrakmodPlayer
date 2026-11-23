@@ -10,11 +10,11 @@ import androidx.compose.ui.platform.*
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.tooling.preview.*
 import androidx.compose.ui.unit.*
-import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.alorma.compose.settings.ui.expressive.SettingsMenuLink
 import com.alorma.compose.settings.ui.expressive.SettingsSwitch
 import com.lossydragon.modplayer.R
-import com.lossydragon.modplayer.db.AppPreferences
+import com.lossydragon.modplayer.ui.components.collectPref
+import com.lossydragon.modplayer.ui.components.rememberAppPreferences
 import com.lossydragon.modplayer.ui.screens.preferences.components.FlagItem
 import com.lossydragon.modplayer.ui.screens.preferences.components.MultiChoiceAlertDialog
 import com.lossydragon.modplayer.ui.screens.preferences.components.PreferenceItem
@@ -26,7 +26,6 @@ import com.lossydragon.native.Player
 import com.lossydragon.native.ResamplerMode
 import kotlinx.collections.immutable.persistentListOf
 import kotlinx.coroutines.launch
-import org.koin.compose.koinInject
 
 private fun formatFlagsLabel(resources: Resources, flags: Int): String {
     val parts = buildList {
@@ -153,32 +152,18 @@ fun PreferenceXmp(
 ) {
     val resource = LocalResources.current
     val scope = rememberCoroutineScope()
-    val prefs = if (LocalView.current.isInEditMode) {
-        AppPreferences(LocalContext.current)
-    } else {
-        koinInject<AppPreferences>()
-    }
+    val prefs = rememberAppPreferences()
 
-    val sampleRate by prefs.getSampleRateFlow()
-        .collectAsStateWithLifecycle(initialValue = Player.DEFAULT_SAMPLE_RATE)
-    val formatFlags by prefs.getPlayerFormatFlow()
-        .collectAsStateWithLifecycle(initialValue = 0)
-    val bufferMs by prefs.getBufferMsFlow()
-        .collectAsStateWithLifecycle(initialValue = Player.DEFAULT_BUFFER_MS)
-    val flags by prefs.getPlayerFlagsFlow()
-        .collectAsStateWithLifecycle(initialValue = 0)
-    val pan by prefs.getDefaultPanFlow()
-        .collectAsStateWithLifecycle(Player.DEFAULT_PAN_SEPARATION)
-    val mix by prefs.getStereoMixFlow()
-        .collectAsStateWithLifecycle(Player.DEFAULT_STEREO_MIX)
-    val dspEffect by prefs.getDspEffectFlow()
-        .collectAsStateWithLifecycle(initialValue = Player.XMP_DSP_LOWPASS)
-    val interp by prefs.getInterpolationTypeFlow()
-        .collectAsStateWithLifecycle(initialValue = Player.DEFAULT_INTERPOLATION)
-    val volume by prefs.getPlayerVolumeFlow()
-        .collectAsStateWithLifecycle(initialValue = Player.DEFAULT_PLAYER_VOLUME)
-    val boost by prefs.getVolumeBoostFlow()
-        .collectAsStateWithLifecycle(initialValue = Player.DEFAULT_VOLUME_BOOST)
+    val sampleRate by prefs.collectPref(Player.DEFAULT_SAMPLE_RATE) { getSampleRateFlow() }
+    val formatFlags by prefs.collectPref(0) { getPlayerFormatFlow() }
+    val bufferMs by prefs.collectPref(Player.DEFAULT_BUFFER_MS) { getBufferMsFlow() }
+    val flags by prefs.collectPref(0) { getPlayerFlagsFlow() }
+    val pan by prefs.collectPref(Player.DEFAULT_PAN_SEPARATION) { getDefaultPanFlow() }
+    val mix by prefs.collectPref(Player.DEFAULT_STEREO_MIX) { getStereoMixFlow() }
+    val dspEffect by prefs.collectPref(Player.XMP_DSP_LOWPASS) { getDspEffectFlow() }
+    val interp by prefs.collectPref(Player.DEFAULT_INTERPOLATION) { getInterpolationTypeFlow() }
+    val volume by prefs.collectPref(Player.DEFAULT_PLAYER_VOLUME) { getPlayerVolumeFlow() }
+    val boost by prefs.collectPref(Player.DEFAULT_VOLUME_BOOST) { getVolumeBoostFlow() }
 
     var isSampleRateShowing by remember { mutableStateOf(false) }
     if (isSampleRateShowing) {
@@ -265,22 +250,8 @@ fun PreferenceXmp(
                 title = { Text(text = stringResource(R.string.pref_interpolation_type)) },
                 subtitle = { Text(text = stringResource(R.string.pref_interpolation_type_desc)) },
                 action = {
-                    val text = when (interp) {
-                        ResamplerMode.NEAREST.id -> stringResource(R.string.interp_nearest)
-
-                        ResamplerMode.LINEAR.id -> stringResource(R.string.interp_linear)
-
-                        ResamplerMode.CUBIC.id -> stringResource(R.string.interp_spline)
-
-                        ResamplerMode.OPENMPT_AMIGA_A500.id ->
-                            stringResource(R.string.interp_openmpt_amiga_a500)
-
-                        ResamplerMode.OPENMPT_AMIGA_A1200.id ->
-                            stringResource(R.string.interp_openmpt_amiga_a1200)
-
-                        else -> stringResource(R.string.unknown)
-                    }
-                    Text(text = text)
+                    val title = interpOptions.find { it.key == interp.toString() }?.title
+                    Text(text = stringResource(title ?: R.string.unknown))
                 },
                 colors = colors,
                 shapes = ListItemDefaults.segmentedShapes(2, 10),

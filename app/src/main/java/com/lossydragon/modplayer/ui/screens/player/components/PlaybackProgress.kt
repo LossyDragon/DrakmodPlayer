@@ -13,24 +13,36 @@ import com.lossydragon.native.model.FrameInfo
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 
-/** Collects the 50 Hz frame flow itself so only this row recomposes per frame. */
+/** Collects the 50 Hz frame flow itself; the thumb follows it, the labels recompose per second. */
 @Composable
 internal fun PlaybackProgress(
     frameInfo: StateFlow<FrameInfo>,
     onSeek: (Long) -> Unit
 ) {
-    val fi by frameInfo.collectAsStateWithLifecycle()
-    val duration = fi.totalTime.toFloat().coerceAtLeast(1f)
+    val fi = frameInfo.collectAsStateWithLifecycle()
+    val totalMs by remember(fi) { derivedStateOf { fi.value.totalTime } }
+    val duration = totalMs.toFloat().coerceAtLeast(1f)
 
     var isSeeking by remember { mutableStateOf(false) }
     val state = rememberSliderState()
     // The engine drives the thumb except while the user is dragging it.
-    LaunchedEffect(Unit) {
-        snapshotFlow { fi }.collect { info ->
+    LaunchedEffect(fi) {
+        snapshotFlow { fi.value }.collect { info ->
             if (!isSeeking) {
                 val total = info.totalTime.toFloat().coerceAtLeast(1f)
                 state.value = (info.time.toFloat() / total).coerceIn(0f, 1f)
             }
+        }
+    }
+    val shownSec by remember(fi) {
+        derivedStateOf {
+            val info = fi.value
+            val ms = if (isSeeking) {
+                state.value * info.totalTime.toFloat().coerceAtLeast(1f)
+            } else {
+                info.time.toFloat()
+            }
+            (ms / 1000f).toLong()
         }
     }
 
@@ -41,11 +53,7 @@ internal fun PlaybackProgress(
         content = {
             Text(
                 modifier = Modifier.padding(horizontal = 6.dp),
-                text = if (isSeeking) {
-                    (state.value * duration).toLong().formatMs()
-                } else {
-                    fi.time.toLong().formatMs()
-                },
+                text = (shownSec * 1000L).formatMs(),
                 style = MaterialTheme.typography.titleMedium,
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
             )
@@ -65,7 +73,7 @@ internal fun PlaybackProgress(
 
             Text(
                 modifier = Modifier.padding(horizontal = 6.dp),
-                text = fi.totalTime.toLong().formatMs(),
+                text = totalMs.toLong().formatMs(),
                 style = MaterialTheme.typography.titleMedium,
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
             )

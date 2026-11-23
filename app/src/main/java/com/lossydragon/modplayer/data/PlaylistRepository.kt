@@ -15,8 +15,6 @@ class PlaylistRepository(
 
     val playlists: Flow<List<PlaylistEntity>> = dao.getAllPlaylists()
 
-    suspend fun createPlaylist(entity: PlaylistEntity): Long = dao.createPlaylist(entity)
-
     suspend fun createPlaylist(name: String, comment: String): Long =
         dao.createPlaylist(PlaylistEntity(name = name, comment = comment))
 
@@ -33,12 +31,6 @@ class PlaylistRepository(
 
     suspend fun deletePlaylist(id: Long) = dao.deletePlaylistWithEntries(id)
 
-    suspend fun getAllPlaylistsOnce(): List<PlaylistEntity> =
-        dao.getAllPlaylistsOnce()
-
-    suspend fun getEntriesRaw(playlistId: Long): List<PlaylistEntryEntity> =
-        dao.getEntries(playlistId)
-
     suspend fun renamePlaylist(id: Long, name: String, comment: String) =
         dao.updatePlaylist(id, name, comment)
 
@@ -51,7 +43,7 @@ class PlaylistRepository(
     /** Writes every playlist as JSON to [outputUri]. */
     suspend fun exportTo(outputUri: Uri) {
         val all = dao.getAllPlaylistsOnce()
-        val entries = all.associate { it.id to dao.getEntries(it.id) }
+        val entries = dao.getAllEntries().groupBy { it.playlistId }
         saf.writeText(outputUri, exportPlaylistsToJson(all, entries))
     }
 

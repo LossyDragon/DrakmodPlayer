@@ -5,6 +5,7 @@ import android.os.Looper
 import androidx.media3.common.MediaItem
 import androidx.media3.common.Player
 import com.lossydragon.modplayer.db.entity.ModuleEntity
+import kotlinx.coroutines.runBlocking
 import org.junit.After
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
@@ -45,11 +46,15 @@ class ModPlayerTest {
 
     @Before
     fun setUp() {
-        val context = RuntimeEnvironment.getApplication()
-        engine = FakeEngine()
-        prefs = FakeAppPreferences(context)
-        player = ModPlayer(context, engine, prefs)
+        prefs = FakeAppPreferences(RuntimeEnvironment.getApplication())
+        player = newPlayer()
         idle()
+    }
+
+    /** A player on a fresh [engine], sharing [prefs]. */
+    private fun newPlayer(): ModPlayer {
+        engine = FakeEngine()
+        return ModPlayer(RuntimeEnvironment.getApplication(), engine, prefs)
     }
 
     @After
@@ -71,11 +76,13 @@ class ModPlayerTest {
         fail("Timed out waiting for $what; engine calls = ${engine.calls}")
     }
 
-    /** Lets any in-flight engine work land, then idles the main looper. */
-    private fun settle() {
-        Thread.sleep(100)
+    /** Runs engine and main-thread work to completion, following hand-offs between the two. */
+    private fun settle() = repeat(8) {
+        engine.drain()
         idle()
     }
+
+    private fun awaitEnded() = await("ended") { player.playbackState == Player.STATE_ENDED }
 
     private fun awaitLoads(count: Int) = await("$count loads") {
         engine.calls("load:").size >= count
@@ -152,7 +159,7 @@ class ModPlayerTest {
     fun `end of last module parks in STATE_ENDED and keeps the queue`() {
         loadQueue(startAt = 2)
         engine.endModule()
-        await("ended") { player.playbackState == Player.STATE_ENDED }
+        awaitEnded()
         assertEquals(2, player.currentMediaItemIndex)
         assertEquals(3, player.mediaItemCount)
         assertEquals(1, engine.calls("load:").size)
@@ -163,7 +170,7 @@ class ModPlayerTest {
     fun `play after the queue ended restarts from the first item`() {
         loadQueue(startAt = 2)
         engine.endModule()
-        await("ended") { player.playbackState == Player.STATE_ENDED }
+        awaitEnded()
 
         player.play()
         awaitLoads(2)
@@ -176,7 +183,7 @@ class ModPlayerTest {
     fun `seeking inside the ended item reloads it instead of jumping to the first`() {
         loadQueue(startAt = 2)
         engine.endModule()
-        await("ended") { player.playbackState == Player.STATE_ENDED }
+        awaitEnded()
 
         player.seekTo(0L)
         await("reload") { engine.calls("load:").size == 2 }
@@ -347,7 +354,7 @@ class ModPlayerTest {
         engine.failPaths = setOf("content://mods/c")
         loadQueue()
         player.seekTo(2, 0L)
-        await("ended") { player.playbackState == Player.STATE_ENDED }
+        awaitEnded()
         settle()
         assertEquals(3, player.mediaItemCount)
         assertEquals(0, prefs.clearCount)
@@ -376,6 +383,29 @@ class ModPlayerTest {
         assertTrue("loads=$loads", loads <= 3)
         settle()
         assertEquals(loads, engine.calls("load:").size)
+        assertFalse(player.playWhenReady)
+        assertEquals(3, player.mediaItemCount)
+    }
+
+    @Test
+    fun `a start error from a superseded item does not cancel the new load`() {
+        loadQueue()
+        engine.loadDelayMs = 150L
+        player.seekToNext()
+        idle()
+        engine.events.tryEmit(EngineEvent.Error("stale"))
+        awaitPlays(2)
+        assertNull(player.playerError)
+        assertEquals(1, player.currentMediaItemIndex)
+        assertTrue(player.playWhenReady)
+    }
+
+    @Test
+    fun `a start error on the loaded item goes idle with an error and keeps the queue`() {
+        loadQueue()
+        engine.events.tryEmit(EngineEvent.Error("boom"))
+        await("error") { player.playerError != null }
+        assertEquals(Player.STATE_IDLE, player.playbackState)
         assertFalse(player.playWhenReady)
         assertEquals(3, player.mediaItemCount)
     }
@@ -503,6 +533,47 @@ class ModPlayerTest {
     }
 
     @Test
+    fun `queue edits keep the loaded item's real metadata`() {
+        engine.modVarsFlow.value = engine.modVarsFlow.value.copy(name = "Space Debris", type = "XM")
+        loadQueue(startAt = 1)
+        await("metadata") { player.currentMediaItem?.mediaMetadata?.title == "Space Debris" }
+
+        player.addMediaItem(MediaItem.fromUri("content://mods/x"))
+        idle()
+        assertEquals("Space Debris", player.currentMediaItem?.mediaMetadata?.title)
+
+        player.moveMediaItem(1, 0)
+        idle()
+        assertEquals(0, player.currentMediaItemIndex)
+        assertEquals("Space Debris", player.currentMediaItem?.mediaMetadata?.title)
+
+        player.removeMediaItem(3)
+        idle()
+        assertEquals("Space Debris", player.currentMediaItem?.mediaMetadata?.title)
+
+        player.seekToNext()
+        awaitLoads(2)
+        assertEquals(1, player.currentMediaItemIndex)
+        assertEquals(3, player.mediaItemCount)
+    }
+
+    @Test
+    fun `media items carrying a module keep its fields through setMediaItems`() {
+        val entity = module("z").copy(fileSize = 4_242L, moduleName = "Zed", moduleType = "IT")
+        val item = MediaItem.Builder()
+            .setUri(entity.uri)
+            .setMediaMetadata(
+                androidx.media3.common.MediaMetadata.Builder()
+                    .setExtras(MediaItemExtras.of(entity))
+                    .build()
+            )
+            .build()
+        player.setMediaItems(listOf(item))
+        awaitLoads(1)
+        assertEquals(listOf(entity), player.queueFlow.value)
+    }
+
+    @Test
     fun `moving items keeps the current item current`() {
         loadQueue(startAt = 0)
         player.moveMediaItem(0, 2)
@@ -561,10 +632,8 @@ class ModPlayerTest {
         player.releaseEngine()
         idle()
 
-        val fresh =
-            ModPlayer(RuntimeEnvironment.getApplication(), FakeEngine().also { engine = it }, prefs)
-        var restored = false
-        kotlinx.coroutines.runBlocking { restored = fresh.restoreQueue() }
+        val fresh = newPlayer()
+        val restored = runBlocking { fresh.restoreQueue() }
         idle()
         assertTrue(restored)
         assertEquals(3, fresh.mediaItemCount)

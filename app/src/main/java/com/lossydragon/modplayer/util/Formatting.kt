@@ -2,6 +2,10 @@ package com.lossydragon.modplayer.util
 
 import android.text.Html
 import java.time.Instant
+import java.time.ZoneId
+import java.time.format.DateTimeFormatter
+import java.time.format.FormatStyle
+import java.util.Locale
 
 /** Formats milliseconds as `m:ss`. */
 fun Long.formatMs(): String {
@@ -20,10 +24,10 @@ fun Long.formatSize(): String = when {
 fun String.fromHtml(): String =
     Html.fromHtml(this, Html.FROM_HTML_MODE_LEGACY).toString().trim()
 
-/** Formats a Unix epoch timestamp in milliseconds to a human-readable date string e.g. "May 23, 2026". */
-fun Long.toReadableDate(): String {
-    val formatter = java.time.format.DateTimeFormatter
-        .ofPattern("MMM d, yyyy")
-        .withZone(java.time.ZoneId.systemDefault())
-    return formatter.format(Instant.ofEpochMilli(this))
-}
+private val mediumDate = DateTimeFormatter.ofLocalizedDate(FormatStyle.MEDIUM)
+
+/** Formats epoch milliseconds as a medium date in the current locale, e.g. "May 23, 2026". */
+fun Long.toReadableDate(): String = mediumDate
+    .withLocale(Locale.getDefault())
+    .withZone(ZoneId.systemDefault())
+    .format(Instant.ofEpochMilli(this))

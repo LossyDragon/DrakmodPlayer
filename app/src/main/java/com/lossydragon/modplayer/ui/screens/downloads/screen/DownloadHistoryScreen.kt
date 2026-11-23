@@ -13,6 +13,7 @@ import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.lossydragon.modplayer.R
 import com.lossydragon.modplayer.data.DownloadHistoryItem
 import com.lossydragon.modplayer.ui.components.BackButton
+import com.lossydragon.modplayer.ui.components.ConfirmDialog
 import com.lossydragon.modplayer.ui.components.MessageBox
 import com.lossydragon.modplayer.ui.screens.downloads.DownloadsViewModel
 import com.lossydragon.modplayer.ui.screens.downloads.components.DownloadListItem
@@ -32,26 +33,13 @@ internal fun DownloadHistoryScreen(
     var showClearDialog by remember { mutableStateOf(false) }
 
     if (showClearDialog) {
-        AlertDialog(
-            onDismissRequest = { showClearDialog = false },
-            icon = { Icon(imageVector = Icons.Default.DeleteForever, contentDescription = null) },
-            title = { Text(text = stringResource(R.string.dialog_title_clear_history)) },
-            text = { Text(text = stringResource(R.string.dialog_message_clear_history)) },
-            confirmButton = {
-                TextButton(
-                    onClick = {
-                        viewModel.clearHistory()
-                        showClearDialog = false
-                    },
-                    content = { Text(text = stringResource(R.string.clear)) }
-                )
-            },
-            dismissButton = {
-                TextButton(
-                    onClick = { showClearDialog = false },
-                    content = { Text(text = stringResource(R.string.cancel)) }
-                )
-            }
+        ConfirmDialog(
+            icon = Icons.Default.DeleteForever,
+            title = stringResource(R.string.dialog_title_clear_history),
+            text = stringResource(R.string.dialog_message_clear_history),
+            confirmLabel = stringResource(R.string.clear),
+            onConfirm = viewModel::clearHistory,
+            onDismiss = { showClearDialog = false },
         )
     }
 
@@ -104,14 +92,7 @@ private fun DownloadHistoryContent(
                 if (history.isEmpty()) {
                     MessageBox(
                         text = stringResource(R.string.message_no_history),
-                        actions = {
-                            TextButton(
-                                onClick = onBack,
-                                content = {
-                                    Text(text = stringResource(R.string.desc_back_button))
-                                }
-                            )
-                        }
+                        onBack = onBack,
                     )
                 } else {
                     LazyColumn(

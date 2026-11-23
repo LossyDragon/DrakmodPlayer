@@ -26,6 +26,37 @@ internal fun PlaylistsFabMenu(
     onExport: () -> Unit,
     onNewPlaylist: () -> Unit
 ) {
+    PlaylistFabMenu(
+        expanded = expanded,
+        onExpand = onExpand,
+        content = {
+            FloatingActionButtonMenuItem(
+                onClick = onImport,
+                text = { Text(text = stringResource(R.string.fab_import_playlists)) },
+                icon = { Icon(imageVector = Icons.Default.Download, contentDescription = null) }
+            )
+            FloatingActionButtonMenuItem(
+                onClick = onExport,
+                text = { Text(text = stringResource(R.string.fab_export_playlists)) },
+                icon = { Icon(imageVector = Icons.Default.Upload, contentDescription = null) }
+            )
+            FloatingActionButtonMenuItem(
+                onClick = onNewPlaylist,
+                text = { Text(text = stringResource(R.string.fab_new_playlist)) },
+                icon = { Icon(imageVector = Icons.Default.Add, contentDescription = null) }
+            )
+        },
+    )
+}
+
+/** The expand/collapse button shared by the playlist FAB menus. */
+@OptIn(ExperimentalMaterial3ExpressiveApi::class)
+@Composable
+internal fun PlaylistFabMenu(
+    expanded: Boolean,
+    onExpand: () -> Unit,
+    content: @Composable FloatingActionButtonMenuScope.() -> Unit
+) {
     FloatingActionButtonMenu(
         modifier = Modifier.offset(x = 16.dp, y = 16.dp),
         expanded = expanded,
@@ -48,23 +79,7 @@ internal fun PlaylistsFabMenu(
                 }
             )
         },
-        content = {
-            FloatingActionButtonMenuItem(
-                onClick = onImport,
-                text = { Text(text = stringResource(R.string.fab_import_playlists)) },
-                icon = { Icon(imageVector = Icons.Default.Download, contentDescription = null) }
-            )
-            FloatingActionButtonMenuItem(
-                onClick = onExport,
-                text = { Text(text = stringResource(R.string.fab_export_playlists)) },
-                icon = { Icon(imageVector = Icons.Default.Upload, contentDescription = null) }
-            )
-            FloatingActionButtonMenuItem(
-                onClick = onNewPlaylist,
-                text = { Text(text = stringResource(R.string.fab_new_playlist)) },
-                icon = { Icon(imageVector = Icons.Default.Add, contentDescription = null) }
-            )
-        },
+        content = content,
     )
 }
 

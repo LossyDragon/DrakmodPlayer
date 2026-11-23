@@ -25,8 +25,7 @@ internal fun BrowserInputField(
     colors: TextFieldColors,
     sortOrder: BrowserSortOrder,
     onSortOrder: (BrowserSortOrder) -> Unit,
-    onFolderPick: () -> Unit,
-    onFilter: (String) -> Unit
+    onFolderPick: () -> Unit
 ) {
     val scope = rememberCoroutineScope()
 
@@ -42,7 +41,6 @@ internal fun BrowserInputField(
                 BackButton {
                     scope.launch { searchBarState.animateToCollapsed() }
                     textFieldState.clearText()
-                    onFilter("")
                 }
             } else {
                 Icon(
@@ -54,10 +52,7 @@ internal fun BrowserInputField(
         trailingIcon = {
             if (textFieldState.text.isNotEmpty()) {
                 IconButton(
-                    onClick = {
-                        textFieldState.clearText()
-                        onFilter("")
-                    },
+                    onClick = { textFieldState.clearText() },
                     content = {
                         Icon(
                             imageVector = Icons.Default.Clear,
@@ -95,7 +90,7 @@ private fun SortMenu(
             content = {
                 Icon(
                     imageVector = Icons.AutoMirrored.Filled.Sort,
-                    contentDescription = stringResource(R.string.desk_sort_button)
+                    contentDescription = stringResource(R.string.desc_sort_button)
                 )
             }
         )
@@ -104,51 +99,26 @@ private fun SortMenu(
             onDismissRequest = { showSortMenu = false },
             shape = MaterialTheme.shapes.small,
             content = {
-                DropdownMenuItem(
-                    text = { Text(text = stringResource(R.string.name)) },
-                    onClick = {
-                        onSortOrder(BrowserSortOrder.NAME)
-                        showSortMenu = false
-                    },
-                    leadingIcon = {
-                        Icon(imageVector = Icons.Default.SortByAlpha, contentDescription = null)
-                    },
-                    trailingIcon = {
-                        if (sortOrder == BrowserSortOrder.NAME) {
-                            Icon(imageVector = Icons.Default.Check, contentDescription = null)
-                        }
+                BrowserSortOrder.entries.forEach { order ->
+                    val (label, icon) = when (order) {
+                        BrowserSortOrder.NAME -> R.string.name to Icons.Default.SortByAlpha
+                        BrowserSortOrder.TYPE -> R.string.type to Icons.Default.Extension
+                        BrowserSortOrder.SIZE -> R.string.size to Icons.Default.DataArray
                     }
-                )
-                DropdownMenuItem(
-                    text = { Text(text = stringResource(R.string.type)) },
-                    onClick = {
-                        onSortOrder(BrowserSortOrder.TYPE)
-                        showSortMenu = false
-                    },
-                    leadingIcon = {
-                        Icon(imageVector = Icons.Default.Extension, contentDescription = null)
-                    },
-                    trailingIcon = {
-                        if (sortOrder == BrowserSortOrder.TYPE) {
-                            Icon(imageVector = Icons.Default.Check, contentDescription = null)
+                    DropdownMenuItem(
+                        text = { Text(text = stringResource(label)) },
+                        onClick = {
+                            onSortOrder(order)
+                            showSortMenu = false
+                        },
+                        leadingIcon = { Icon(imageVector = icon, contentDescription = null) },
+                        trailingIcon = {
+                            if (sortOrder == order) {
+                                Icon(imageVector = Icons.Default.Check, contentDescription = null)
+                            }
                         }
-                    }
-                )
-                DropdownMenuItem(
-                    text = { Text(text = stringResource(R.string.size)) },
-                    onClick = {
-                        onSortOrder(BrowserSortOrder.SIZE)
-                        showSortMenu = false
-                    },
-                    leadingIcon = {
-                        Icon(imageVector = Icons.Default.DataArray, contentDescription = null)
-                    },
-                    trailingIcon = {
-                        if (sortOrder == BrowserSortOrder.SIZE) {
-                            Icon(imageVector = Icons.Default.Check, contentDescription = null)
-                        }
-                    }
-                )
+                    )
+                }
             }
         )
     }
@@ -186,7 +156,6 @@ private fun Preview() {
                 sortOrder = BrowserSortOrder.SIZE,
                 onSortOrder = {},
                 onFolderPick = {},
-                onFilter = {},
             )
         }
     }

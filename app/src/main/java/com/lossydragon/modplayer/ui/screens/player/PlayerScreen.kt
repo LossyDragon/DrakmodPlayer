@@ -29,6 +29,7 @@ import com.lossydragon.modplayer.player.model.PatternData
 import com.lossydragon.modplayer.ui.activityViewModel
 import com.lossydragon.modplayer.ui.components.AppSnackbarHostState
 import com.lossydragon.modplayer.ui.components.BackButton
+import com.lossydragon.modplayer.ui.components.PlayerErrorEffect
 import com.lossydragon.modplayer.ui.screens.player.components.ChipList
 import com.lossydragon.modplayer.ui.screens.player.components.DurationsSheet
 import com.lossydragon.modplayer.ui.screens.player.components.PatternInfoRow
@@ -127,9 +128,7 @@ fun PlayerScreen(
         if (hasLoadedOnce && state.currentModule == null) onBack()
     }
 
-    LaunchedEffect(state.errorMessage) {
-        state.errorMessage?.let { snackbarHostState.showSnackbar(it) }
-    }
+    PlayerErrorEffect(state.errorMessage, snackbarHostState)
 
     LaunchedEffect(showAudioInfo) {
         while (isActive && showAudioInfo) {
@@ -329,8 +328,9 @@ private fun PlayerScreenContent(
         return
     }
 
-    // Not delegated: read only inside PatternView's draw lambda.
+    // Not delegated: read only inside PatternView's draw lambda, and only redrawn per row.
     val frame = frameInfo.collectAsStateWithLifecycle()
+    val row = remember(frame) { derivedStateOf { frame.value.row } }
 
     Scaffold(
         modifier = modifier,
@@ -431,7 +431,7 @@ private fun PlayerScreenContent(
                         modifier = Modifier.fillMaxSize(),
                         module = state.currentModule,
                         pattern = patternData,
-                        currentRow = { frame.value.row },
+                        currentRow = { row.value },
                         showRowNumbers = state.showRowNumbers,
                     )
 

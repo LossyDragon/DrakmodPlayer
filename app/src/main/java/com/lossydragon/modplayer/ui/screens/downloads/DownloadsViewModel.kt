@@ -18,8 +18,7 @@ import com.lossydragon.modplayer.data.ModuleRepository
 import com.lossydragon.modplayer.data.ResultPagingSource
 import com.lossydragon.modplayer.data.SafDataSource
 import com.lossydragon.modplayer.db.AppPreferences
-import com.lossydragon.modplayer.model.Artist
-import com.lossydragon.modplayer.model.ArtistInfo
+import com.lossydragon.modplayer.db.entity.ModuleEntity
 import com.lossydragon.modplayer.model.Module
 import com.lossydragon.modplayer.model.ModuleResult
 import com.lossydragon.modplayer.model.ResultItem
@@ -38,6 +37,7 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.cancelAndJoin
+import kotlinx.coroutines.channels.Channel
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.SharingStarted
@@ -46,6 +46,7 @@ import kotlinx.coroutines.flow.firstOrNull
 import kotlinx.coroutines.flow.flatMapLatest
 import kotlinx.coroutines.flow.flowOf
 import kotlinx.coroutines.flow.map
+import kotlinx.coroutines.flow.receiveAsFlow
 import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
@@ -77,6 +78,11 @@ sealed class DownloadStatus {
     data object Loading : DownloadStatus()
     data object None : DownloadStatus()
     data object Success : DownloadStatus()
+}
+
+/** One-shot notifications; the UI shows them as a snackbar. */
+sealed interface DownloadsEvent {
+    data class Error(val message: UiText) : DownloadsEvent
 }
 
 @Immutable
@@ -117,10 +123,8 @@ class DownloadsViewModel(
         .map { it.toPersistentList() }
         .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), persistentListOf())
 
-    @Deprecated("Use history; this rebuilds API DTOs from the few stored columns.")
-    val historyState: StateFlow<ImmutableList<Module>> = history
-        .map { items -> items.map { it.toModule() }.toPersistentList() }
-        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), persistentListOf())
+    private val _events = Channel<DownloadsEvent>(Channel.BUFFERED)
+    val events: Flow<DownloadsEvent> = _events.receiveAsFlow()
 
     val searchState: StateFlow<DownloadSearchState>
         field = MutableStateFlow(DownloadSearchState())
@@ -273,6 +277,33 @@ class DownloadsViewModel(
     private fun setDownloadError(@StringRes fallback: Int, detail: String? = null) {
         val message = detail?.let { UiText.Raw(it) } ?: UiText.Res(fallback)
         moduleResultState.update { it.copy(downloadStatus = DownloadStatus.Error(message)) }
+        _events.trySend(DownloadsEvent.Error(message))
+    }
+
+    /** The downloaded file for [module] as a playable entity; reports why not through [events]. */
+    suspend fun findDownloaded(module: Module): ModuleEntity? {
+        val error = when {
+            lastDirectory.firstOrNull().isNullOrBlank() -> R.string.download_error_no_folder
+
+            else -> {
+                val uri = findModuleUri(module)
+                if (uri != null) {
+                    val filename = module.downloadFilename
+                    return ModuleEntity(
+                        filePath = uri.toString(),
+                        filename = filename,
+                        fileExtension = filename.substringAfterLast('.', ""),
+                        fileSize = module.bytes.toLong(),
+                        isValidModule = true,
+                        moduleName = module.songtitle,
+                        moduleType = module.format,
+                    )
+                }
+                R.string.snack_module_not_found
+            }
+        }
+        _events.trySend(DownloadsEvent.Error(UiText.Res(error)))
+        return null
     }
 
     fun deleteModule(module: Module) {
@@ -345,17 +376,7 @@ class DownloadsViewModel(
         saf.findDownloadedModule(
             rootUri = rootUri,
             artist = module.artist,
-            filename = module.url.substringAfterLast('#'),
+            filename = module.downloadFilename,
         )
     }
-
-    /** Shim for the deprecated [historyState]. */
-    private fun DownloadHistoryItem.toModule() = Module(
-        id = id,
-        filename = filename,
-        songtitle = songtitle,
-        format = format,
-        bytes = bytes,
-        artistInfo = ArtistInfo(artist = listOf(Artist(alias = artist))),
-    )
 }

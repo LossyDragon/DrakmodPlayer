@@ -51,7 +51,6 @@ data class FileItem(
 @Immutable
 data class BrowserUiState(
     val breadcrumbs: ImmutableList<String> = persistentListOf(),
-    val currentPath: String = "",
     val directories: ImmutableList<FileItem> = persistentListOf(),
     val error: String? = null,
     val files: ImmutableList<ModuleEntity> = persistentListOf(),
@@ -110,6 +109,16 @@ class FileBrowserViewModel(
             // Subscribed only now so the initial Idle doesn't flash an empty screen.
             db.indexState
                 .onEach { indexState -> state.update { it.withIndexState(indexState) } }
+                .launchIn(this)
+
+            // Follow a root picked elsewhere (the preferences screen).
+            prefs.getLastDirectoryFlow()
+                .onEach { root ->
+                    if (root.isNullOrBlank() || root == dirStack.firstOrNull()?.first) return@onEach
+                    dirStack.clear()
+                    pushDir(root, displayName(root))
+                    state.update { it.copy(hasStorageAccess = true, error = null) }
+                }
                 .launchIn(this)
         }
 
@@ -227,10 +236,7 @@ class FileBrowserViewModel(
 
     private fun updateBreadcrumbs() {
         state.update {
-            it.copy(
-                currentPath = dirStack.lastOrNull()?.first.orEmpty(),
-                breadcrumbs = dirStack.map { (_, name) -> name }.toImmutableList(),
-            )
+            it.copy(breadcrumbs = dirStack.map { (_, name) -> name }.toImmutableList())
         }
     }
 

@@ -13,7 +13,6 @@ data class DirectoryEntry(
     val childUri: Uri,
     val docId: String,
     val name: String,
-    val mime: String,
     val size: Long,
     val isDirectory: Boolean
 )
@@ -82,7 +81,6 @@ fun ContentResolver.queryDirectoryEntries(treeRoot: Uri, docId: String): List<Di
                     childUri = DocumentsContract.buildDocumentUriUsingTree(treeRoot, childId),
                     docId = childId,
                     name = name,
-                    mime = mime,
                     size = size,
                     isDirectory = mime == DocumentsContract.Document.MIME_TYPE_DIR
                 )
@@ -92,14 +90,14 @@ fun ContentResolver.queryDirectoryEntries(treeRoot: Uri, docId: String): List<Di
     return entries
 }
 
-/**
- * Finds a child directory by [name] under [parentDocId] in the given [treeUri].
- * Returns the document ID of the found directory, or null if not found.
- */
-fun ContentResolver.findChildDir(
+private const val DOWNLOAD_ROOT = "TheModArchive"
+
+/** Document id of the child of [parentDocId] named [name], or null. */
+private fun ContentResolver.findChild(
     treeUri: Uri,
     parentDocId: String,
-    name: String
+    name: String,
+    dirOnly: Boolean = false
 ): String? {
     val childrenUri = DocumentsContract.buildChildDocumentsUriUsingTree(treeUri, parentDocId)
     query(
@@ -114,26 +112,21 @@ fun ContentResolver.findChildDir(
         null,
     )?.use { cursor ->
         while (cursor.moveToNext()) {
-            if (cursor.getString(1) == name &&
-                cursor.getString(2) == DocumentsContract.Document.MIME_TYPE_DIR
-            ) {
-                return cursor.getString(0)
-            }
+            if (cursor.getString(1) != name) continue
+            if (dirOnly && cursor.getString(2) != DocumentsContract.Document.MIME_TYPE_DIR) continue
+            return cursor.getString(0)
         }
     }
     return null
 }
 
-/**
- * Finds or creates a child directory by [name] under [parentDocId].
- * Returns the document ID, or null if creation fails.
- */
-fun ContentResolver.findOrCreateChildDir(
+/** Finds or creates the child directory [name]; returns its document id, or null. */
+private fun ContentResolver.findOrCreateChildDir(
     treeUri: Uri,
     parentDocId: String,
     name: String
 ): String? {
-    findChildDir(treeUri, parentDocId, name)?.let { return it }
+    findChild(treeUri, parentDocId, name, dirOnly = true)?.let { return it }
     val parentUri = DocumentsContract.buildDocumentUriUsingTree(treeUri, parentDocId)
     val newUri = DocumentsContract.createDocument(
         this,
@@ -144,17 +137,14 @@ fun ContentResolver.findOrCreateChildDir(
     return newUri?.let { DocumentsContract.getDocumentId(it) }
 }
 
-/**
- * Returns the URI of the download directory for [module] under
- * `TheModArchive/{artist}/`, creating it if needed.
- */
-fun Context.getDownloadDir(
+/** The download directory for [module], `TheModArchive/{artist}/`, created if needed. */
+private fun Context.getDownloadDir(
     rootUri: Uri,
     module: Module
 ): Uri? = try {
     val rootDoc = DocumentsContract.getTreeDocumentId(rootUri)
     val cr = contentResolver
-    val tmaDoc = cr.findOrCreateChildDir(rootUri, rootDoc, "TheModArchive") ?: return null
+    val tmaDoc = cr.findOrCreateChildDir(rootUri, rootDoc, DOWNLOAD_ROOT) ?: return null
     val artistDoc = cr.findOrCreateChildDir(rootUri, tmaDoc, module.artist) ?: tmaDoc
     DocumentsContract.buildDocumentUriUsingTree(rootUri, artistDoc)
 } catch (e: Exception) {
@@ -166,34 +156,17 @@ fun Context.getDownloadDir(
  * Locates a downloaded module file by [filename] under the artist's directory.
  * Returns the file URI, or null if not found.
  */
-fun Context.findDownloadedModule(
+internal fun Context.findDownloadedModule(
     rootUri: Uri,
     artist: String,
     filename: String
 ): Uri? = try {
     val rootDocId = DocumentsContract.getTreeDocumentId(rootUri)
     val cr = contentResolver
-    val tmaDocId = cr.findChildDir(rootUri, rootDocId, "TheModArchive") ?: return null
-    val artistDocId = cr.findChildDir(rootUri, tmaDocId, artist) ?: tmaDocId
-    val childrenUri = DocumentsContract.buildChildDocumentsUriUsingTree(rootUri, artistDocId)
-
-    cr.query(
-        childrenUri,
-        arrayOf(
-            DocumentsContract.Document.COLUMN_DOCUMENT_ID,
-            DocumentsContract.Document.COLUMN_DISPLAY_NAME,
-        ),
-        null,
-        null,
-        null,
-    )?.use { cursor ->
-        while (cursor.moveToNext()) {
-            if (cursor.getString(1) == filename) {
-                return DocumentsContract.buildDocumentUriUsingTree(rootUri, cursor.getString(0))
-            }
-        }
-    }
-    null
+    val tmaDocId = cr.findChild(rootUri, rootDocId, DOWNLOAD_ROOT, dirOnly = true)
+    val dirDocId = tmaDocId?.let { cr.findChild(rootUri, it, artist, dirOnly = true) ?: it }
+    dirDocId?.let { cr.findChild(rootUri, it, filename) }
+        ?.let { DocumentsContract.buildDocumentUriUsingTree(rootUri, it) }
 } catch (e: Exception) {
     Timber.e(e)
     null
@@ -209,27 +182,9 @@ class PartialDownload(
 private const val PART_SUFFIX = ".part"
 
 /** Finds a child document of [dirUri] named [name], or null. */
-private fun ContentResolver.findChildFile(rootUri: Uri, dirUri: Uri, name: String): Uri? {
-    val dirDocId = DocumentsContract.getDocumentId(dirUri)
-    val childrenUri = DocumentsContract.buildChildDocumentsUriUsingTree(rootUri, dirDocId)
-    query(
-        childrenUri,
-        arrayOf(
-            DocumentsContract.Document.COLUMN_DOCUMENT_ID,
-            DocumentsContract.Document.COLUMN_DISPLAY_NAME,
-        ),
-        null,
-        null,
-        null,
-    )?.use { cursor ->
-        while (cursor.moveToNext()) {
-            if (cursor.getString(1) == name) {
-                return DocumentsContract.buildDocumentUriUsingTree(rootUri, cursor.getString(0))
-            }
-        }
-    }
-    return null
-}
+private fun ContentResolver.findChildFile(rootUri: Uri, dirUri: Uri, name: String): Uri? =
+    findChild(rootUri, DocumentsContract.getDocumentId(dirUri), name)
+        ?.let { DocumentsContract.buildDocumentUriUsingTree(rootUri, it) }
 
 /**
  * Creates a `<filename>.part` document for [module] in its download directory (replacing a stale
@@ -241,7 +196,7 @@ fun Context.createPartialDownload(
     module: Module
 ): PartialDownload? = try {
     val dirUri = getDownloadDir(rootUri, module) ?: return null
-    val finalName = module.url.substringAfterLast('#')
+    val finalName = module.downloadFilename
     val partName = finalName + PART_SUFFIX
     val cr = contentResolver
 

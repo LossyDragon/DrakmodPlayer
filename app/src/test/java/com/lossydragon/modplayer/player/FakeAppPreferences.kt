@@ -30,7 +30,7 @@ class FakeAppPreferences(context: Context) : AppPreferences(context) {
     override suspend fun getQueueState(): QueueState? {
         val json = savedQueueJson ?: return null
         val state = savedState ?: PlaybackState(0, 0L, 0, false)
-        return QueueState(state.index, json, state.positionMs, state.repeat, state.shuffle)
+        return QueueState(json, state)
     }
 
     override suspend fun clearQueueState() {

@@ -7,11 +7,11 @@ import androidx.compose.ui.platform.*
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.tooling.preview.*
 import androidx.compose.ui.unit.*
-import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.alorma.compose.settings.ui.expressive.SettingsMenuLink
 import com.alorma.compose.settings.ui.expressive.SettingsSwitch
 import com.lossydragon.modplayer.R
-import com.lossydragon.modplayer.db.AppPreferences
+import com.lossydragon.modplayer.ui.components.collectPref
+import com.lossydragon.modplayer.ui.components.rememberAppPreferences
 import com.lossydragon.modplayer.ui.screens.preferences.components.PreferenceItem
 import com.lossydragon.modplayer.ui.screens.preferences.components.PreferenceSection
 import com.lossydragon.modplayer.ui.screens.preferences.components.SingleChoiceAlertDialog
@@ -19,7 +19,6 @@ import com.lossydragon.modplayer.ui.theme.AppTheme
 import com.lossydragon.native.RenderingBackend
 import kotlinx.collections.immutable.persistentListOf
 import kotlinx.coroutines.launch
-import org.koin.compose.koinInject
 
 private val backendOptions = persistentListOf(
     PreferenceItem(
@@ -40,18 +39,13 @@ fun PreferencePlayer(
     colors: ListItemColors
 ) {
     val scope = rememberCoroutineScope()
-    val prefs = if (LocalView.current.isInEditMode) {
-        AppPreferences(LocalContext.current)
-    } else {
-        koinInject<AppPreferences>()
-    }
+    val prefs = rememberAppPreferences()
 
-    val autoResume by prefs.getAutoResumeFlow()
-        .collectAsStateWithLifecycle(initialValue = false)
-    val rowNumbers by prefs.getRowNumbersFlow()
-        .collectAsStateWithLifecycle(initialValue = false)
-    val renderingBackend by prefs.getRenderingBackendFlow()
-        .collectAsStateWithLifecycle(initialValue = RenderingBackend.OPENMPT)
+    val autoResume by prefs.collectPref(false) { getAutoResumeFlow() }
+    val rowNumbers by prefs.collectPref(false) { getRowNumbersFlow() }
+    val renderingBackend by prefs.collectPref(RenderingBackend.OPENMPT) {
+        getRenderingBackendFlow()
+    }
 
     var isBackendShowing by remember { mutableStateOf(false) }
     if (isBackendShowing) {
