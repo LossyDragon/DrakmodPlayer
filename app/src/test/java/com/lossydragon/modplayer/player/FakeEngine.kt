@@ -125,7 +125,11 @@ class FakeEngine : Engine {
         playingFlow.value = false
     }
 
-    override fun setSequence(index: Int): Boolean = false
+    override fun setSequence(index: Int): Boolean {
+        calls += "sequence:$index"
+        currentSequenceFlow.value = index
+        return true
+    }
 
     override fun setRepeatOne(value: Boolean) {
         repeatOneRequested = value

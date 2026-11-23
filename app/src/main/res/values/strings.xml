@@ -5,6 +5,7 @@
     <string name="audio_stats_text">API: %1$s\nSharing mode: %2$s\nPerformance mode: %3$s\nFormat: %4$s\nSample rate: %5$d Hz\nFrames per burst: %6$d\nBuffer size: %7$d / %8$d frames\nXRuns: %9$d\nUnderruns: %10$d</string>
     <string name="auto_file_browser">File Browser</string>
     <string name="auto_home">Home</string>
+    <string name="auto_next_subsong">Next subsong</string>
     <string name="auto_no_playlists">No playlists yet</string>
     <string name="auto_play_all">Play all</string>
     <string name="auto_playlists">Playlists</string>

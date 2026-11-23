@@ -158,6 +158,12 @@ class ModPlayer(
     /** Switches to sequence [index] of the loaded module. */
     fun setSequence(index: Int) = engine.post { engine.setSequence(index) }
 
+    /** Switches to the next sequence of the loaded module, wrapping to the first. */
+    fun nextSequence() {
+        val count = engine.modVarsFlow.value.seqData.size
+        if (count > 1) setSequence((engine.currentSequenceFlow.value + 1) % count)
+    }
+
     /** Loads [files] into the queue and starts playback at [startAt]. */
     fun loadQueue(
         files: List<ModuleEntity>,
@@ -393,9 +399,10 @@ class ModPlayer(
         startPositionMs: Long
     ): ListenableFuture<*> {
         val files = mediaItems.toModules()
-        if (files.isEmpty()) {
+        if (mediaItems.isEmpty()) {
             clearQueue()
-        } else {
+        } else if (files.isNotEmpty()) {
+            // Items that all lack a URI are a request we could not resolve, not a clear.
             loadQueue(
                 files = files,
                 startAt = startIndex.coerceIn(0, files.lastIndex),

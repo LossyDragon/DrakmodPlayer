@@ -623,6 +623,18 @@ class ModPlayerTest {
         await("repeat off") { !engine.repeatOneRequested }
     }
 
+    @Test
+    fun `setting items that cannot be resolved keeps the queue`() {
+        loadQueue(startAt = 1)
+        awaitLoads(1)
+
+        player.setMediaItems(listOf(MediaItem.Builder().setMediaId("mystery").build()))
+        idle()
+        assertEquals(3, player.mediaItemCount)
+        assertEquals(1, player.currentMediaItemIndex)
+        assertEquals(0, prefs.clearCount)
+    }
+
     // --- restore ------------------------------------------------------------------------
 
     @Test

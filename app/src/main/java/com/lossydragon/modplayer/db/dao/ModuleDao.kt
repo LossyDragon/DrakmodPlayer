@@ -48,6 +48,10 @@ interface ModuleDao {
     @Query("SELECT COUNT(*) FROM modules")
     suspend fun count(): Int
 
+    /** Emits after every write to the table; the value means nothing. */
+    @Query("SELECT COUNT(*) FROM modules")
+    fun changes(): Flow<Int>
+
     @Query("SELECT EXISTS(SELECT 1 FROM modules WHERE filePath = :path)")
     suspend fun exists(path: String): Boolean
 

@@ -49,6 +49,21 @@ abstract class PlaylistDao {
     @Query("SELECT * FROM playlist_entries WHERE name LIKE '%' || :query || '%' ORDER BY name")
     abstract suspend fun searchByName(query: String): List<PlaylistEntryEntity>
 
+    @Query("SELECT * FROM playlists WHERE id = :id")
+    abstract suspend fun getPlaylist(id: Long): PlaylistEntity?
+
+    @Query(
+        "SELECT * FROM playlists WHERE name = :name COLLATE NOCASE ORDER BY createdAt DESC LIMIT 1"
+    )
+    abstract suspend fun findPlaylistByName(name: String): PlaylistEntity?
+
+    @Query("SELECT * FROM playlist_entries WHERE uri = :uri LIMIT 1")
+    abstract suspend fun findEntryByUri(uri: String): PlaylistEntryEntity?
+
+    /** Emits after every write to the playlists or their entries; the value means nothing. */
+    @Query("SELECT (SELECT COUNT(*) FROM playlists) + (SELECT COUNT(*) FROM playlist_entries)")
+    abstract fun changes(): Flow<Int>
+
     /**
      * Appends [entries] after the current last position, skipping URIs already in the playlist
      * (and duplicates within [entries]). Incoming positions are ignored. Returns the count added.
