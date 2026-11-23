@@ -17,6 +17,7 @@ A spiritual successor to [cmatsuoka/xmp-android](https://github.com/cmatsuoka/xm
   <img src="docs/images/PlayerSearch.png" width="24%" alt="Search" />
 </p>
 
+#### (Light theme still a WIP. Dark theme is primarily targeted)
 ---
 ## Features
 
