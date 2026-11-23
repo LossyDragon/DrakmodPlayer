@@ -133,9 +133,8 @@ class PlayerViewModel(
                 status = status,
                 isShuffle = player.shuffleModeEnabled,
                 repeatMode = repeat,
-                hasNext =
-                    queue.isNotEmpty() &&
-                        (repeat != Player.REPEAT_MODE_OFF || index < queue.lastIndex),
+                hasNext = queue.isNotEmpty() &&
+                    (repeat != Player.REPEAT_MODE_OFF || index < queue.lastIndex),
                 hasPrevious = queue.isNotEmpty() && (repeat != Player.REPEAT_MODE_OFF || index > 0),
                 errorMessage = player.playerError?.message,
             )

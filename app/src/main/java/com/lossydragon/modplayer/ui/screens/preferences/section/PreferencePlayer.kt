@@ -79,9 +79,7 @@ fun PreferencePlayer(
                         RenderingBackend.LIBXMP -> R.string.pref_backend_libxmp
                         else -> R.string.pref_backend_invalid
                     }
-                    Text(
-                        text = stringResource(id)
-                    )
+                    Text(text = stringResource(id))
                 },
                 colors = colors,
                 shapes = ListItemDefaults.segmentedShapes(0, 3),

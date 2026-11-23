@@ -138,9 +138,7 @@ fun DownloadSearchScreen(
                     singleLine = true,
                     label = { Text(text = stringResource(R.string.search)) },
                     keyboardOptions = KeyboardOptions(imeAction = ImeAction.Search),
-                    keyboardActions = KeyboardActions(
-                        onSearch = { submit() }
-                    ),
+                    keyboardActions = KeyboardActions(onSearch = { submit() }),
                 )
 
                 Spacer(modifier = Modifier.height(24.dp))

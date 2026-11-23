@@ -388,9 +388,7 @@ private fun PlaylistEntriesScreen(
             lazyListState = lazyListState,
             onMove = { from, to ->
                 onReorderEntry(from.index, to.index)
-                hapticFeedback.performHapticFeedback(
-                    HapticFeedbackType.SegmentFrequentTick
-                )
+                hapticFeedback.performHapticFeedback(HapticFeedbackType.SegmentFrequentTick)
             }
         )
         val keys = remember(state.entries) { state.entries.stableKeys() }

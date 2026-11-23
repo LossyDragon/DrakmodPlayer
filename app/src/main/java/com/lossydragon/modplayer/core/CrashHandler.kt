@@ -86,11 +86,10 @@ class CrashHandler(
                 )
                 val selection = "${MediaStore.Downloads.RELATIVE_PATH} LIKE ? AND " +
                     "${MediaStore.Downloads.DISPLAY_NAME} LIKE ?"
-                val selectionArgs =
-                    arrayOf(
-                        "%${Constants.DOWNLOADS_FOLDER}%",
-                        "${Constants.CRASH_FILE_PREFIX}%.txt"
-                    )
+                val selectionArgs = arrayOf(
+                    "%${Constants.DOWNLOADS_FOLDER}%",
+                    "${Constants.CRASH_FILE_PREFIX}%.txt"
+                )
                 val sortOrder = "${MediaStore.Downloads.DATE_MODIFIED} DESC"
 
                 resolver.query(

@@ -227,9 +227,7 @@ private fun Preview() {
             ModuleDetailLayout(
                 moduleResult = ModuleResult(
                     sponsor = Sponsor(
-                        details = SponsorDetails(
-                            text = "Some Sponsor Text"
-                        )
+                        details = SponsorDetails(text = "Some Sponsor Text")
                     ),
                     module = Module(
                         filename = "tomorrow_by_kh.mod",

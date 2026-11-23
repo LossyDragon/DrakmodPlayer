@@ -21,10 +21,9 @@ data class DownloadHistoryItem(
 
 class DownloadHistoryRepository(private val dao: DownloadHistoryDao) {
 
-    fun getAllFlow(): Flow<List<DownloadHistoryItem>> = dao.getAllFlow(
-        DownloadHistoryDao.HISTORY_LIMIT
-    )
-        .map { entities -> entities.map { it.toItem() } }
+    fun getAllFlow(): Flow<List<DownloadHistoryItem>> =
+        dao.getAllFlow(DownloadHistoryDao.HISTORY_LIMIT)
+            .map { entities -> entities.map { it.toItem() } }
 
     suspend fun add(module: Module) =
         dao.upsertAndPrune(historyEntityOf(module), DownloadHistoryDao.HISTORY_LIMIT)

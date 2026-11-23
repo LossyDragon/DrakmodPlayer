@@ -158,7 +158,6 @@ fun PreferenceInterface(
                             text = stringResource(R.string.hex_code, hexCode),
                             fontSize = 16.sp,
                             fontWeight = FontWeight.Bold,
-
                         )
                     }
 
