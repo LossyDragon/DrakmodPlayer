@@ -50,11 +50,9 @@ android {
     defaultConfig {
         applicationId = "com.lossydragon.modplayer"
 
-        /*
-         * https://apilevels.com/
-         */
-        minSdk = 26 // Oreo
-        targetSdk = 37 // Cinnamon Bun (terrible codename).
+        /* https://apilevels.com/ */
+        minSdk = 26
+        targetSdk = 37
 
         versionCode = 22
         versionName = "1.0"
@@ -136,7 +134,7 @@ dependencies {
     implementation(libs.timber)
 
     testImplementation(libs.junit.jupiter.api)
-    testImplementation(libs.junit4) // Robolectric has no Jupiter runner
+    testImplementation(libs.junit4)
     testImplementation(libs.robolectric)
     testRuntimeOnly(libs.junit.jupiter.engine)
     testRuntimeOnly(libs.junit.platform.launcher)

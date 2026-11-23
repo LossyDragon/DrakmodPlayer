@@ -8,6 +8,16 @@ A spiritual successor to [cmatsuoka/xmp-android](https://github.com/cmatsuoka/xm
 [![Build Signed Release APK](https://github.com/LossyDragon/DragonModPlayer/actions/workflows/release-build.yml/badge.svg?branch=master)](https://github.com/LossyDragon/DragonModPlayer/actions/workflows/release-build.yml)
 
 ---
+## Screenshots
+
+<p align="center">
+  <img src="docs/images/Home.png" width="24%" alt="File browser" />
+  <img src="docs/images/PlayerChannel.png" width="24%" alt="Player, channel view" />
+  <img src="docs/images/PlayerPattern.png" width="24%" alt="Player, pattern view" />
+  <img src="docs/images/PlayerSearch.png" width="24%" alt="Search" />
+</p>
+
+---
 ## Features
 
 *UI and Features are still in a Work in Progress, but the app is in a usable state.*
