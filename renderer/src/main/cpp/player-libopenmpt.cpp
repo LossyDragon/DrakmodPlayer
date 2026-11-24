@@ -49,7 +49,7 @@ struct OpenMptFrame {
   int order = 0, pattern = 0, row = 0, numRows = 0, speed = 0, bpm = 0;
   int timeMs = 0, totalMs = 0, channels = 0, playingChannels = 0, sequence = 0, loopCount = 0;
 };
-static SeqLock<OpenMptFrame> g_frame;
+static DelayLine<OpenMptFrame, SNAPSHOT_SLOTS> g_frame;
 
 // Per-channel play state for the visualiser. Only the render callback may read it from the
 // module (libopenmpt is not thread-safe), so it is published the same way as the frame.
@@ -58,7 +58,7 @@ struct OpenMptChannels {
   std::array<bool, MAX_CHANNELS> ok{};
   std::array<openmpt_module_current_channel_state, MAX_CHANNELS> ch{};
 };
-static SeqLock<OpenMptChannels> g_channels;
+static DelayLine<OpenMptChannels, SNAPSHOT_SLOTS> g_channels;
 static OpenMptChannels g_channels_scratch; // audio thread only
 
 struct SubsongInfo {
@@ -202,15 +202,15 @@ static int renderOpenMpt(void* audioData, int32_t numFrames, int32_t numChannels
   f.playingChannels = openmpt_module_get_current_playing_channels(mod);
   f.sequence = state.selected_subsong.load(std::memory_order_relaxed);
   f.loopCount = state.loop_count;
-  g_frame.update([&](OpenMptFrame& d) { d = f; });
-
   state.frames_since_channels += numFrames;
   if (state.frames_since_channels >= rate / CHANNEL_SNAPSHOT_HZ) {
     state.frames_since_channels = 0;
+    const int64_t at = audio_render_frame() + numFrames;
+    g_frame.push(at, [&](OpenMptFrame& d) { d = f; });
     OpenMptChannels& c = g_channels_scratch;
     c.count = std::min<int>(MAX_CHANNELS, f.channels);
     for (int i = 0; i < c.count; i++) c.ok[i] = openmpt_module_get_current_channel_state(mod, i, &c.ch[i]) != 0;
-    g_channels.update([&](OpenMptChannels& d) { d = c; });
+    g_channels.push(at, [&](OpenMptChannels& d) { d = c; });
   }
 
   return ended ? -1 : 0;
@@ -318,6 +318,7 @@ jboolean openmpt_setSequence(JNIEnv* env, jint seq) {
   state.selected_subsong = seq;
   state.duration = openmpt_module_get_duration_seconds(state.mod);
   setRestartPoint(state, state.mod);
+  resetSnapshots();
   clear_module_ended();
   return JNI_TRUE;
 }
@@ -479,6 +480,7 @@ jint openmpt_seek(JNIEnv* env, jint time) {
   std::lock_guard<std::mutex> lock(state.mutex);
   if (!state.mod) return -1;
   openmpt_module_set_position_seconds(state.mod, time / 1000.0);
+  resetSnapshots(); // show the new position at once instead of the buffered tail
   return 0;
 }
 
@@ -600,7 +602,7 @@ void openmpt_getChannelData(JNIEnv* env, jobject channelInfo) {
     std::lock_guard<std::mutex> lock(state.mutex);
     if (!state.mod) return;
     static thread_local OpenMptChannels snap; // 3.6 KB; keep it off the stack of UI threads
-    if (!g_channels.read(snap)) return;
+    if (!g_channels.read(audio_presented_frame(), snap)) return;
     channels = snap.count;
 
     for (int i = 0; i < channels; i++) {
@@ -646,7 +648,7 @@ void openmpt_getChannelData(JNIEnv* env, jobject channelInfo) {
 
 void openmpt_getFrameInfo(JNIEnv* env, jobject frameInfo) {
   OpenMptFrame f;
-  if (!g_frame.read(f) || !f.valid) return;
+  if (!g_frame.read(audio_presented_frame(), f) || !f.valid) return;
   env->SetIntField(frameInfo, g_frameInfo.pos, f.order);
   env->SetIntField(frameInfo, g_frameInfo.pattern, f.pattern);
   env->SetIntField(frameInfo, g_frameInfo.row, f.row);
@@ -803,7 +805,7 @@ void openmpt_getSampleData(JNIEnv* env, jboolean trigger, jint ins, jint key, ji
     if (!state.mod || chn < 0 || chn >= MAX_CHANNELS) return;
 
     static thread_local OpenMptChannels snap;
-    if (!g_channels.read(snap) || chn >= snap.count || !snap.ok[chn]) return;
+    if (!g_channels.read(audio_presented_frame(), snap) || chn >= snap.count || !snap.ok[chn]) return;
     const openmpt_module_current_channel_state& channel = snap.ch[chn];
     if (channel.sample <= 0 || channel.increment == 0) return;
 

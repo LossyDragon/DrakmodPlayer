@@ -68,6 +68,57 @@ struct SeqLock {
   T data{};
 };
 
+// At most SNAPSHOT_HZ pushes a second, so the history spans ~2 s: more than the largest buffer.
+constexpr int SNAPSHOT_HZ = 60;
+constexpr size_t SNAPSHOT_SLOTS = 128;
+
+// Single-writer history of snapshots keyed by the stream frame they were rendered at, so a
+// reader gets the one being heard now rather than the one just mixed.
+template <typename T, size_t N>
+struct DelayLine {
+  template <typename F>
+  void push(int64_t frame, F&& fill) {
+    const uint64_t h = head.load(std::memory_order_relaxed);
+    Slot& s = slots[h % N];
+    s.frame.store(frame, std::memory_order_relaxed);
+    fill(s.data);
+    head.store(h + 1, std::memory_order_seq_cst);
+  }
+
+  // Writer must be drained.
+  void reset() {
+    head.store(0, std::memory_order_seq_cst);
+  }
+
+  // Newest snapshot at or before `frame`; the oldest one when all are later (start, seek).
+  bool read(int64_t frame, T& out) const {
+    for (int i = 0; i < 8; i++) {
+      const uint64_t h = head.load(std::memory_order_seq_cst);
+      if (h == 0) return false;
+      // The slot at h % N may be mid-write, so it is never a candidate.
+      const uint64_t oldest = h >= N ? h - N + 1 : 0;
+      uint64_t pick = oldest;
+      for (uint64_t j = h; j-- > oldest;) {
+        if (slots[j % N].frame.load(std::memory_order_relaxed) <= frame) {
+          pick = j;
+          break;
+        }
+      }
+      out = slots[pick % N].data;
+      std::atomic_thread_fence(std::memory_order_acquire);
+      if (head.load(std::memory_order_seq_cst) < pick + N) return true;
+    }
+    return false;
+  }
+
+  struct Slot {
+    std::atomic<int64_t> frame{0};
+    T data{};
+  };
+  std::atomic<uint64_t> head{0};
+  std::array<Slot, N> slots{};
+};
+
 // Silences the callback and drains an in-flight render so engine state can be mutated.
 // Must be taken BEFORE any mutex the render callback can block on, or the drain never completes.
 struct RenderPause {

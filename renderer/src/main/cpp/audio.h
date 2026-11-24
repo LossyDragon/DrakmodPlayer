@@ -55,6 +55,10 @@ int pause_render(void); // silence + drain; returns previous playing state for r
 
 void resume_render(int was_playing); // restores playing without touching module_ended
 
+int64_t audio_render_frame(void); // inside the render callback only: stream frame of the buffer's first sample
+
+int64_t audio_presented_frame(void); // stream frame reaching the output now; -1 without a stream
+
 #ifdef __cplusplus
 }
 #endif

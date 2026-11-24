@@ -39,6 +39,21 @@ static int actual_channels = 2;
 static int effective_format_flags = 0;
 static int requested_buffer_ms = 0;
 
+// audio thread only
+static int64_t render_frame = 0;
+
+// Output position anchor, extrapolated between refreshes; under mutex.
+constexpr int64_t ANCHOR_REFRESH_NS = 50'000'000;
+static int64_t anchor_frame = -1;
+static int64_t anchor_ns = 0;
+static int64_t anchor_taken_ns = 0;
+
+static int64_t now_ns() {
+  timespec t{};
+  clock_gettime(CLOCK_MONOTONIC, &t);
+  return t.tv_sec * 1000000000LL + t.tv_nsec;
+}
+
 void note_underrun() {
   underrun_count.fetch_add(1, std::memory_order_relaxed);
 }
@@ -73,6 +88,7 @@ public:
 
     AudioRenderCallback callback = render_callback.load(std::memory_order_acquire);
     if (playing.load(std::memory_order_seq_cst) && callback != nullptr) {
+      render_frame = audioStream->getFramesWritten();
       timespec t0{};
       clock_gettime(CLOCK_MONOTONIC, &t0);
       int ret = callback(audioData, numFrames, numChannels, bytesPerSample);
@@ -130,6 +146,37 @@ int pause_render() {
 
 void resume_render(int was_playing) {
   if (was_playing) playing.store(true, std::memory_order_seq_cst);
+}
+
+int64_t audio_render_frame() {
+  return render_frame;
+}
+
+int64_t audio_presented_frame() {
+  const int64_t now = now_ns();
+  lock();
+  if (!audio_stream) {
+    unlock();
+    return -1;
+  }
+  const int64_t written = audio_stream->getFramesWritten();
+  if (anchor_frame < 0 || now - anchor_taken_ns > ANCHOR_REFRESH_NS) {
+    int64_t frame = 0, time = 0;
+    if (audio_stream->getTimestamp(CLOCK_MONOTONIC, &frame, &time) == oboe::Result::OK) {
+      anchor_frame = frame;
+      anchor_ns = time;
+    } else {
+      // No timestamps (OpenSL ES, or just started): assume a full buffer ahead of the output.
+      anchor_frame = written - audio_stream->getBufferSizeInFrames();
+      if (anchor_frame < 0) anchor_frame = 0;
+      anchor_ns = now;
+    }
+    anchor_taken_ns = now;
+  }
+  int64_t frame = anchor_frame + (now - anchor_ns) * audio_stream->getSampleRate() / 1000000000LL;
+  unlock();
+  if (frame > written) frame = written;
+  return frame < 0 ? 0 : frame;
 }
 
 int has_module_ended() {
@@ -215,6 +262,7 @@ static int oboe_open(int sample_rate, int performance_mode, int channel_count, i
 
   lock();
   audio_stream = stream;
+  anchor_frame = -1;
   unlock();
 
   const char* sharingMode = (stream->getSharingMode() == oboe::SharingMode::Exclusive) ? "Exclusive" : "Shared";

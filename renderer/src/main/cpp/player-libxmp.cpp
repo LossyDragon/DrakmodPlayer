@@ -35,12 +35,14 @@ static std::atomic<xmp_context> g_render_ctx(nullptr);
 // passed as the loop arg to xmp_play_buffer: 0 = loop forever (repeat-one), 1 = play once
 static std::atomic<int> g_loop_flag(1);
 
-// Published by the render callback after every xmp_play_buffer; `valid` is false while stopped.
+// Published by the render callback, tagged with the stream frame it ends at; empty while stopped.
 struct FrameSnapshot {
   bool valid = false;
   xmp_frame_info fi{};
 };
-static SeqLock<FrameSnapshot> g_frame;
+static DelayLine<FrameSnapshot, SNAPSHOT_SLOTS> g_frame;
+static std::atomic<int> g_snapshot_interval(0); // frames between snapshots
+static int g_frames_since_snapshot = 0;         // audio thread only
 
 static xmp_subinstrument* getSubinstrument(const xmp_module_info& mi, int ins, int key) {
   if (!mi.mod || ins < 0 || ins >= mi.mod->ins || key < 0 || key >= XMP_MAX_KEYS) return nullptr;
@@ -111,10 +113,14 @@ static int render_xmp(void* audioData, int32_t numFrames, int32_t numChannels, i
     return 0;
   }
   int ret = xmp_play_buffer(ctx, audioData, numBytes, g_loop_flag.load(std::memory_order_relaxed));
-  g_frame.update([&](FrameSnapshot& s) {
-    s.valid = true;
-    xmp_get_frame_info(ctx, &s.fi);
-  });
+  g_frames_since_snapshot += numFrames;
+  if (g_frames_since_snapshot >= g_snapshot_interval.load(std::memory_order_relaxed)) {
+    g_frames_since_snapshot = 0;
+    g_frame.push(audio_render_frame() + numFrames, [&](FrameSnapshot& s) {
+      s.valid = true;
+      xmp_get_frame_info(ctx, &s.fi);
+    });
+  }
   // libxmp reports end of module as -XMP_END; any error also ends playback
   return ret < 0 ? -1 : 0;
 }
@@ -170,6 +176,7 @@ jboolean xmp_init(JNIEnv* env, jint rate, jint ms, jint mode, jint channels, jin
 
   state.ctx = ctx;
   state.actual_rate = actual_rate;
+  g_snapshot_interval.store(actual_rate / SNAPSHOT_HZ, std::memory_order_relaxed);
   g_render_ctx.store(ctx, std::memory_order_release);
   set_render_callback(render_xmp);
 
@@ -198,6 +205,7 @@ jboolean xmp_setSequence(JNIEnv* env, jint seq) {
   state.sequence = seq;
   xmp_set_position(state.ctx, mi.seq_data[seq].entry_point);
   xmp_play_buffer(state.ctx, nullptr, 0, 0);
+  g_frame.reset();
   clear_module_ended();
 
   return JNI_TRUE;
@@ -388,6 +396,7 @@ jint xmp_seek(JNIEnv* env, jint time) {
   RenderPause pause;
   std::unique_lock<std::mutex> lock = state.lock();
   if (!state.ctx) return -1;
+  g_frame.reset(); // show the new position at once instead of the buffered tail
   return xmp_seek_time(state.ctx, time);
 }
 
@@ -491,7 +500,7 @@ void xmp_getChannelData(JNIEnv* env, jobject channelInfo) {
     if (!state.initialized || !state.mod_is_loaded || !state.playing || !state.mi.mod) return;
 
     static thread_local FrameSnapshot snap; // 1.6 KB; keep it off the stack of UI threads
-    if (!g_frame.read(snap) || !snap.valid) return;
+    if (!g_frame.read(audio_presented_frame(), snap) || !snap.valid) return;
 
     const xmp_module_info& mi = state.mi;
     const xmp_frame_info& fi = snap.fi;
@@ -551,7 +560,7 @@ void xmp_getChannelData(JNIEnv* env, jobject channelInfo) {
 
 void xmp_getFrameInfo(JNIEnv* env, jobject frameInfo) {
   static thread_local FrameSnapshot snap;
-  if (!g_frame.read(snap) || !snap.valid) return;
+  if (!g_frame.read(audio_presented_frame(), snap) || !snap.valid) return;
   const xmp_frame_info& fi = snap.fi;
 
   env->SetIntField(frameInfo, g_frameInfo.pos, fi.pos);

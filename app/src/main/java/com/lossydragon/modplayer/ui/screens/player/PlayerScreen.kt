@@ -330,7 +330,13 @@ private fun PlayerScreenContent(
 
     // Not delegated: read only inside PatternView's draw lambda, and only redrawn per row.
     val frame = frameInfo.collectAsStateWithLifecycle()
-    val row = remember(frame) { derivedStateOf { frame.value.row } }
+    // Holds the last row while the next pattern's data is still loading.
+    val row = remember(frame, patternData) {
+        derivedStateOf {
+            val fi = frame.value
+            if (fi.pattern == patternData.patternIndex) fi.row else patternData.numRows - 1
+        }
+    }
 
     Scaffold(
         modifier = modifier,
