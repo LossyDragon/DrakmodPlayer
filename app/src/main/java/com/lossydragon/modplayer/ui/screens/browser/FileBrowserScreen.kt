@@ -13,7 +13,6 @@ import androidx.compose.material3.*
 import androidx.compose.material3.pulltorefresh.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.*
-import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.*
 import androidx.compose.ui.input.nestedscroll.*
 import androidx.compose.ui.platform.*
@@ -39,8 +38,6 @@ import com.lossydragon.modplayer.util.asString
 import kotlinx.collections.immutable.ImmutableList
 import kotlinx.collections.immutable.persistentListOf
 import kotlinx.collections.immutable.toImmutableList
-import kotlinx.coroutines.flow.distinctUntilChanged
-import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.launch
 
 @Composable
@@ -57,9 +54,8 @@ fun FileBrowserScreen(
     val scope = rememberCoroutineScope()
 
     val browserState by browserViewModel.state.collectAsStateWithLifecycle()
-    val repeatMode by remember(playerViewModel) {
-        playerViewModel.state.map { it.repeatMode }.distinctUntilChanged()
-    }.collectAsStateWithLifecycle(playerViewModel.state.value.repeatMode)
+    val playerState = playerViewModel.state.collectAsStateWithLifecycle()
+    val repeatMode by remember { derivedStateOf { playerState.value.repeatMode } }
     val playlists by browserViewModel.playlists.collectAsStateWithLifecycle()
 
     // Pending "add to playlist" target: a file ([ModuleEntity]) or a folder ([FileItem]).
@@ -161,7 +157,7 @@ fun FileBrowserScreen(
     )
 }
 
-@OptIn(ExperimentalMaterial3Api::class, ExperimentalMaterial3ExpressiveApi::class)
+@OptIn(ExperimentalMaterial3Api::class)
 @Composable
 private fun FileBrowserScreenContent(
     modifier: Modifier = Modifier,
@@ -415,7 +411,6 @@ private fun QuickPickHint(text: String) {
     )
 }
 
-@OptIn(ExperimentalMaterial3ExpressiveApi::class)
 @Composable
 private fun PlaylistPickerDialog(
     playlists: ImmutableList<PlaylistEntity>,

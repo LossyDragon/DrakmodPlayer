@@ -26,7 +26,6 @@ import kotlin.math.abs
 import sh.calvin.reorderable.DragGestureDetector
 import sh.calvin.reorderable.ReorderableCollectionItemScope
 
-@OptIn(ExperimentalMaterial3ExpressiveApi::class)
 @Composable
 internal fun ReorderableCollectionItemScope.PlaylistEntryItem(
     index: Int,

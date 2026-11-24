@@ -16,7 +16,7 @@ constexpr const char* TAG = "Drakplayer JNI";
 #define LOG_WARN(...) __android_log_print(ANDROID_LOG_WARN, TAG, __VA_ARGS__)
 #define LOG_ERROR(...) __android_log_print(ANDROID_LOG_ERROR, TAG, __VA_ARGS__)
 
-#define METHOD(type, name) JNIEXPORT type JNICALL Java_com_lossydragon_native_Player_##name
+#define METHOD(type, name) JNIEXPORT type JNICALL Java_com_lossydragon_renderer_Player_##name
 
 #define BACKEND_OPENMPT 0
 #define BACKEND_LIBXMP 1

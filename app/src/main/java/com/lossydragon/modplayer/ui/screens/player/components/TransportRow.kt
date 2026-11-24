@@ -14,7 +14,6 @@ import com.lossydragon.modplayer.R
 import com.lossydragon.modplayer.player.PlaybackStatus
 import com.lossydragon.modplayer.ui.theme.AppTheme
 
-@OptIn(ExperimentalMaterial3ExpressiveApi::class)
 @Composable
 internal fun TransportRow(
     status: PlaybackStatus,

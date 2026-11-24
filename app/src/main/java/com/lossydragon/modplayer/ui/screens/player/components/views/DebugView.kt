@@ -15,10 +15,10 @@ import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.lossydragon.modplayer.player.PlaybackStatus
 import com.lossydragon.modplayer.player.PlayerUiState
 import com.lossydragon.modplayer.ui.theme.AppTheme
-import com.lossydragon.native.Player
-import com.lossydragon.native.model.ChannelInfo
-import com.lossydragon.native.model.FrameInfo
-import com.lossydragon.native.model.ModVars
+import com.lossydragon.renderer.Player
+import com.lossydragon.renderer.model.ChannelInfo
+import com.lossydragon.renderer.model.FrameInfo
+import com.lossydragon.renderer.model.ModVars
 import kotlin.time.Duration.Companion.milliseconds
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.delay

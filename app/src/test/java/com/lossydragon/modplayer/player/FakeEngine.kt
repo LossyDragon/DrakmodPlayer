@@ -2,9 +2,9 @@ package com.lossydragon.modplayer.player
 
 import com.lossydragon.modplayer.db.entity.ModuleEntity
 import com.lossydragon.modplayer.player.model.PatternData
-import com.lossydragon.native.model.AudioStats
-import com.lossydragon.native.model.FrameInfo
-import com.lossydragon.native.model.ModVars
+import com.lossydragon.renderer.model.AudioStats
+import com.lossydragon.renderer.model.FrameInfo
+import com.lossydragon.renderer.model.ModVars
 import java.util.Collections
 import java.util.concurrent.Executors
 import kotlinx.coroutines.flow.MutableSharedFlow

@@ -22,8 +22,8 @@ import androidx.compose.ui.tooling.preview.datasource.*
 import androidx.compose.ui.unit.*
 import com.lossydragon.modplayer.R
 import com.lossydragon.modplayer.ui.theme.AppTheme
-import com.lossydragon.native.Player
-import com.lossydragon.native.model.ChannelInfo
+import com.lossydragon.renderer.Player
+import com.lossydragon.renderer.model.ChannelInfo
 import kotlin.time.Duration.Companion.milliseconds
 import kotlinx.collections.immutable.ImmutableList
 import kotlinx.collections.immutable.toPersistentList

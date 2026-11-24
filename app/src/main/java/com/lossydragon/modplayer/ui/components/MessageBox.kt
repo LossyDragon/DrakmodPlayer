@@ -15,7 +15,6 @@ import androidx.compose.ui.unit.*
 import com.lossydragon.modplayer.R
 import com.lossydragon.modplayer.ui.theme.AppTheme
 
-@OptIn(ExperimentalMaterial3ExpressiveApi::class)
 @Composable
 fun MessageBox(
     text: String,

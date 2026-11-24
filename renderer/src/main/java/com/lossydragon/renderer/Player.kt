@@ -1,13 +1,13 @@
-package com.lossydragon.native
+package com.lossydragon.renderer
 
 import android.content.Context
 import android.net.Uri
 import android.util.Log
-import com.lossydragon.native.model.AudioStats
-import com.lossydragon.native.model.ChannelInfo
-import com.lossydragon.native.model.FrameInfo
-import com.lossydragon.native.model.ModInfo
-import com.lossydragon.native.model.ModVars
+import com.lossydragon.renderer.model.AudioStats
+import com.lossydragon.renderer.model.ChannelInfo
+import com.lossydragon.renderer.model.FrameInfo
+import com.lossydragon.renderer.model.ModInfo
+import com.lossydragon.renderer.model.ModVars
 
 object Player {
 

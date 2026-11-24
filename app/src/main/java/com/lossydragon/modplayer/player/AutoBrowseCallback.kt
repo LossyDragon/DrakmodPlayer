@@ -343,7 +343,9 @@ class AutoBrowseCallback(
         request: MediaItem.RequestMetadata
     ): MediaItemsWithStartPosition {
         val extras = request.extras
+
         // The assistant's own parse of the query, when it made one.
+        @Suppress("DEPRECATION") // EXTRA_MEDIA_PLAYLIST: no replacement, still sent
         val terms = listOfNotNull(
             request.searchQuery,
             extras?.getString(MediaStore.EXTRA_MEDIA_PLAYLIST),

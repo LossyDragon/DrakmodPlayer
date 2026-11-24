@@ -1,0 +1,122 @@
+name: Build signed APK
+
+# Reusable: builds and signs the release APK and uploads it as an artifact. Called by
+# release-build.yml (rolling pre-release) and release.yml (full release).
+on:
+  workflow_call:
+    outputs:
+      version_code:
+        value: ${{ jobs.build.outputs.version_code }}
+      version_name:
+        value: ${{ jobs.build.outputs.version_name }}
+      artifact:
+        description: Name of the uploaded artifact holding the APK
+        value: signed-apk
+
+permissions:
+  contents: read
+
+jobs:
+  build:
+    name: Build signed release APK
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    outputs:
+      version_code: ${{ steps.version.outputs.version_code }}
+      version_name: ${{ steps.version.outputs.version_name }}
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          submodules: recursive
+
+      - name: Read version
+        id: version
+        run: |
+          set -euo pipefail
+          FILE="app/build.gradle.kts"
+          CODE=$(grep -E '^\s*versionCode\s*=' "$FILE" | head -n1 | sed -E 's/.*=\s*([0-9]+).*/\1/')
+          NAME=$(grep -E '^\s*versionName\s*=' "$FILE" | head -n1 | sed -E 's/.*=\s*"([^"]+)".*/\1/')
+          if [[ -z "$CODE" || -z "$NAME" ]]; then
+            echo "::error::Could not read versionCode/versionName from $FILE."
+            exit 1
+          fi
+          echo "Version: $NAME ($CODE)"
+          echo "version_code=$CODE" >> "$GITHUB_OUTPUT"
+          echo "version_name=$NAME" >> "$GITHUB_OUTPUT"
+
+      - name: Validate Gradle wrapper
+        uses: gradle/actions/wrapper-validation@v4
+
+      - name: Set up JDK 21
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: 21
+
+      - name: Set up Gradle
+        uses: gradle/actions/setup-gradle@v4
+        with:
+          cache-read-only: ${{ github.ref != 'refs/heads/master' }}
+
+      - name: Cache CMake build outputs
+        uses: actions/cache@v4
+        with:
+          path: renderer/.cxx
+          key: cmake-${{ runner.os }}-${{ hashFiles('renderer/src/main/cpp/**', 'renderer/build.gradle.kts') }}
+          restore-keys: cmake-${{ runner.os }}-
+
+      - name: Cache Android SDK build-cache
+        uses: actions/cache@v4
+        with:
+          path: ~/.android/build-cache
+          key: ${{ runner.os }}-android-${{ hashFiles('gradle/libs.versions.toml', 'gradle/wrapper/gradle-wrapper.properties') }}
+          restore-keys: |
+            ${{ runner.os }}-android-
+
+      - name: Decode keystore
+        env:
+          KEYSTORE_BASE64: ${{ secrets.KEYSTORE_BASE64 }}
+        run: |
+          if [[ -z "$KEYSTORE_BASE64" ]]; then
+            echo "::error::KEYSTORE_BASE64 secret is not set."
+            exit 1
+          fi
+          echo "::add-mask::$KEYSTORE_BASE64"
+          echo "$KEYSTORE_BASE64" | base64 --decode > "${{ runner.temp }}/release.jks"
+
+      # I'm a Windows user, okay!
+      - name: Make gradlew executable
+        run: chmod +x ./gradlew
+
+      - name: Build release APK
+        env:
+          ORG_GRADLE_PROJECT_modArchiveApiKey: ${{ secrets.MOD_ARCHIVE_API_KEY }}
+          RELEASE_KEYSTORE_PATH: ${{ runner.temp }}/release.jks
+          RELEASE_KEYSTORE_PASSWORD: ${{ secrets.KEYSTORE_PASSWORD }}
+          RELEASE_KEY_ALIAS: ${{ secrets.KEY_ALIAS }}
+          RELEASE_KEY_PASSWORD: ${{ secrets.KEY_PASSWORD }}
+        run: ./gradlew :app:packageRelease --build-cache --stacktrace
+
+      - name: Name the APK
+        env:
+          VERSION_CODE: ${{ steps.version.outputs.version_code }}
+          VERSION_NAME: ${{ steps.version.outputs.version_name }}
+        run: |
+          set -euo pipefail
+          shopt -s nullglob
+          APKS=(app/build/outputs/apk/release/*.apk)
+          if [[ ${#APKS[@]} -ne 1 ]]; then
+            echo "::error::Expected one release APK, found ${#APKS[@]}."
+            exit 1
+          fi
+          mkdir dist
+          cp "${APKS[0]}" "dist/DrakmodPlayer-${VERSION_NAME}-${VERSION_CODE}.apk"
+
+      - name: Upload APK
+        uses: actions/upload-artifact@v4
+        with:
+          name: signed-apk
+          path: dist/*.apk
+          if-no-files-found: error
+          retention-days: 30

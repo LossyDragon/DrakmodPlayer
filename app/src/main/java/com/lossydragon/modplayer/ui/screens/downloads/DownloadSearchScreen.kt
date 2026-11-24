@@ -26,7 +26,6 @@ import kotlinx.coroutines.launch
 
 private const val MIN_QUERY = 3
 
-@OptIn(ExperimentalMaterial3ExpressiveApi::class, ExperimentalMaterial3Api::class)
 @Composable
 fun DownloadSearchScreen(
     hasApiKey: Boolean,

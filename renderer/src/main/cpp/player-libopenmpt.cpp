@@ -721,7 +721,7 @@ void openmpt_getModVars(JNIEnv* env, jobject modVars) {
   env->SetIntField(modVars, g_modVars.gvl, 64);
   env->SetIntField(modVars, g_modVars.miNumSequences, subsongs);
 
-  jclass seqCls = env->FindClass("com/lossydragon/native/model/Sequence");
+  jclass seqCls = env->FindClass("com/lossydragon/renderer/model/Sequence");
   jobjectArray seqArray = env->NewObjectArray(subsongs, seqCls, nullptr);
   for (int i = 0; i < subsongs; i++) {
     jobject seqObj = env->AllocObject(seqCls);

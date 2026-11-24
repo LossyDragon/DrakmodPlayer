@@ -62,6 +62,12 @@
                 <data android:scheme="content" android:mimeType="audio/x-med" />
                 <data android:scheme="content" android:mimeType="application/octet-stream" />
             </intent-filter>
+
+            <!-- "Play X on Drakmod Player" from the assistant on the phone. -->
+            <intent-filter>
+                <action android:name="android.media.action.MEDIA_PLAY_FROM_SEARCH" />
+                <category android:name="android.intent.category.DEFAULT" />
+            </intent-filter>
         </activity>
 
         <receiver

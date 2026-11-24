@@ -4,11 +4,10 @@ import androidx.compose.foundation.layout.*
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.*
-import androidx.compose.ui.Modifier
 import androidx.compose.ui.res.*
-import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.font.*
 import androidx.compose.ui.tooling.preview.*
-import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.*
 import com.lossydragon.modplayer.BuildConfig
 import com.lossydragon.modplayer.R
 import com.lossydragon.modplayer.ui.components.BackButton
@@ -17,7 +16,6 @@ import com.lossydragon.modplayer.util.annotatedLinkString
 import com.mikepenz.aboutlibraries.ui.compose.android.produceLibraries
 import com.mikepenz.aboutlibraries.ui.compose.m3.LibrariesContainer
 import com.mikepenz.aboutlibraries.ui.compose.variant.DefaultLibraryBadges
-import com.mikepenz.aboutlibraries.ui.compose.variant.LibraryBadges
 
 @Composable
 fun PreferencesAbout(

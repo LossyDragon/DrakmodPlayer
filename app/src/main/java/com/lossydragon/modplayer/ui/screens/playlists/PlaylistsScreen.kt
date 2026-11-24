@@ -171,7 +171,6 @@ fun NavPlaylists(
     )
 }
 
-@OptIn(ExperimentalMaterial3ExpressiveApi::class, ExperimentalMaterial3Api::class)
 @Composable
 private fun PlaylistListScreen(
     modifier: Modifier = Modifier,
@@ -343,7 +342,6 @@ private fun ImmutableList<ModuleEntity>.stableKeys(): List<String> {
     }
 }
 
-@OptIn(ExperimentalMaterial3ExpressiveApi::class, ExperimentalMaterial3Api::class)
 @Composable
 private fun PlaylistEntriesScreen(
     modifier: Modifier = Modifier,

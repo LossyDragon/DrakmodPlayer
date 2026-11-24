@@ -110,7 +110,7 @@ SequenceFields g_sequence{};
   if (!(a.b = env->GetFieldID(clazz, #b, c))) return false
 
 static bool initAudioStatsFields(JNIEnv* env) {
-  GET_CLASS("com/lossydragon/native/model/AudioStats");
+  GET_CLASS("com/lossydragon/renderer/model/AudioStats");
   GET_FIELD(g_audioStats, xrunCount, "I");
   GET_FIELD(g_audioStats, underrunCount, "I");
   GET_FIELD(g_audioStats, framesPerBurst, "I");
@@ -125,7 +125,7 @@ static bool initAudioStatsFields(JNIEnv* env) {
 }
 
 static bool initChannelInfoFields(JNIEnv* env) {
-  GET_CLASS("com/lossydragon/native/model/ChannelInfo");
+  GET_CLASS("com/lossydragon/renderer/model/ChannelInfo");
   GET_FIELD(g_channelInfo, volumes, "[I");
   GET_FIELD(g_channelInfo, finalVols, "[I");
   GET_FIELD(g_channelInfo, pans, "[I");
@@ -141,7 +141,7 @@ static bool initChannelInfoFields(JNIEnv* env) {
 }
 
 static bool initFrameInfoFields(JNIEnv* env) {
-  GET_CLASS("com/lossydragon/native/model/FrameInfo");
+  GET_CLASS("com/lossydragon/renderer/model/FrameInfo");
   GET_FIELD(g_frameInfo, pos, "I");
   GET_FIELD(g_frameInfo, pattern, "I");
   GET_FIELD(g_frameInfo, row, "I");
@@ -163,14 +163,14 @@ static bool initFrameInfoFields(JNIEnv* env) {
 }
 
 static bool initModInfoFields(JNIEnv* env) {
-  GET_CLASS("com/lossydragon/native/model/ModInfo");
+  GET_CLASS("com/lossydragon/renderer/model/ModInfo");
   GET_FIELD(g_modInfo, name, "Ljava/lang/String;");
   GET_FIELD(g_modInfo, type, "Ljava/lang/String;");
   return true;
 }
 
 static bool initModVarsFields(JNIEnv* env) {
-  GET_CLASS("com/lossydragon/native/model/ModVars");
+  GET_CLASS("com/lossydragon/renderer/model/ModVars");
   GET_FIELD(g_modVars, name, "Ljava/lang/String;");
   GET_FIELD(g_modVars, type, "Ljava/lang/String;");
   GET_FIELD(g_modVars, pat, "I");
@@ -185,14 +185,14 @@ static bool initModVarsFields(JNIEnv* env) {
   GET_FIELD(g_modVars, gvl, "I");
   GET_FIELD(g_modVars, miNumSequences, "I");
   GET_FIELD(g_modVars, miComment, "Ljava/lang/String;");
-  GET_FIELD(g_modVars, seqData, "[Lcom/lossydragon/native/model/Sequence;");
+  GET_FIELD(g_modVars, seqData, "[Lcom/lossydragon/renderer/model/Sequence;");
   GET_FIELD(g_modVars, instruments, "[Ljava/lang/String;");
   GET_FIELD(g_modVars, renderingEngine, "Ljava/lang/String;");
   return true;
 }
 
 static bool initSequenceFields(JNIEnv* env) {
-  GET_CLASS("com/lossydragon/native/model/Sequence");
+  GET_CLASS("com/lossydragon/renderer/model/Sequence");
   GET_FIELD(g_sequence, entryPoint, "I");
   GET_FIELD(g_sequence, duration, "I");
   return true;

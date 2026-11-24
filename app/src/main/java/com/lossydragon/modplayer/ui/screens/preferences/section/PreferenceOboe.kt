@@ -3,7 +3,6 @@ package com.lossydragon.modplayer.ui.screens.preferences.section
 import androidx.compose.foundation.layout.*
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
-import androidx.compose.ui.platform.*
 import androidx.compose.ui.res.*
 import androidx.compose.ui.tooling.preview.*
 import androidx.compose.ui.unit.*
@@ -15,7 +14,7 @@ import com.lossydragon.modplayer.ui.screens.preferences.components.PreferenceIte
 import com.lossydragon.modplayer.ui.screens.preferences.components.PreferenceSection
 import com.lossydragon.modplayer.ui.screens.preferences.components.SingleChoiceAlertDialog
 import com.lossydragon.modplayer.ui.theme.AppTheme
-import com.lossydragon.native.Player
+import com.lossydragon.renderer.Player
 import kotlinx.collections.immutable.persistentListOf
 import kotlinx.coroutines.launch
 
@@ -56,7 +55,6 @@ private val apiOptions = persistentListOf(
     ),
 )
 
-@OptIn(ExperimentalMaterial3ExpressiveApi::class)
 @Composable
 fun PreferenceOboe(
     colors: ListItemColors
@@ -128,7 +126,6 @@ fun PreferenceOboe(
     )
 }
 
-@OptIn(ExperimentalMaterial3ExpressiveApi::class)
 @Preview
 @Composable
 private fun Preview() {

@@ -2,9 +2,11 @@ package com.lossydragon.modplayer
 
 import android.Manifest
 import android.annotation.SuppressLint
+import android.app.SearchManager
 import android.content.ComponentName
 import android.content.Intent
 import android.os.Bundle
+import android.provider.MediaStore
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
 import androidx.activity.result.contract.ActivityResultContracts
@@ -13,9 +15,11 @@ import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.*
 import androidx.compose.ui.res.stringResource
+import androidx.core.content.ContextCompat
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.lifecycle.lifecycleScope
 import androidx.lifecycle.viewmodel.navigation3.rememberViewModelStoreNavEntryDecorator
+import androidx.media3.common.MediaItem
 import androidx.media3.session.MediaController
 import androidx.media3.session.SessionToken
 import androidx.navigation3.runtime.NavKey
@@ -36,9 +40,9 @@ import com.lossydragon.modplayer.util.requestNotificationPermission
 import com.lossydragon.modplayer.util.requestWriteStoragePermission
 import com.lossydragon.modplayer.util.setEdgeToEdgeConfig
 import com.lossydragon.modplayer.util.toModuleEntity
-import com.lossydragon.native.Player
-import com.lossydragon.native.RenderingBackend
-import com.lossydragon.native.model.ModInfo
+import com.lossydragon.renderer.Player
+import com.lossydragon.renderer.RenderingBackend
+import com.lossydragon.renderer.model.ModInfo
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.launch
@@ -69,18 +73,23 @@ class MainActivity : ComponentActivity() {
 
     /**
      * The UI drives [com.lossydragon.modplayer.player.ModPlayer] directly (it is a Koin
-     * singleton in this process), so this controller is never used for commands. It exists
-     * only to keep [PlayerService] bound — and therefore alive — while the activity is
-     * visible, which is what lets the session/notification come up before playback starts.
+     * singleton in this process), so this controller only carries voice-search requests.
+     * Otherwise it exists to keep [PlayerService] bound — and therefore alive — while the
+     * activity is visible, which lets the session/notification come up before playback starts.
      */
-    override fun onStart() {
-        super.onStart()
-        if (controllerFuture != null) return
+    private fun connectController(): ListenableFuture<MediaController> {
+        controllerFuture?.let { return it }
         val sessionToken = SessionToken(
             this,
             ComponentName(this, PlayerService::class.java)
         )
-        controllerFuture = MediaController.Builder(this, sessionToken).buildAsync()
+        return MediaController.Builder(this, sessionToken).buildAsync()
+            .also { controllerFuture = it }
+    }
+
+    override fun onStart() {
+        super.onStart()
+        connectController()
     }
 
     override fun onStop() {
@@ -92,6 +101,26 @@ class MainActivity : ComponentActivity() {
     override fun onNewIntent(intent: Intent) {
         super.onNewIntent(intent)
         handleViewIntent(intent)
+        handleSearchIntent(intent)
+    }
+
+    /** Hands an assistant "play …" request to the session, which resolves it like Android Auto's. */
+    private fun handleSearchIntent(intent: Intent) {
+        if (intent.action != MediaStore.INTENT_ACTION_MEDIA_PLAY_FROM_SEARCH) return
+        val query = intent.getStringExtra(SearchManager.QUERY).orEmpty()
+        Timber.d("Handle search intent: '$query'")
+        val request = MediaItem.RequestMetadata.Builder()
+            .setSearchQuery(query)
+            .setExtras(intent.extras)
+            .build()
+        val item = MediaItem.Builder().setRequestMetadata(request).build()
+        val future = connectController()
+        future.addListener({
+            val controller = runCatching { future.get() }.getOrNull() ?: return@addListener
+            controller.setMediaItem(item)
+            controller.prepare()
+            controller.play()
+        }, ContextCompat.getMainExecutor(this))
     }
 
     /**
@@ -141,6 +170,7 @@ class MainActivity : ComponentActivity() {
         }
 
         handleViewIntent(intent)
+        if (savedInstanceState == null) handleSearchIntent(intent)
 
         setContent {
             AppTheme {

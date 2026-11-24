@@ -1,6 +1,7 @@
 package com.lossydragon.modplayer.data
 
 import android.net.Uri
+import androidx.core.net.toUri
 import com.lossydragon.modplayer.db.dao.PlaylistDao
 import com.lossydragon.modplayer.db.entity.ModuleEntity
 import com.lossydragon.modplayer.db.entity.PlaylistEntity
@@ -51,7 +52,7 @@ class PlaylistRepository(
     suspend fun importFrom(inputUri: Uri, validateUris: Boolean): ImportResult {
         val export = parsePlaylistExport(saf.readText(inputUri))
         val check: ((String) -> Boolean)? =
-            if (validateUris) { uri -> saf.isAccessible(Uri.parse(uri)) } else null
+            if (validateUris) { uri -> saf.isAccessible(uri.toUri()) } else null
         val batch = export.toRoomEntities(check)
         batch.playlists.forEach { dao.createPlaylistWithEntries(it.playlist, it.entries) }
         return batch.result

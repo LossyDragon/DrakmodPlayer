@@ -1,9 +1,9 @@
-package com.lossydragon.native.model
+package com.lossydragon.renderer.model
 
 import androidx.compose.runtime.Immutable
 
 /**
- * @see [org.helllabs.libxmp.Xmp.getChannelData]
+ * @see [com.lossydragon.renderer.Player.getChannelData]
  */
 @Immutable
 data class ChannelInfo(

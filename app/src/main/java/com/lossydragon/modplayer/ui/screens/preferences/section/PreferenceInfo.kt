@@ -3,8 +3,6 @@ package com.lossydragon.modplayer.ui.screens.preferences.section
 import androidx.compose.foundation.layout.*
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
-import androidx.compose.ui.platform.LocalContext
-import androidx.compose.ui.platform.LocalView
 import androidx.compose.ui.res.*
 import androidx.compose.ui.tooling.preview.*
 import androidx.compose.ui.unit.*
@@ -17,7 +15,6 @@ import com.lossydragon.modplayer.ui.screens.preferences.components.PreferenceSec
 import com.lossydragon.modplayer.ui.theme.AppTheme
 import kotlinx.coroutines.launch
 
-@OptIn(ExperimentalMaterial3ExpressiveApi::class)
 @Composable
 fun PreferenceInfo(
     colors: ListItemColors,
@@ -80,7 +77,6 @@ fun PreferenceInfo(
     )
 }
 
-@OptIn(ExperimentalMaterial3ExpressiveApi::class)
 @Preview
 @Composable
 private fun Preview() {

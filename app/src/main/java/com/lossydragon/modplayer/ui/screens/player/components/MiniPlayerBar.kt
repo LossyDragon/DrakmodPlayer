@@ -24,14 +24,13 @@ import com.lossydragon.modplayer.db.entity.ModuleEntity
 import com.lossydragon.modplayer.player.PlaybackStatus
 import com.lossydragon.modplayer.player.PlayerUiState
 import com.lossydragon.modplayer.ui.theme.AppTheme
-import com.lossydragon.native.model.FrameInfo
-import com.lossydragon.native.model.ModVars
+import com.lossydragon.renderer.model.FrameInfo
+import com.lossydragon.renderer.model.ModVars
 import kotlin.math.abs
 import kotlinx.collections.immutable.persistentListOf
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 
-@OptIn(ExperimentalMaterial3ExpressiveApi::class)
 @Composable
 fun MiniPlayerBar(
     state: PlayerUiState,

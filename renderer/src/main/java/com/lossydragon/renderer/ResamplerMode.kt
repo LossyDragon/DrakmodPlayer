@@ -1,4 +1,4 @@
-package com.lossydragon.native
+package com.lossydragon.renderer
 
 enum class ResamplerMode(val id: Int) {
     NEAREST(Player.XMP_INTERP_NEAREST),
@@ -8,7 +8,6 @@ enum class ResamplerMode(val id: Int) {
     OPENMPT_AMIGA_A1200(101);
 
     companion object {
-        fun fromId(id: Int): ResamplerMode =
-            entries.firstOrNull { it.id == id } ?: LINEAR
+        fun fromId(id: Int): ResamplerMode = entries.firstOrNull { it.id == id } ?: LINEAR
     }
 }

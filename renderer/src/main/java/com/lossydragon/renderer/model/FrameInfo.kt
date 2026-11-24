@@ -1,9 +1,9 @@
-package com.lossydragon.native.model
+package com.lossydragon.renderer.model
 
 import androidx.compose.runtime.Immutable
 
 /**
- * @see [org.helllabs.libxmp.Xmp.getFrameInfo]
+ * @see [com.lossydragon.renderer.Player.getFrameInfo]
  */
 @Immutable
 data class FrameInfo(

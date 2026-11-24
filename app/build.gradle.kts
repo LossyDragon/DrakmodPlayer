@@ -54,7 +54,7 @@ android {
         minSdk = 26
         targetSdk = 37
 
-        versionCode = 22
+        versionCode = 23
         versionName = "1.0"
 
         //noinspection ChromeOsAbiSupport
@@ -90,8 +90,9 @@ android {
         }
     }
     compileOptions {
-        sourceCompatibility = JavaVersion.toVersion(libs.versions.java.get())
-        targetCompatibility = JavaVersion.toVersion(libs.versions.java.get())
+        val java = libs.versions.java.get()
+        sourceCompatibility = JavaVersion.toVersion(java)
+        targetCompatibility = JavaVersion.toVersion(java)
     }
     buildFeatures {
         compose = true
@@ -110,14 +111,17 @@ android {
 }
 
 dependencies {
-    implementation(project(":renderer"))
-
-    implementation(platform(libs.compose.bom))
-    implementation(platform(libs.koin.bom))
+    val composeBom = platform(libs.compose.bom)
+    val koinBom = platform(libs.koin.bom)
+    val renderer = project(":renderer")
 
     debugImplementation(libs.compose.ui.tooling)
 
     ksp(libs.room.compiler)
+
+    implementation(composeBom)
+    implementation(koinBom)
+    implementation(renderer)
 
     implementation(libs.aboutlibraries.compose.m3)
     implementation(libs.bundles.compose)

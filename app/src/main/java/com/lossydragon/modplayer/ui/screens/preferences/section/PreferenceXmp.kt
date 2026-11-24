@@ -22,8 +22,8 @@ import com.lossydragon.modplayer.ui.screens.preferences.components.PreferenceSec
 import com.lossydragon.modplayer.ui.screens.preferences.components.SettingsSlider
 import com.lossydragon.modplayer.ui.screens.preferences.components.SingleChoiceAlertDialog
 import com.lossydragon.modplayer.ui.theme.AppTheme
-import com.lossydragon.native.Player
-import com.lossydragon.native.ResamplerMode
+import com.lossydragon.renderer.Player
+import com.lossydragon.renderer.ResamplerMode
 import kotlinx.collections.immutable.persistentListOf
 import kotlinx.coroutines.launch
 
@@ -145,7 +145,6 @@ private val formatOptions = persistentListOf(
     ),
 )
 
-@OptIn(ExperimentalMaterial3ExpressiveApi::class)
 @Composable
 fun PreferenceXmp(
     colors: ListItemColors
@@ -345,7 +344,6 @@ fun PreferenceXmp(
     )
 }
 
-@OptIn(ExperimentalMaterial3ExpressiveApi::class)
 @Preview
 @Composable
 private fun Preview() {

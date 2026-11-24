@@ -65,7 +65,6 @@ internal fun QueueSheet(
     )
 }
 
-@OptIn(ExperimentalMaterial3ExpressiveApi::class)
 @Composable
 private fun QueueListItem(
     isCurrentItem: Boolean,

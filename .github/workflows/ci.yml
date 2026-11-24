@@ -1,7 +1,7 @@
 name: CI
 
-# Builds, lints and unit-tests every push and pull request. The signed release build
-# lives in release-build.yml and only runs on versionCode bumps.
+# Builds, lints and unit-tests every push and pull request. Signed builds live in
+# release-build.yml (rolling pre-release on versionCode bumps) and release.yml (manual).
 on:
   push:
     branches: [ master ]

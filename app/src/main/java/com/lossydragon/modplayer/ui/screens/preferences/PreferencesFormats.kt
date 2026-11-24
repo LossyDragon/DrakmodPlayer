@@ -16,7 +16,6 @@ import com.lossydragon.modplayer.ui.theme.AppTheme
 import kotlinx.collections.immutable.ImmutableList
 import kotlinx.collections.immutable.toPersistentList
 
-@OptIn(ExperimentalMaterial3ExpressiveApi::class, ExperimentalMaterial3Api::class)
 @Composable
 internal fun PreferencesFormats(
     onBack: () -> Unit,

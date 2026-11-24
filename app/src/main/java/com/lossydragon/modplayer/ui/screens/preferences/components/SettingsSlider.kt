@@ -13,7 +13,6 @@ import com.alorma.compose.settings.ui.expressive.SettingsTileDefaults
 import com.lossydragon.modplayer.R
 import com.lossydragon.modplayer.ui.theme.AppTheme
 
-@OptIn(ExperimentalMaterial3ExpressiveApi::class)
 @Composable
 fun SettingsSlider(
     value: Float,
@@ -74,7 +73,6 @@ fun SettingsSlider(
     )
 }
 
-@OptIn(ExperimentalMaterial3ExpressiveApi::class)
 @Preview
 @Composable
 private fun Preview() {

@@ -14,7 +14,7 @@ import com.lossydragon.modplayer.db.PlaybackState
 import com.lossydragon.modplayer.db.entity.ModuleEntity
 import com.lossydragon.modplayer.db.entity.PlaylistEntity
 import com.lossydragon.modplayer.db.entity.PlaylistEntryEntity
-import com.lossydragon.native.model.Sequence
+import com.lossydragon.renderer.model.Sequence
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.cancel

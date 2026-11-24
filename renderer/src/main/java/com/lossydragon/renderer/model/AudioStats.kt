@@ -1,4 +1,4 @@
-package com.lossydragon.native.model
+package com.lossydragon.renderer.model
 
 import androidx.compose.runtime.Immutable
 
@@ -6,7 +6,7 @@ import androidx.compose.runtime.Immutable
  * Real-time audio statistics from the Oboe audio engine.
  *
  * Provides performance metrics and configuration details about the active audio stream.
- * All values represent the current state at the time [org.helllabs.libxmp.Xmp.getAudioStats] was called.
+ * All values represent the current state at the time [com.lossydragon.renderer.Player.getAudioStats] was called.
  *
  * @property xrunCount Total number of buffer underruns/overruns detected by the audio system.
  *                     Higher values indicate audio glitches. Only available on devices that

@@ -1,4 +1,4 @@
-package com.lossydragon.native.model
+package com.lossydragon.renderer.model
 
 import androidx.compose.runtime.Immutable
 

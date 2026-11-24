@@ -8,11 +8,11 @@ import androidx.media3.common.Player
 import androidx.media3.common.util.UnstableApi
 import com.lossydragon.modplayer.db.AppPreferences
 import com.lossydragon.modplayer.db.entity.ModuleEntity
-import com.lossydragon.native.RenderingBackend
-import com.lossydragon.native.model.AudioStats
-import com.lossydragon.native.model.FrameInfo
-import com.lossydragon.native.model.ModVars
-import com.lossydragon.native.model.Sequence
+import com.lossydragon.renderer.RenderingBackend
+import com.lossydragon.renderer.model.AudioStats
+import com.lossydragon.renderer.model.FrameInfo
+import com.lossydragon.renderer.model.ModVars
+import com.lossydragon.renderer.model.Sequence
 import kotlinx.collections.immutable.ImmutableList
 import kotlinx.collections.immutable.persistentListOf
 import kotlinx.collections.immutable.toImmutableList

@@ -29,7 +29,6 @@ import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import org.koin.compose.koinInject
 
-@OptIn(ExperimentalMaterial3ExpressiveApi::class, ExperimentalMaterial3Api::class)
 @Composable
 internal fun PreferencesScreen(
     snackbarHostState: SnackbarHostState,

@@ -45,8 +45,10 @@ A spiritual successor to [cmatsuoka/xmp-android](https://github.com/cmatsuoka/xm
 
 ### Integration
 - **Android Auto support** — browse files and playlists, search, and play from your car
-- **Voice playback** — ask for a playlist or track by name
+- **Voice playback** — in Android Auto, ask the assistant for a playlist or track by name; a bare "play music" resumes your queue or shuffles the library
 - **Media session integration** — lock screen, watch, and notification controls
+
+*Note: voice playback only works in Android Auto. Gemini on your phone won't hand requests to Drakmod Player, because Google only does that for apps published on the Play Store. Other assistants may work.*
 
 ### In Progress
 *The app is in a usable state, but these are still being worked on:*

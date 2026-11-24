@@ -1,0 +1,108 @@
+name: Release
+
+# Manual: builds a signed APK from the chosen branch and publishes it as a full release
+# tagged v<versionName>. Bump versionName and versionCode first: the run fails unless both
+# moved on from the last full release, and an existing tag is never overwritten.
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: full-release
+  cancel-in-progress: false
+
+jobs:
+  # Fail before the long build unless both versionName and versionCode moved on from the
+  # last full release.
+  preflight:
+    name: Check the version was bumped
+    runs-on: ubuntu-latest
+    env:
+      GH_TOKEN: ${{ github.token }}
+      GH_REPO: ${{ github.repository }}
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Compare with the last release
+        run: |
+          set -euo pipefail
+          FILE="app/build.gradle.kts"
+          code() { grep -E '^\s*versionCode\s*=' | head -n1 | sed -E 's/.*=\s*([0-9]+).*/\1/'; }
+          name() { grep -E '^\s*versionName\s*=' | head -n1 | sed -E 's/.*=\s*"([^"]+)".*/\1/'; }
+
+          CODE=$(code < "$FILE" || true)
+          NAME=$(name < "$FILE" || true)
+          if [[ -z "$CODE" || -z "$NAME" ]]; then
+            echo "::error::Could not read versionCode/versionName from $FILE."
+            exit 1
+          fi
+          echo "This build: $NAME ($CODE)"
+
+          if [[ -n "$(git ls-remote --tags origin "refs/tags/v$NAME")" ]]; then
+            echo "::error::Tag v$NAME already exists. Bump versionName before releasing."
+            exit 1
+          fi
+
+          # Latest full release; pre-releases and drafts are not considered.
+          LAST=$(gh release view --json tagName --jq .tagName 2>/dev/null || true)
+          if [[ -z "$LAST" ]]; then
+            echo "No earlier full release — nothing to compare against."
+            exit 0
+          fi
+
+          git fetch --depth=1 origin "refs/tags/$LAST:refs/tags/$LAST"
+          OLD=$(git show "$LAST:$FILE" 2>/dev/null || true)
+          OLD_CODE=$(code <<< "$OLD" || true)
+          OLD_NAME=$(name <<< "$OLD" || true)
+          if [[ -z "$OLD_CODE" || -z "$OLD_NAME" ]]; then
+            echo "::error::Could not read the version released as $LAST."
+            exit 1
+          fi
+          echo "Last release $LAST: $OLD_NAME ($OLD_CODE)"
+
+          FAIL=0
+          if [[ "$NAME" == "$OLD_NAME" ]]; then
+            echo "::error::versionName is still $NAME, the same as $LAST. Bump it before releasing."
+            FAIL=1
+          fi
+          if (( CODE <= OLD_CODE )); then
+            echo "::error::versionCode $CODE is not higher than $OLD_CODE from $LAST. Bump it before releasing."
+            FAIL=1
+          fi
+          exit "$FAIL"
+
+  build:
+    needs: preflight
+    uses: ./.github/workflows/build-signed-apk.yml
+    secrets: inherit
+
+  publish:
+    name: Publish release
+    needs: build
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    env:
+      GH_TOKEN: ${{ github.token }}
+      GH_REPO: ${{ github.repository }}
+      VERSION_CODE: ${{ needs.build.outputs.version_code }}
+      VERSION_NAME: ${{ needs.build.outputs.version_name }}
+    steps:
+      - name: Download APK
+        uses: actions/download-artifact@v4
+        with:
+          name: ${{ needs.build.outputs.artifact }}
+          path: dist
+
+      - name: Create the release
+        run: |
+          set -euo pipefail
+          gh release create "v$VERSION_NAME" dist/*.apk \
+            --latest \
+            --target "$GITHUB_SHA" \
+            --title "Drakmod Player $VERSION_NAME" \
+            --notes "Version $VERSION_NAME (build $VERSION_CODE)." \
+            --generate-notes

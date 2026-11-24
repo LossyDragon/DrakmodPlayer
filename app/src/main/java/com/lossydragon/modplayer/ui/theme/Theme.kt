@@ -1,11 +1,9 @@
 package com.lossydragon.modplayer.ui.theme
 
-import androidx.compose.foundation.isSystemInDarkTheme
+import androidx.compose.foundation.*
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.graphics.*
-import androidx.compose.ui.platform.LocalContext
-import androidx.compose.ui.platform.LocalView
 import com.lossydragon.modplayer.db.AppPreferences
 import com.lossydragon.modplayer.ui.components.collectPref
 import com.lossydragon.modplayer.ui.components.rememberAppPreferences

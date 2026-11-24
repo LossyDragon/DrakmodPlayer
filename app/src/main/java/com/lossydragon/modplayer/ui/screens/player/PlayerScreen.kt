@@ -41,10 +41,10 @@ import com.lossydragon.modplayer.ui.screens.player.components.views.ChannelView
 import com.lossydragon.modplayer.ui.screens.player.components.views.DebugView
 import com.lossydragon.modplayer.ui.screens.player.components.views.PatternView
 import com.lossydragon.modplayer.ui.theme.AppTheme
-import com.lossydragon.native.model.AudioStats
-import com.lossydragon.native.model.FrameInfo
-import com.lossydragon.native.model.ModVars
-import com.lossydragon.native.model.Sequence
+import com.lossydragon.renderer.model.AudioStats
+import com.lossydragon.renderer.model.FrameInfo
+import com.lossydragon.renderer.model.ModVars
+import com.lossydragon.renderer.model.Sequence
 import kotlin.time.Duration.Companion.seconds
 import kotlinx.collections.immutable.toPersistentList
 import kotlinx.coroutines.Dispatchers

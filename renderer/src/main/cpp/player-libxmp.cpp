@@ -651,7 +651,7 @@ void xmp_getModVars(JNIEnv* env, jobject modVars) {
   env->SetIntField(modVars, g_modVars.miNumSequences, numSeq);
   env->SetObjectField(modVars, g_modVars.miComment, commentStr);
 
-  jclass seqCls = env->FindClass("com/lossydragon/native/model/Sequence");
+  jclass seqCls = env->FindClass("com/lossydragon/renderer/model/Sequence");
   jobjectArray seqArray = env->NewObjectArray((jsize)seqs.size(), seqCls, nullptr);
   for (int i = 0; i < (int)seqs.size(); i++) {
     jobject seqObj = env->AllocObject(seqCls);

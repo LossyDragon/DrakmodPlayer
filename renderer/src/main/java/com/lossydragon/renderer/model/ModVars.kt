@@ -1,9 +1,9 @@
-package com.lossydragon.native.model
+package com.lossydragon.renderer.model
 
 import androidx.compose.runtime.Stable
 
 /**
- * @see [org.helllabs.libxmp.Xmp.getModVars]
+ * @see [com.lossydragon.renderer.Player.getModVars]
  */
 @Stable
 data class ModVars(

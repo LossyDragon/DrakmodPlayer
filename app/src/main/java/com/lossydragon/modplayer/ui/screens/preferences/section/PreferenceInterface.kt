@@ -7,8 +7,7 @@ import androidx.compose.runtime.*
 import androidx.compose.ui.*
 import androidx.compose.ui.draw.*
 import androidx.compose.ui.graphics.*
-import androidx.compose.ui.platform.*
-import androidx.compose.ui.res.stringResource
+import androidx.compose.ui.res.*
 import androidx.compose.ui.text.font.*
 import androidx.compose.ui.tooling.preview.*
 import androidx.compose.ui.unit.*
@@ -82,7 +81,6 @@ private val styleItems = persistentListOf(
     ),
 )
 
-@OptIn(ExperimentalMaterial3ExpressiveApi::class)
 @Composable
 fun PreferenceInterface(
     colors: ListItemColors
@@ -247,7 +245,6 @@ fun PreferenceInterface(
     )
 }
 
-@OptIn(ExperimentalMaterial3ExpressiveApi::class)
 @Preview
 @Composable
 private fun Preview() {

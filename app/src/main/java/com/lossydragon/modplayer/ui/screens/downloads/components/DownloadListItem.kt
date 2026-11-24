@@ -13,7 +13,6 @@ import com.lossydragon.modplayer.R
 import com.lossydragon.modplayer.ui.theme.AppTheme
 import com.lossydragon.modplayer.util.fromHtml
 
-@OptIn(ExperimentalMaterial3ExpressiveApi::class)
 @Composable
 internal fun DownloadListItem(
     text: String,

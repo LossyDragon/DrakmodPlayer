@@ -8,7 +8,7 @@ import com.lossydragon.modplayer.db.AppPreferences
 import com.lossydragon.modplayer.db.dao.ModuleDao
 import com.lossydragon.modplayer.db.entity.ModuleEntity
 import com.lossydragon.modplayer.util.DirectoryEntry
-import com.lossydragon.native.model.ModInfo
+import com.lossydragon.renderer.model.ModInfo
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers

@@ -6,13 +6,13 @@ import com.lossydragon.modplayer.db.AppPreferences
 import com.lossydragon.modplayer.db.entity.ModuleEntity
 import com.lossydragon.modplayer.player.model.NoteCell
 import com.lossydragon.modplayer.player.model.PatternData
-import com.lossydragon.native.Player
-import com.lossydragon.native.RenderingBackend
-import com.lossydragon.native.ResamplerMode
-import com.lossydragon.native.model.AudioStats
-import com.lossydragon.native.model.FrameInfo
-import com.lossydragon.native.model.ModInfo
-import com.lossydragon.native.model.ModVars
+import com.lossydragon.renderer.Player
+import com.lossydragon.renderer.RenderingBackend
+import com.lossydragon.renderer.ResamplerMode
+import com.lossydragon.renderer.model.AudioStats
+import com.lossydragon.renderer.model.FrameInfo
+import com.lossydragon.renderer.model.ModInfo
+import com.lossydragon.renderer.model.ModVars
 import java.util.concurrent.ConcurrentHashMap
 import java.util.concurrent.Executors
 import kotlinx.collections.immutable.toImmutableList
@@ -41,7 +41,7 @@ import timber.log.Timber
  */
 class PlayerEngine(
     private val context: Context,
-    private val prefs: AppPreferences
+    prefs: AppPreferences
 ) : Engine {
 
     private companion object {
@@ -130,7 +130,7 @@ class PlayerEngine(
     private var activeAudioConfig: AudioConfig? = null
 
     private val enginePrefs: StateFlow<EnginePrefs?> = combine(
-        listOf<Flow<Int>>(
+        listOf(
             prefs.getSampleRateFlow(),
             prefs.getBufferMsFlow(),
             prefs.getPlayerFormatFlow(),

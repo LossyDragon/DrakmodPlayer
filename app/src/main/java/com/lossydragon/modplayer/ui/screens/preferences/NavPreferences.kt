@@ -11,8 +11,8 @@ import androidx.navigation3.runtime.rememberNavBackStack
 import androidx.navigation3.runtime.rememberSaveableStateHolderNavEntryDecorator
 import androidx.navigation3.ui.NavDisplay
 import com.lossydragon.modplayer.util.shareLink
-import com.lossydragon.native.Player
-import com.lossydragon.native.RenderingBackend
+import com.lossydragon.renderer.Player
+import com.lossydragon.renderer.RenderingBackend
 import kotlinx.collections.immutable.toPersistentList
 import kotlinx.serialization.Serializable
 

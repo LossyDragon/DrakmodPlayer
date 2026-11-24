@@ -13,7 +13,6 @@ import androidx.compose.ui.tooling.preview.*
 import com.lossydragon.modplayer.R
 import com.lossydragon.modplayer.ui.theme.AppTheme
 
-@OptIn(ExperimentalMaterial3ExpressiveApi::class)
 @Composable
 internal fun BrowserListItem(
     title: String,

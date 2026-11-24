@@ -11,7 +11,7 @@ import androidx.compose.ui.unit.*
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.lossydragon.modplayer.R
 import com.lossydragon.modplayer.ui.theme.AppTheme
-import com.lossydragon.native.model.FrameInfo
+import com.lossydragon.renderer.model.FrameInfo
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 

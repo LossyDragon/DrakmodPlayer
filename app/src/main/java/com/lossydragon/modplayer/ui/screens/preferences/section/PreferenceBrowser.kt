@@ -20,7 +20,6 @@ import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.launch
 import org.koin.compose.koinInject
 
-@OptIn(ExperimentalMaterial3ExpressiveApi::class)
 @Composable
 fun PreferenceBrowser(colors: ListItemColors) {
     val scope = rememberCoroutineScope()
@@ -63,7 +62,6 @@ fun PreferenceBrowser(colors: ListItemColors) {
     )
 }
 
-@OptIn(ExperimentalMaterial3ExpressiveApi::class)
 @Preview
 @Composable
 private fun Preview() {

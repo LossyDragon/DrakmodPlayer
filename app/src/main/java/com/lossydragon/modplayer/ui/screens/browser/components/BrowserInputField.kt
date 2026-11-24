@@ -17,7 +17,6 @@ import com.lossydragon.modplayer.ui.screens.browser.BrowserSortOrder
 import com.lossydragon.modplayer.ui.theme.AppTheme
 import kotlinx.coroutines.launch
 
-@OptIn(ExperimentalMaterial3Api::class, ExperimentalMaterial3ExpressiveApi::class)
 @Composable
 internal fun BrowserInputField(
     textFieldState: TextFieldState,

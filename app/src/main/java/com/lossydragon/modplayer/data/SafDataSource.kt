@@ -15,8 +15,8 @@ import com.lossydragon.modplayer.util.isAccessible
 import com.lossydragon.modplayer.util.openPartialDownload
 import com.lossydragon.modplayer.util.queryDirectoryEntries
 import com.lossydragon.modplayer.util.resolveDocId
-import com.lossydragon.native.Player
-import com.lossydragon.native.model.ModInfo
+import com.lossydragon.renderer.Player
+import com.lossydragon.renderer.model.ModInfo
 import java.io.OutputStream
 import timber.log.Timber
 

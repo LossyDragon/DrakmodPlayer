@@ -2,8 +2,6 @@ package com.lossydragon.modplayer.ui.screens.player.components
 
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.*
-import androidx.compose.material.icons.*
-import androidx.compose.material.icons.filled.*
 import androidx.compose.material3.*
 import androidx.compose.material3.SheetValue.*
 import androidx.compose.runtime.*
@@ -16,7 +14,7 @@ import androidx.compose.ui.unit.*
 import com.lossydragon.modplayer.R
 import com.lossydragon.modplayer.ui.theme.AppTheme
 import com.lossydragon.modplayer.util.formatMs
-import com.lossydragon.native.model.Sequence
+import com.lossydragon.renderer.model.Sequence
 import kotlinx.collections.immutable.ImmutableList
 import kotlinx.collections.immutable.toPersistentList
 
@@ -59,7 +57,6 @@ internal fun DurationsSheet(
     )
 }
 
-@OptIn(ExperimentalMaterial3ExpressiveApi::class)
 @Composable
 private fun DurationItem(
     isCurrentItem: Boolean,

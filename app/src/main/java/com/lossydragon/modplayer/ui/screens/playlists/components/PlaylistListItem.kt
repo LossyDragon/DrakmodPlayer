@@ -14,7 +14,6 @@ import com.lossydragon.modplayer.db.entity.PlaylistEntity
 import com.lossydragon.modplayer.ui.theme.AppTheme
 import com.lossydragon.modplayer.util.toReadableDate
 
-@OptIn(ExperimentalMaterial3ExpressiveApi::class)
 @Composable
 internal fun PlaylistListItem(
     item: PlaylistEntity,

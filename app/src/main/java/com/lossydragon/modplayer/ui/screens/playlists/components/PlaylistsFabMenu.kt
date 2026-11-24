@@ -8,16 +8,12 @@ import androidx.compose.material.icons.filled.*
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.*
-import androidx.compose.ui.Modifier
-import androidx.compose.ui.res.stringResource
-import androidx.compose.ui.tooling.preview.Preview
-import androidx.compose.ui.tooling.preview.PreviewParameter
-import androidx.compose.ui.tooling.preview.PreviewParameterProvider
+import androidx.compose.ui.res.*
+import androidx.compose.ui.tooling.preview.*
 import androidx.compose.ui.unit.*
 import com.lossydragon.modplayer.R
 import com.lossydragon.modplayer.ui.theme.AppTheme
 
-@OptIn(ExperimentalMaterial3ExpressiveApi::class)
 @Composable
 internal fun PlaylistsFabMenu(
     expanded: Boolean,
@@ -50,7 +46,6 @@ internal fun PlaylistsFabMenu(
 }
 
 /** The expand/collapse button shared by the playlist FAB menus. */
-@OptIn(ExperimentalMaterial3ExpressiveApi::class)
 @Composable
 internal fun PlaylistFabMenu(
     expanded: Boolean,

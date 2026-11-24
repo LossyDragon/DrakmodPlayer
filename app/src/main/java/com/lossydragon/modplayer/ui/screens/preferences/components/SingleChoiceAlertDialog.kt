@@ -69,7 +69,6 @@ internal fun SingleChoiceAlertDialog(
     )
 }
 
-@OptIn(ExperimentalMaterial3ExpressiveApi::class)
 @Composable
 private fun LabelRadioButton(
     item: PreferenceItem,

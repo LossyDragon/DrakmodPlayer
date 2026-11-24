@@ -5,7 +5,7 @@ plugins {
 }
 
 android {
-    namespace = "org.helllabs.libxmp"
+    namespace = "com.lossydragon.renderer"
 
     compileSdk {
         version = release(37)
@@ -40,17 +40,17 @@ android {
     externalNativeBuild.cmake.path = file("src/main/cpp/CMakeLists.txt")
 
     compileOptions {
-        sourceCompatibility = JavaVersion.toVersion(libs.versions.java.get())
-        targetCompatibility = JavaVersion.toVersion(libs.versions.java.get())
+        val java = libs.versions.java.get()
+        sourceCompatibility = JavaVersion.toVersion(java)
+        targetCompatibility = JavaVersion.toVersion(java)
     }
 
     buildFeatures.prefab = true
 
     dependencies {
-        // Jetpack Compose
-        implementation(platform(libs.compose.bom))
+        val composeBom = platform(libs.compose.bom)
+        implementation(composeBom)
         implementation(libs.compose.runtime)
-        // Audio Renderer
         implementation(libs.oboe)
     }
 }
