@@ -87,7 +87,7 @@ val appModule = module {
             defaultRequest { url(Constants.HTTP_BASE_URL) }
         }
     }
-    single { ModArchiveService(get()) }
+    single { ModArchiveService(get(), get()) }
 
     // Media Player
     single<Engine> { PlayerEngine(androidContext(), get()) }

@@ -12,10 +12,13 @@ import androidx.navigation3.ui.NavDisplay
 import com.lossydragon.modplayer.BuildConfig
 import com.lossydragon.modplayer.player.PlayerViewModel
 import com.lossydragon.modplayer.ui.activityViewModel
+import com.lossydragon.modplayer.ui.components.collectPref
+import com.lossydragon.modplayer.ui.components.rememberAppPreferences
 import com.lossydragon.modplayer.ui.screens.downloads.screen.DownloadHistoryScreen
 import com.lossydragon.modplayer.ui.screens.downloads.screen.DownloadModuleScreen
 import com.lossydragon.modplayer.ui.screens.downloads.screen.DownloadResultScreen
 import com.lossydragon.modplayer.ui.screens.downloads.screen.ResultRequest
+import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.launch
 import kotlinx.serialization.Serializable
 
@@ -44,7 +47,9 @@ fun NavDownloads(
 
     val backStack = rememberNavBackStack(NavKeyDownload.Search)
     val scope = rememberCoroutineScope()
-    val hasApiKey = remember { BuildConfig.API_KEY.isNotBlank() }
+    val hasApiKey by rememberAppPreferences().collectPref(BuildConfig.API_KEY.isNotBlank()) {
+        getApiKeyFlow().map { it.isNotBlank() }
+    }
 
     NavDisplay(
         backStack = backStack,

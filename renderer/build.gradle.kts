@@ -10,7 +10,6 @@ android {
     compileSdk {
         version = release(37)
     }
-
     defaultConfig {
         minSdk = 26
         //noinspection ChromeOsAbiSupport
@@ -25,7 +24,6 @@ android {
             )
         }
     }
-
     buildTypes {
         // Optimised + symbols: an -O0 libopenmpt/libxmp can't keep up with the audio callback,
         // but a plain Release build has nothing for the native debugger to work with.
@@ -36,14 +34,13 @@ android {
             externalNativeBuild.cmake.arguments += "-DCMAKE_BUILD_TYPE=Release"
         }
     }
-
-    externalNativeBuild.cmake.path = file("src/main/cpp/CMakeLists.txt")
-
     compileOptions {
         val java = libs.versions.java.get()
         sourceCompatibility = JavaVersion.toVersion(java)
         targetCompatibility = JavaVersion.toVersion(java)
     }
+
+    externalNativeBuild.cmake.path = file("src/main/cpp/CMakeLists.txt")
 
     buildFeatures.prefab = true
 

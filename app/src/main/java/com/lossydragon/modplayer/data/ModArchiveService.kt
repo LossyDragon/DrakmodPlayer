@@ -1,6 +1,7 @@
 package com.lossydragon.modplayer.data
 
 import com.lossydragon.modplayer.BuildConfig
+import com.lossydragon.modplayer.db.AppPreferences
 import com.lossydragon.modplayer.model.ArtistResult
 import com.lossydragon.modplayer.model.ModuleResult
 import com.lossydragon.modplayer.model.SearchListResult
@@ -14,16 +15,17 @@ import io.ktor.http.ContentType
 import nl.adaptivity.xmlutil.serialization.XML
 import timber.log.Timber
 
-class ModArchiveService(private val client: HttpClient) {
+class ModArchiveService(private val client: HttpClient, private val prefs: AppPreferences) {
 
     private suspend inline fun <reified T : TypeResult> executeRequest(
         request: String,
         vararg params: Pair<String, Any?>
     ): Result<T> = runCatching {
         if (BuildConfig.DEBUG) Timber.d("request=$request ${params.toList()}")
+        val apiKey = prefs.getApiKey()
         val response = client.get("/xml-tools.php") {
             accept(ContentType.Application.Xml)
-            parameter("key", BuildConfig.API_KEY)
+            parameter("key", apiKey)
             parameter("request", request)
             params.forEach { (key, value) -> if (value != null) parameter(key, value) }
         }.bodyAsText()

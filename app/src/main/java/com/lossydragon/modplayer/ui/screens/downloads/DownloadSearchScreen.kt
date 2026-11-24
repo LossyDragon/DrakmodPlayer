@@ -18,6 +18,7 @@ import androidx.compose.ui.unit.*
 import com.lossydragon.modplayer.R
 import com.lossydragon.modplayer.core.Constants
 import com.lossydragon.modplayer.ui.components.BackButton
+import com.lossydragon.modplayer.ui.components.SurfaceMessageBox
 import com.lossydragon.modplayer.ui.theme.AppTheme
 import com.lossydragon.modplayer.util.annotatedLinkString
 import kotlin.time.Duration.Companion.milliseconds
@@ -122,6 +123,14 @@ fun DownloadSearchScreen(
             horizontalAlignment = Alignment.CenterHorizontally,
             verticalArrangement = Arrangement.Top,
             content = {
+                if (!hasApiKey) {
+                    SurfaceMessageBox(
+                        icon = Icons.Default.Key,
+                        title = stringResource(R.string.search_no_api_title),
+                        message = stringResource(R.string.search_no_api_message),
+                    )
+                }
+
                 OutlinedTextField(
                     modifier = Modifier
                         .fillMaxWidth()
@@ -197,6 +206,7 @@ fun DownloadSearchScreen(
                                 OutlinedButton(
                                     onClick = onHistory,
                                     shape = MaterialTheme.shapes.small,
+                                    enabled = hasApiKey,
                                     content = {
                                         Icon(
                                             imageVector = Icons.Default.History,
@@ -212,6 +222,21 @@ fun DownloadSearchScreen(
                     }
                 )
             }
+        )
+    }
+}
+
+@Preview
+@Composable
+private fun Preview_NoApiKey() {
+    AppTheme {
+        DownloadSearchScreen(
+            hasApiKey = false,
+            snackbarHostState = remember { SnackbarHostState() },
+            onBack = {},
+            onSearch = { _, _ -> },
+            onRandom = {},
+            onHistory = {},
         )
     }
 }

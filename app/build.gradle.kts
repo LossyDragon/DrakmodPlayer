@@ -46,7 +46,6 @@ android {
             minorApiLevel = 2
         }
     }
-
     defaultConfig {
         applicationId = "com.lossydragon.modplayer"
 

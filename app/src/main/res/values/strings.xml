@@ -141,6 +141,11 @@
     <string name="pref_advanced_options">Advanced Configuration Below</string>
     <string name="pref_amoled">AMOLED Mode</string>
     <string name="pref_amoled_desc">Use pure black backgrounds.</string>
+    <string name="pref_api_key">Mod Archive API key</string>
+    <string name="pref_api_key_builtin">Using the built-in key</string>
+    <string name="pref_api_key_custom">Using your own key</string>
+    <string name="pref_api_key_desc">Search uses The Mod Archive\'s XML API, which needs a key. Keys are issued by The Mod Archive on request. Leave empty to use the built-in key, if this build has one.</string>
+    <string name="pref_api_key_label">API key</string>
     <string name="pref_audio_api">Audio API</string>
     <string name="pref_audio_api_desc">Underlying audio system used for playback.</string>
     <string name="pref_audio_api_item_aaudio">AAudio</string>
@@ -251,6 +256,7 @@
     <string name="pref_theme_color">Theme Color</string>
     <string name="pref_title_about">About</string>
     <string name="pref_title_browser">File Browser</string>
+    <string name="pref_title_downloads">Downloads</string>
     <string name="pref_title_interface">Interface</string>
     <string name="pref_title_libxmp">Libxmp</string>
     <string name="pref_title_oboe">Oboe (Audio)</string>
@@ -266,6 +272,8 @@
     <string name="root_folder">Root</string>
     <string name="save">Save</string>
     <string name="search">Search</string>
+    <string name="search_no_api_message">Search needs a Mod Archive API key.\nAdd yours in the Downloads section of Preferences.</string>
+    <string name="search_no_api_title">No API key set</string>
     <string name="search_api_credits">Powered by The Mod Archive</string>
     <string name="search_placeholder">Search modules…</string>
     <string name="search_quick_play_hint">Type to filter. Tap a result to play just that file.</string>
@@ -288,7 +296,7 @@
     <string name="snack_import_ok">Imported %1$d playlists, %2$d entries</string>
     <string name="snack_import_ok_skipped">Imported %1$d playlists, %2$d entries, %3$d skipped</string>
     <string name="snack_module_not_found">Downloaded file not found</string>
-    <string name="snack_no_api">No API key used to search.</string>
+    <string name="snack_no_api">No API key set. Add one in Preferences to search.</string>
     <string name="snack_no_instruments">No instruments to display</string>
     <string name="snack_no_song_message">No song message to display</string>
     <string name="snack_nothing_to_play">Nothing to play</string>

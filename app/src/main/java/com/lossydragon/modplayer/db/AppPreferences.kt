@@ -11,6 +11,7 @@ import androidx.datastore.preferences.core.intPreferencesKey
 import androidx.datastore.preferences.core.longPreferencesKey
 import androidx.datastore.preferences.core.stringPreferencesKey
 import androidx.datastore.preferences.preferencesDataStore
+import com.lossydragon.modplayer.BuildConfig
 import com.lossydragon.modplayer.db.entity.ModuleEntity
 import com.lossydragon.renderer.Player
 import com.lossydragon.renderer.RenderingBackend
@@ -127,6 +128,20 @@ open class AppPreferences(context: Context) {
     private val globalSubSongs = booleanPreferencesKey("global_subsongs")
     open fun getGlobalSubSongsFlow(): Flow<Boolean> = flow(globalSubSongs, false)
     suspend fun setGlobalSubSongs(v: Boolean) = set(globalSubSongs, v)
+
+    /* Downloads */
+    private val modArchiveApiKey = stringPreferencesKey("mod_archive_api_key")
+
+    /** The key the user typed in, blank when unset. */
+    fun getUserApiKeyFlow(): Flow<String> = flow(modArchiveApiKey, "")
+
+    /** The key requests should use: the user's own, else the one compiled in (blank if none). */
+    fun getApiKeyFlow(): Flow<String> =
+        getUserApiKeyFlow().map { it.ifBlank { BuildConfig.API_KEY } }.distinctUntilChanged()
+
+    suspend fun getApiKey(): String = getApiKeyFlow().first()
+
+    suspend fun setUserApiKey(v: String) = set(modArchiveApiKey, v.trim())
 
     /* Player */
     private val renderingBackend = intPreferencesKey("rendering_backend")

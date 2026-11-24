@@ -18,6 +18,7 @@ import com.lossydragon.modplayer.ui.components.BackButton
 import com.lossydragon.modplayer.ui.components.ConfirmDialog
 import com.lossydragon.modplayer.ui.components.rememberAppPreferences
 import com.lossydragon.modplayer.ui.screens.preferences.section.PreferenceBrowser
+import com.lossydragon.modplayer.ui.screens.preferences.section.PreferenceDownloads
 import com.lossydragon.modplayer.ui.screens.preferences.section.PreferenceInfo
 import com.lossydragon.modplayer.ui.screens.preferences.section.PreferenceInterface
 import com.lossydragon.modplayer.ui.screens.preferences.section.PreferenceOboe
@@ -98,6 +99,7 @@ internal fun PreferencesScreen(
                 content = {
                     PreferenceInterface(colors)
                     PreferenceBrowser(colors)
+                    PreferenceDownloads(colors)
                     PreferencePlayer(colors)
                     PreferenceInfo(
                         colors = colors,

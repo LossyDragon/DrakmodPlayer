@@ -84,7 +84,8 @@ A spiritual successor to [cmatsuoka/xmp-android](https://github.com/cmatsuoka/xm
 - The Mod Archive search needs an API key: set `modArchiveApiKey="your-key"` (quotes included —
   the value is used as a Java string literal) in `~/.gradle/gradle.properties`, or
   `ORG_GRADLE_PROJECT_modArchiveApiKey` in the environment. Without one the app builds
-  fine and the download tab is disabled.
+  fine and search stays disabled until a key is entered in the Downloads section of Preferences
+  (a key entered there always takes precedence over the compiled-in one).
 
 ---
 
