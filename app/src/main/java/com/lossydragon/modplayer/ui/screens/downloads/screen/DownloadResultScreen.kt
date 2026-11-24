@@ -2,6 +2,8 @@ package com.lossydragon.modplayer.ui.screens.downloads.screen
 
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.*
+import androidx.compose.material.icons.*
+import androidx.compose.material.icons.filled.*
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.*
@@ -21,12 +23,12 @@ import com.lossydragon.modplayer.model.Module
 import com.lossydragon.modplayer.model.ResultItem
 import com.lossydragon.modplayer.ui.components.BackButton
 import com.lossydragon.modplayer.ui.components.MessageBox
-import com.lossydragon.modplayer.ui.components.ProgressbarIndicator
 import com.lossydragon.modplayer.ui.screens.downloads.DownloadSearchState
 import com.lossydragon.modplayer.ui.screens.downloads.DownloadsViewModel
 import com.lossydragon.modplayer.ui.screens.downloads.SearchResultType
 import com.lossydragon.modplayer.ui.screens.downloads.SearchType
 import com.lossydragon.modplayer.ui.screens.downloads.components.DownloadListItem
+import com.lossydragon.modplayer.ui.screens.downloads.components.downloadSegmentedShapes
 import com.lossydragon.modplayer.ui.theme.AppTheme
 import com.lossydragon.modplayer.util.UiText
 import com.lossydragon.modplayer.util.asString
@@ -109,45 +111,87 @@ private fun DownloadScreenContent(
                 .padding(padding)
                 .fillMaxSize(),
         ) {
+            val refresh = pagingItems.loadState.refresh
             when {
-                pagingItems.loadState.refresh is LoadState.Loading -> ProgressbarIndicator(
-                    modifier = Modifier.align(Alignment.Center)
+                refresh is LoadState.Loading -> ContainedLoadingIndicator(
+                    modifier = Modifier
+                        .align(Alignment.Center)
+                        .size(72.dp)
                 )
 
-                pagingItems.loadState.refresh is LoadState.Error ||
-                    (pagingItems.itemCount == 0 && state.activeType != SearchResultType.NONE) -> {
-                    val text = (pagingItems.loadState.refresh as? LoadState.Error)
-                        ?.error?.message ?: noResultsText
-                    MessageBox(text = text, onBack = onBack)
-                }
-
-                else -> LazyColumn(modifier = Modifier.fillMaxSize()) {
-                    items(
-                        count = pagingItems.itemCount,
-                        key = pagingItems.itemKey { it.id }
-                    ) { idx ->
-                        when (val item = pagingItems[idx]) {
-                            is Module -> DownloadListItem(
-                                text = item.songtitle,
-                                supportingText = item.artist,
-                                leadingText = item.format,
-                                trailingText = stringResource(R.string.size_kb, item.sizeKb),
-                                onClick = { onModuleClick(item.id) }
-                            )
-
-                            is Item -> DownloadListItem(
-                                text = item.alias,
-                                onClick = { onArtistClick(item.id, item.alias) }
-                            )
-                        }
+                refresh is LoadState.Error -> MessageBox(
+                    icon = Icons.Default.CloudOff,
+                    text = refresh.error.message ?: noResultsText,
+                    actions = {
+                        TextButton(
+                            onClick = onBack,
+                            content = { Text(text = stringResource(R.string.desc_back_button)) }
+                        )
+                        TextButton(
+                            onClick = pagingItems::retry,
+                            content = { Text(text = stringResource(R.string.retry)) }
+                        )
                     }
-                    if (pagingItems.loadState.append is LoadState.Loading) {
-                        item {
-                            LoadingIndicator(
-                                modifier = Modifier
-                                    .fillMaxWidth()
-                                    .padding(16.dp),
-                            )
+                )
+
+                pagingItems.itemCount == 0 && state.activeType != SearchResultType.NONE ->
+                    MessageBox(
+                        icon = Icons.Default.SearchOff,
+                        text = noResultsText,
+                        onBack = onBack,
+                    )
+
+                else -> {
+                    // More pages may still arrive, so only the true end of the list gets the
+                    // rounded bottom corners; otherwise they would flip on every page load.
+                    val itemCount = pagingItems.itemCount
+                    val segmentCount = if (pagingItems.loadState.append.endOfPaginationReached) {
+                        itemCount
+                    } else {
+                        itemCount + 1
+                    }
+                    LazyColumn(
+                        modifier = Modifier.fillMaxSize(),
+                        contentPadding = PaddingValues(horizontal = 16.dp, vertical = 8.dp),
+                    ) {
+                        items(
+                            count = itemCount,
+                            key = pagingItems.itemKey { it.id }
+                        ) { idx ->
+                            val itemModifier = Modifier
+                                .animateItem()
+                                .padding(bottom = ListItemDefaults.SegmentedGap)
+                            val shapes = downloadSegmentedShapes(idx, segmentCount)
+                            when (val item = pagingItems[idx]) {
+                                is Module -> DownloadListItem(
+                                    modifier = itemModifier,
+                                    text = item.songtitle,
+                                    supportingText = item.artist,
+                                    leadingText = item.format,
+                                    trailingText = stringResource(R.string.size_kb, item.sizeKb),
+                                    segmentedShapes = shapes,
+                                    onClick = { onModuleClick(item.id) }
+                                )
+
+                                is Item -> DownloadListItem(
+                                    modifier = itemModifier,
+                                    text = item.alias,
+                                    leadingIcon = Icons.Default.Person,
+                                    segmentedShapes = shapes,
+                                    onClick = { onArtistClick(item.id, item.alias) }
+                                )
+                            }
+                        }
+                        if (pagingItems.loadState.append is LoadState.Loading) {
+                            item {
+                                Box(
+                                    modifier = Modifier
+                                        .fillMaxWidth()
+                                        .padding(16.dp),
+                                    contentAlignment = Alignment.Center,
+                                    content = { LoadingIndicator() }
+                                )
+                            }
                         }
                     }
                 }

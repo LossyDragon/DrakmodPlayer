@@ -1,7 +1,9 @@
 package com.lossydragon.modplayer.ui.screens.downloads
 
 import androidx.compose.foundation.*
+import androidx.compose.foundation.interaction.*
 import androidx.compose.foundation.layout.*
+import androidx.compose.foundation.shape.*
 import androidx.compose.foundation.text.*
 import androidx.compose.material.icons.*
 import androidx.compose.material.icons.filled.*
@@ -10,9 +12,13 @@ import androidx.compose.runtime.*
 import androidx.compose.runtime.saveable.*
 import androidx.compose.ui.*
 import androidx.compose.ui.focus.*
+import androidx.compose.ui.graphics.*
+import androidx.compose.ui.graphics.vector.*
 import androidx.compose.ui.platform.*
 import androidx.compose.ui.res.*
+import androidx.compose.ui.semantics.*
 import androidx.compose.ui.text.input.*
+import androidx.compose.ui.text.style.*
 import androidx.compose.ui.tooling.preview.*
 import androidx.compose.ui.unit.*
 import com.lossydragon.modplayer.R
@@ -123,107 +129,239 @@ fun DownloadSearchScreen(
             horizontalAlignment = Alignment.CenterHorizontally,
             verticalArrangement = Arrangement.Top,
             content = {
-                if (!hasApiKey) {
-                    SurfaceMessageBox(
-                        icon = Icons.Default.Key,
-                        title = stringResource(R.string.search_no_api_title),
-                        message = stringResource(R.string.search_no_api_message),
-                    )
-                }
-
-                OutlinedTextField(
+                Column(
                     modifier = Modifier
-                        .fillMaxWidth()
-                        .focusRequester(focusRequester),
-                    shape = MaterialTheme.shapes.small,
-                    enabled = hasApiKey,
-                    value = query,
-                    onValueChange = {
-                        query = it
-                        hasInteracted = true
-                    },
-                    isError = hasInteracted && query.length < MIN_QUERY,
-                    singleLine = true,
-                    label = { Text(text = stringResource(R.string.search)) },
-                    keyboardOptions = KeyboardOptions(imeAction = ImeAction.Search),
-                    keyboardActions = KeyboardActions(onSearch = { submit() }),
-                )
-
-                Spacer(modifier = Modifier.height(24.dp))
-
-                // ButtonGroup items are built outside composition; resolve the labels first.
-                val titleLabel = stringResource(R.string.search_selection_title)
-                val artistLabel = stringResource(R.string.search_selection_artist)
-                ButtonGroup(
-                    modifier = Modifier.padding(horizontal = 16.dp),
-                    expandedRatio = .20f,
-                    overflowIndicator = {},
+                        .widthIn(max = 600.dp)
+                        .padding(top = 8.dp, bottom = 16.dp),
                     content = {
-                        toggleableItem(
-                            checked = type == SearchType.TITLE,
-                            enabled = hasApiKey,
-                            label = titleLabel,
-                            onCheckedChange = { type = SearchType.TITLE },
-                            weight = 1f,
-                        )
-                        toggleableItem(
-                            checked = type == SearchType.ARTIST,
-                            enabled = hasApiKey,
-                            label = artistLabel,
-                            onCheckedChange = { type = SearchType.ARTIST },
-                            weight = 1f,
-                        )
-                    }
-                )
+                        if (!hasApiKey) {
+                            SurfaceMessageBox(
+                                icon = Icons.Default.Key,
+                                title = stringResource(R.string.search_no_api_title),
+                                message = stringResource(R.string.search_no_api_message),
+                            )
+                        }
 
-                Spacer(modifier = Modifier.height(24.dp))
+                        SearchField(
+                            modifier = Modifier.focusRequester(focusRequester),
+                            query = query,
+                            enabled = hasApiKey,
+                            isError = hasInteracted && query.length < MIN_QUERY,
+                            onQueryChange = {
+                                query = it
+                                hasInteracted = true
+                            },
+                            onSubmit = submit,
+                        )
 
-                ButtonGroup(
-                    overflowIndicator = {},
-                    content = {
-                        customItem(
-                            buttonGroupContent = {
-                                OutlinedButton(
-                                    onClick = onRandom,
-                                    shape = MaterialTheme.shapes.small,
-                                    enabled = hasApiKey,
+                        SectionLabel(text = stringResource(R.string.search_by))
+
+                        Row(
+                            modifier = Modifier.fillMaxWidth(),
+                            horizontalArrangement = Arrangement.spacedBy(
+                                ButtonGroupDefaults.ConnectedSpaceBetween
+                            ),
+                            content = {
+                                SearchTypeButton(
                                     modifier = Modifier.weight(1f),
-                                    content = {
-                                        Icon(
-                                            imageVector = Icons.Default.Shuffle,
-                                            contentDescription = null,
-                                            modifier = Modifier.size(18.dp)
-                                        )
-                                        Spacer(modifier = Modifier.width(6.dp))
-                                        Text(text = stringResource(R.string.random))
-                                    }
-                                )
-                            },
-                            menuContent = {}
-                        )
-                        customItem(
-                            buttonGroupContent = {
-                                OutlinedButton(
-                                    onClick = onHistory,
-                                    shape = MaterialTheme.shapes.small,
+                                    label = stringResource(R.string.search_selection_title),
+                                    checked = type == SearchType.TITLE,
                                     enabled = hasApiKey,
-                                    content = {
-                                        Icon(
-                                            imageVector = Icons.Default.History,
-                                            contentDescription = null,
-                                        )
-                                        Spacer(modifier = Modifier.width(6.dp))
-                                        Text(text = stringResource(R.string.history))
-                                    }
+                                    shapes = ButtonGroupDefaults.connectedLeadingButtonShapes(),
+                                    onClick = { type = SearchType.TITLE },
                                 )
-                            },
-                            menuContent = {}
+                                SearchTypeButton(
+                                    modifier = Modifier.weight(1f),
+                                    label = stringResource(R.string.search_selection_artist),
+                                    checked = type == SearchType.ARTIST,
+                                    enabled = hasApiKey,
+                                    shapes = ButtonGroupDefaults.connectedTrailingButtonShapes(),
+                                    onClick = { type = SearchType.ARTIST },
+                                )
+                            }
+                        )
+
+                        SectionLabel(text = stringResource(R.string.search_discover))
+
+                        val randomLabel = stringResource(R.string.random)
+                        val historyLabel = stringResource(R.string.history)
+                        ButtonGroup(
+                            modifier = Modifier.fillMaxWidth(),
+                            overflowIndicator = {},
+                            content = {
+                                customItem(
+                                    buttonGroupContent = {
+                                        val interactionSource =
+                                            remember { MutableInteractionSource() }
+                                        DiscoverButton(
+                                            modifier = Modifier
+                                                .weight(1f)
+                                                .animateWidth(interactionSource),
+                                            icon = Icons.Default.Shuffle,
+                                            label = randomLabel,
+                                            enabled = hasApiKey,
+                                            interactionSource = interactionSource,
+                                            onClick = onRandom,
+                                        )
+                                    },
+                                    menuContent = {}
+                                )
+                                customItem(
+                                    buttonGroupContent = {
+                                        val interactionSource =
+                                            remember { MutableInteractionSource() }
+                                        DiscoverButton(
+                                            modifier = Modifier
+                                                .weight(1f)
+                                                .animateWidth(interactionSource),
+                                            icon = Icons.Default.History,
+                                            label = historyLabel,
+                                            enabled = hasApiKey,
+                                            interactionSource = interactionSource,
+                                            onClick = onHistory,
+                                        )
+                                    },
+                                    menuContent = {}
+                                )
+                            }
                         )
                     }
                 )
             }
         )
     }
+}
+
+/** Pill-shaped filled search input, matching the M3 Expressive search bar look. */
+@Composable
+private fun SearchField(
+    query: String,
+    enabled: Boolean,
+    isError: Boolean,
+    onQueryChange: (String) -> Unit,
+    onSubmit: () -> Unit,
+    modifier: Modifier = Modifier
+) {
+    val container = MaterialTheme.colorScheme.surfaceContainerHigh
+    TextField(
+        modifier = modifier.fillMaxWidth(),
+        shape = CircleShape,
+        colors = TextFieldDefaults.colors(
+            focusedContainerColor = container,
+            unfocusedContainerColor = container,
+            errorContainerColor = container,
+            disabledContainerColor = MaterialTheme.colorScheme.surfaceContainerLow,
+            focusedIndicatorColor = Color.Transparent,
+            unfocusedIndicatorColor = Color.Transparent,
+            errorIndicatorColor = Color.Transparent,
+            disabledIndicatorColor = Color.Transparent,
+        ),
+        enabled = enabled,
+        value = query,
+        onValueChange = onQueryChange,
+        isError = isError,
+        singleLine = true,
+        placeholder = { Text(text = stringResource(R.string.search_placeholder)) },
+        leadingIcon = {
+            Icon(
+                imageVector = Icons.Default.Search,
+                contentDescription = null,
+            )
+        },
+        trailingIcon = if (query.isNotEmpty()) {
+            {
+                IconButton(
+                    onClick = { onQueryChange("") },
+                    content = {
+                        Icon(
+                            imageVector = Icons.Default.Close,
+                            contentDescription = stringResource(R.string.desc_search_clear),
+                        )
+                    }
+                )
+            }
+        } else {
+            null
+        },
+        supportingText = if (isError) {
+            { Text(text = stringResource(R.string.snack_query_too_short)) }
+        } else {
+            null
+        },
+        keyboardOptions = KeyboardOptions(imeAction = ImeAction.Search),
+        keyboardActions = KeyboardActions(onSearch = { onSubmit() }),
+    )
+}
+
+@Composable
+private fun SectionLabel(text: String) {
+    Text(
+        modifier = Modifier.padding(start = 16.dp, top = 24.dp, bottom = 8.dp),
+        text = text,
+        style = MaterialTheme.typography.labelLarge,
+        color = MaterialTheme.colorScheme.primary,
+    )
+}
+
+@Composable
+private fun SearchTypeButton(
+    label: String,
+    checked: Boolean,
+    enabled: Boolean,
+    shapes: ToggleButtonShapes,
+    onClick: () -> Unit,
+    modifier: Modifier = Modifier
+) {
+    ToggleButton(
+        modifier = modifier.semantics { role = Role.RadioButton },
+        checked = checked,
+        onCheckedChange = { onClick() },
+        enabled = enabled,
+        buttonSize = ToggleButtonSize.Medium,
+        shapes = shapes,
+        content = {
+            Text(
+                text = label,
+                style = MaterialTheme.typography.labelLarge,
+                maxLines = 1,
+                overflow = TextOverflow.Ellipsis,
+            )
+        }
+    )
+}
+
+/** Medium tonal button whose corners morph on press. */
+@Composable
+private fun DiscoverButton(
+    icon: ImageVector,
+    label: String,
+    enabled: Boolean,
+    interactionSource: MutableInteractionSource,
+    onClick: () -> Unit,
+    modifier: Modifier = Modifier
+) {
+    val height = ButtonDefaults.MediumContainerHeight
+    FilledTonalButton(
+        modifier = modifier.heightIn(min = height),
+        onClick = onClick,
+        shapes = ButtonDefaults.shapesFor(height),
+        enabled = enabled,
+        contentPadding = ButtonDefaults.contentPaddingFor(height, hasStartIcon = true),
+        interactionSource = interactionSource,
+        content = {
+            Icon(
+                modifier = Modifier.size(ButtonDefaults.iconSizeFor(height)),
+                imageVector = icon,
+                contentDescription = null,
+            )
+            Spacer(modifier = Modifier.width(ButtonDefaults.iconSpacingFor(height)))
+            Text(
+                text = label,
+                style = ButtonDefaults.textStyleFor(height),
+                maxLines = 1,
+            )
+        }
+    )
 }
 
 @Preview

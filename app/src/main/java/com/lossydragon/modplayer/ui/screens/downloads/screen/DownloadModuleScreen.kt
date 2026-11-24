@@ -1,5 +1,6 @@
 package com.lossydragon.modplayer.ui.screens.downloads.screen
 
+import androidx.compose.foundation.interaction.*
 import androidx.compose.foundation.layout.*
 import androidx.compose.material.icons.*
 import androidx.compose.material.icons.filled.*
@@ -7,6 +8,7 @@ import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.runtime.saveable.*
 import androidx.compose.ui.*
+import androidx.compose.ui.graphics.vector.*
 import androidx.compose.ui.platform.*
 import androidx.compose.ui.res.*
 import androidx.compose.ui.text.style.*
@@ -19,7 +21,6 @@ import com.lossydragon.modplayer.model.ModuleResult
 import com.lossydragon.modplayer.ui.components.BackButton
 import com.lossydragon.modplayer.ui.components.ConfirmDialog
 import com.lossydragon.modplayer.ui.components.MessageBox
-import com.lossydragon.modplayer.ui.components.ProgressbarIndicator
 import com.lossydragon.modplayer.ui.screens.downloads.DownloadStatus
 import com.lossydragon.modplayer.ui.screens.downloads.DownloadsEvent
 import com.lossydragon.modplayer.ui.screens.downloads.DownloadsViewModel
@@ -89,6 +90,7 @@ internal fun DownloadModuleScreen(
     )
 }
 
+@OptIn(ExperimentalMaterial3ExpressiveApi::class)
 @Composable
 private fun DownloadModuleContent(
     state: ModuleResultState,
@@ -155,68 +157,125 @@ private fun DownloadModuleContent(
             )
         },
         bottomBar = {
-            BottomAppBar {
-                Column(modifier = Modifier.fillMaxWidth()) {
+            Surface(color = BottomAppBarDefaults.containerColor) {
+                Column(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .windowInsetsPadding(BottomAppBarDefaults.windowInsets)
+                        .padding(top = 4.dp, bottom = 12.dp)
+                ) {
+                    val progressModifier = Modifier
+                        .fillMaxWidth()
+                        .padding(horizontal = 16.dp)
                     when (val status = state.downloadStatus) {
-                        is DownloadStatus.Progress -> LinearProgressIndicator(
+                        is DownloadStatus.Progress -> LinearWavyProgressIndicator(
                             progress = { status.percent / 100f },
-                            modifier = Modifier.fillMaxWidth(),
+                            modifier = progressModifier,
                         )
 
-                        is DownloadStatus.Loading -> LinearProgressIndicator(
-                            modifier = Modifier.fillMaxWidth(),
+                        is DownloadStatus.Loading -> LinearWavyProgressIndicator(
+                            modifier = progressModifier,
                         )
 
-                        else -> Spacer(modifier = Modifier.height(4.dp)) // keep layout stable
+                        else -> Spacer(
+                            modifier = Modifier.height(
+                                WavyProgressIndicatorDefaults.LinearContainerHeight
+                            )
+                        )
                     }
 
-                    Row(
+                    Spacer(modifier = Modifier.height(4.dp))
+
+                    val module = state.result?.module
+                    val isDownloading = state.downloadStatus is DownloadStatus.Loading ||
+                        state.downloadStatus is DownloadStatus.Progress
+                    val buttonLabel = when {
+                        state.isLoading -> stringResource(R.string.loading)
+
+                        isDownloading -> when (val s = state.downloadStatus) {
+                            is DownloadStatus.Progress ->
+                                stringResource(R.string.value_percent, s.percent.toInt())
+
+                            else -> stringResource(R.string.downloading)
+                        }
+
+                        state.moduleExists -> stringResource(R.string.play)
+
+                        module?.isSupported == false -> stringResource(R.string.unsupported)
+
+                        else -> stringResource(R.string.download)
+                    }
+                    val buttonIcon = when {
+                        state.isLoading || isDownloading -> null
+                        state.moduleExists -> Icons.Default.PlayArrow
+                        module?.isSupported == false -> null
+                        else -> Icons.Default.Download
+                    }
+                    val randomLabel = stringResource(R.string.random)
+
+                    ButtonGroup(
                         modifier = Modifier
                             .fillMaxWidth()
-                            .padding(horizontal = 16.dp, vertical = 8.dp),
-                        horizontalArrangement = Arrangement.spacedBy(8.dp),
+                            .padding(horizontal = 16.dp),
+                        overflowIndicator = {},
                         content = {
-                            val module = state.result?.module
-                            val isDownloading = state.downloadStatus is DownloadStatus.Loading ||
-                                state.downloadStatus is DownloadStatus.Progress
-                            val buttonLabel = when {
-                                state.isLoading -> stringResource(R.string.loading)
-
-                                isDownloading -> when (val s = state.downloadStatus) {
-                                    is DownloadStatus.Progress ->
-                                        stringResource(R.string.value_percent, s.percent.toInt())
-
-                                    else -> stringResource(R.string.downloading)
-                                }
-
-                                state.moduleExists -> stringResource(R.string.play)
-
-                                module?.isSupported == false -> stringResource(R.string.unsupported)
-
-                                else -> stringResource(R.string.download)
-                            }
-
-                            Button(
-                                modifier = Modifier.weight(1f),
-                                shape = MaterialTheme.shapes.small,
-                                enabled = !state.isLoading && !isDownloading &&
-                                    module?.isSupported != false,
-                                onClick = {
-                                    if (state.moduleExists) {
-                                        module?.let { onPlay(it) }
-                                    } else {
-                                        module?.let { onDownloadModule(it) }
-                                    }
+                            customItem(
+                                buttonGroupContent = {
+                                    val interactionSource = remember { MutableInteractionSource() }
+                                    Button(
+                                        modifier = Modifier
+                                            .weight(1f)
+                                            .heightIn(min = ActionButtonHeight)
+                                            .animateWidth(interactionSource),
+                                        shapes = ButtonDefaults.shapesFor(ActionButtonHeight),
+                                        contentPadding = ButtonDefaults.contentPaddingFor(
+                                            buttonHeight = ActionButtonHeight,
+                                            hasStartIcon = buttonIcon != null,
+                                        ),
+                                        interactionSource = interactionSource,
+                                        enabled = !state.isLoading && !isDownloading &&
+                                            module?.isSupported != false,
+                                        onClick = {
+                                            if (state.moduleExists) {
+                                                module?.let { onPlay(it) }
+                                            } else {
+                                                module?.let { onDownloadModule(it) }
+                                            }
+                                        },
+                                        content = {
+                                            ActionButtonContent(
+                                                icon = buttonIcon,
+                                                label = buttonLabel,
+                                            )
+                                        }
+                                    )
                                 },
-                                content = { Text(text = buttonLabel) }
+                                menuContent = {}
                             )
-
-                            OutlinedButton(
-                                modifier = Modifier.weight(1f),
-                                shape = MaterialTheme.shapes.small,
-                                enabled = !state.isLoading && !isDownloading,
-                                onClick = onRandomModule,
-                                content = { Text(text = stringResource(R.string.random)) }
+                            customItem(
+                                buttonGroupContent = {
+                                    val interactionSource = remember { MutableInteractionSource() }
+                                    FilledTonalButton(
+                                        modifier = Modifier
+                                            .heightIn(min = ActionButtonHeight)
+                                            .animateWidth(interactionSource),
+                                        shapes = ButtonDefaults.shapesFor(ActionButtonHeight),
+                                        contentPadding = ButtonDefaults.contentPaddingFor(
+                                            buttonHeight = ActionButtonHeight,
+                                            hasStartIcon = true,
+                                        ),
+                                        interactionSource = interactionSource,
+                                        enabled = !state.isLoading && !isDownloading,
+                                        onClick = onRandomModule,
+                                        content = {
+                                            ActionButtonContent(
+                                                icon = Icons.Default.Shuffle,
+                                                label = randomLabel,
+                                            )
+                                        }
+                                    )
+                                },
+                                menuContent = {}
                             )
                         }
                     )
@@ -232,9 +291,12 @@ private fun DownloadModuleContent(
                 content = {
                     val result = state.result
                     when {
-                        state.isLoading -> ProgressbarIndicator()
+                        state.isLoading -> ContainedLoadingIndicator(
+                            modifier = Modifier.size(72.dp)
+                        )
 
                         state.softError != null -> MessageBox(
+                            icon = Icons.Default.ErrorOutline,
                             text = state.softError,
                             onBack = onBack,
                         )
@@ -244,11 +306,32 @@ private fun DownloadModuleContent(
                                 .fillMaxSize()
                                 .padding(horizontal = 16.dp),
                             moduleResult = result,
+                            isDownloaded = state.moduleExists,
                         )
                     }
                 }
             )
         }
+    )
+}
+
+private val ActionButtonHeight = ButtonDefaults.MediumContainerHeight
+
+/** Icon and label sized for an [ActionButtonHeight] button. */
+@Composable
+private fun ActionButtonContent(icon: ImageVector?, label: String) {
+    icon?.let {
+        Icon(
+            modifier = Modifier.size(ButtonDefaults.iconSizeFor(ActionButtonHeight)),
+            imageVector = it,
+            contentDescription = null,
+        )
+        Spacer(modifier = Modifier.width(ButtonDefaults.iconSpacingFor(ActionButtonHeight)))
+    }
+    Text(
+        text = label,
+        style = ButtonDefaults.textStyleFor(ActionButtonHeight),
+        maxLines = 1,
     )
 }
 

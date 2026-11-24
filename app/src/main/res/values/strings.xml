@@ -102,6 +102,9 @@
     <string name="fab_play_shuffled">Play Shuffled</string>
     <string name="hex_code">#%s</string>
     <string name="history">History</string>
+    <string name="history_earlier">Earlier</string>
+    <string name="history_today">Today</string>
+    <string name="history_yesterday">Yesterday</string>
     <string name="indexing">Indexing…</string>
     <string name="info_bpm">BPM</string>
     <string name="info_pat">Pat</string>
@@ -115,12 +118,21 @@
     <string name="message_no_modules_in_folder">No module files found in this folder.</string>
     <string name="message_no_playlist_items">No entries in this playlist</string>
     <string name="message_no_playlists">No Playlists found</string>
-    <string name="module_detail_adjusted_text">%s… </string>
-    <string name="module_detail_by">%1$s by %2$s (%3$s)</string>
+    <string name="module_detail_artist">by %s</string>
+    <string name="module_detail_artist_notes">Artist\'s Notes</string>
+    <plurals name="module_detail_channels">
+        <item quantity="one">%d channel</item>
+        <item quantity="other">%d channels</item>
+    </plurals>
+    <string name="module_detail_downloaded">Downloaded</string>
     <string name="module_detail_instruments">Instruments</string>
     <string name="module_detail_license">License</string>
     <string name="module_detail_song_message">Song Message</string>
     <string name="module_detail_sponsor">Sponsor</string>
+    <string name="module_detail_stat_downloads">Downloads</string>
+    <string name="module_detail_stat_favourites">Favourites</string>
+    <string name="module_detail_stat_rating">Rating</string>
+    <string name="module_detail_stat_review">Review</string>
     <string name="module_download_share">%1$s (by %2$s) from The Mod Archive: %3$s</string>
     <string name="mono">mono</string>
     <string name="name">Name</string>
@@ -272,6 +284,8 @@
     <string name="root_folder">Root</string>
     <string name="save">Save</string>
     <string name="search">Search</string>
+    <string name="search_by">Search by</string>
+    <string name="search_discover">Discover</string>
     <string name="search_no_api_message">Search needs a Mod Archive API key.\nAdd yours in the Downloads section of Preferences.</string>
     <string name="search_no_api_title">No API key set</string>
     <string name="search_api_credits">Powered by The Mod Archive</string>
@@ -280,7 +294,7 @@
     <string name="search_selection_artist">Artist</string>
     <string name="search_selection_title">Title or Filename</string>
     <string name="select">Select</string>
-    <string name="show_less">" Show Less"</string>
+    <string name="show_less">Show Less</string>
     <string name="show_more">Show More</string>
     <string name="sixteen_bit">16-bit</string>
     <string name="size">Size</string>

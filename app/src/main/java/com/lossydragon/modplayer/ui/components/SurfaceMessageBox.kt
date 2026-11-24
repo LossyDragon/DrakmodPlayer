@@ -17,7 +17,7 @@ import com.lossydragon.modplayer.ui.theme.AppTheme
 fun SurfaceMessageBox(
     icon: ImageVector? = null,
     title: String,
-    message: String,
+    message: String
 ) {
     Surface(
         modifier = Modifier
