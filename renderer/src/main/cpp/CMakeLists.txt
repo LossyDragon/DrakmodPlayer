@@ -10,6 +10,7 @@ set(CMAKE_CXX_STANDARD_REQUIRED ON)
 # Add libxmp's CMakeLists.txt
 add_subdirectory(libxmp)
 target_compile_options(xmp_static PRIVATE -Wno-unused-function)
+target_sources(xmp_static PRIVATE "${CMAKE_CURRENT_SOURCE_DIR}/xmp-extras.c")
 
 # Add OpenMPT
 set(OPENMPT_WAVEFORM_PATCH "${CMAKE_CURRENT_SOURCE_DIR}/patches/openmpt-waveform-api.patch")

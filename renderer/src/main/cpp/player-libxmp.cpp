@@ -11,6 +11,8 @@
 #include <array>
 #include <atomic>
 #include <cerrno>
+#include <cmath>
+#include <cstdint>
 #include <cstdio>
 #include <cstdlib>
 #include <cstring>
@@ -28,7 +30,9 @@ constexpr const char* TAG = "Drakplayer (libxmp) JNI";
 #define LOG_ERROR(...) __android_log_print(ANDROID_LOG_ERROR, TAG, __VA_ARGS__)
 
 constexpr int MAX_BUFFER_SIZE = 1024;
-constexpr int PERIOD_BASE = 13696;
+constexpr double C4_PERIOD = 428.0; // libxmp's mixer reference period
+
+extern "C" double xmp_extra_c5spd(xmp_context ctx, int smp); // xmp-extras.c
 
 // Audio-thread view of the context: set by init, nulled (with the callback drained) before free.
 static std::atomic<xmp_context> g_render_ctx(nullptr);
@@ -99,7 +103,7 @@ struct XmpPlayerState {
   std::array<int, XMP_MAX_CHANNELS> cur_vol{};
   std::array<int, XMP_MAX_CHANNELS> hold_vol{};
   std::array<int, XMP_MAX_CHANNELS> last_key{};
-  std::array<int, XMP_MAX_CHANNELS> pos{};
+  std::vector<double> c5spd; // per sample, fixed at load
 
 private:
   XmpPlayerState() = default;
@@ -352,7 +356,8 @@ jint xmp_loadFd(JNIEnv* env, jint fd, jobject modInfo) {
 
   if (res == 0) {
     xmp_get_module_info(state.ctx, &state.mi);
-    state.pos.fill(0);
+    state.c5spd.resize(state.mi.mod->smp);
+    for (int i = 0; i < state.mi.mod->smp; i++) state.c5spd[i] = xmp_extra_c5spd(state.ctx, i);
     state.sequence = 0;
     state.mod_is_loaded = true;
     LOG_INFO("loadModuleFd() - loaded: %s", ti.name);
@@ -747,67 +752,48 @@ void xmp_getSampleData(JNIEnv* env, jboolean trigger, jint ins, jint key, jint p
   [&]() {
     std::unique_lock<std::mutex> lock = state.lock();
 
-    if (!state.mod_is_loaded || !state.mi.mod) return;
-    if (chn < 0 || chn >= XMP_MAX_CHANNELS) return;
-    if (period <= 0 || ins < 0 || key < 0 || key >= XMP_MAX_KEYS) return;
-
+    if (!state.mod_is_loaded || !state.mi.mod || state.actual_rate <= 0) return;
     const xmp_module_info& mi = state.mi;
-    if (ins >= mi.mod->ins) return;
+    if (chn < 0 || chn >= std::min<int>(mi.mod->chn, XMP_MAX_CHANNELS)) return;
 
-    xmp_subinstrument* sub = getSubinstrument(mi, ins, key);
-    if (!sub || sub->sid < 0 || sub->sid >= mi.mod->smp) return;
+    // The channel as it is being heard: real sample, position and pitch (ins/key/period/trigger unused).
+    static thread_local FrameSnapshot snap;
+    if (!g_frame.read(audio_presented_frame(), snap) || !snap.valid) return;
+    const xmp_channel_info& ci = snap.fi.channel_info[chn];
+    if (ci.period == 0) return;
 
-    const xmp_sample* xxs = &mi.mod->xxs[sub->sid];
-    if (xxs->flg & XMP_SAMPLE_SYNTH || xxs->len == 0 || !xxs->data) return;
-
-    int step = (PERIOD_BASE << 4) / period;
-    int lps = xxs->lps << 5;
-    int lpe = xxs->lpe << 5;
-
-    int current_pos = state.pos[chn];
-    if (trigger == JNI_TRUE || (current_pos >> 5) >= xxs->len) current_pos = 0;
-
-    int transient_size = 0;
-    if (step > 0) {
-      transient_size = (xxs->flg & XMP_SAMPLE_LOOP) ? (lps - current_pos) / step : ((xxs->len << 5) - current_pos) / step;
+    int smp = ci.sample;
+    if (mi.mod->smp > 256) { // ci.sample is a byte; go through the instrument map instead
+      xmp_subinstrument* sub = getSubinstrument(mi, ci.instrument, ci.note);
+      smp = sub ? sub->sid : -1;
     }
-    int limit = std::min(width, std::max(0, transient_size));
+    if (smp < 0 || smp >= mi.mod->smp) return;
 
-    if (xxs->flg & XMP_SAMPLE_16BIT) {
-      const auto* data = reinterpret_cast<const short*>(xxs->data);
-      for (int i = 0; i < limit; i++) {
-        sample_buffer[i] = static_cast<jbyte>(data[current_pos >> 5] >> 8);
-        current_pos += step;
+    const xmp_sample& xxs = mi.mod->xxs[smp];
+    if (xxs.flg & XMP_SAMPLE_SYNTH || xxs.len <= 0 || !xxs.data) return;
+    if (ci.position >= static_cast<unsigned int>(xxs.len)) return; // also "no voice" (-1)
+
+    // Same formula as libxmp's mixer: sample frames advanced per output frame.
+    const double c5spd = smp < static_cast<int>(state.c5spd.size()) ? state.c5spd[smp] : 8363.0;
+    const double step = C4_PERIOD * c5spd * 4096.0 / state.actual_rate / ci.period;
+    if (!(step >= 0.001 && step <= 32767.0)) return;
+
+    const bool loop = (xxs.flg & XMP_SAMPLE_LOOP) && xxs.lps >= 0 && xxs.lpe > xxs.lps && xxs.lpe <= xxs.len;
+    const bool is16 = (xxs.flg & XMP_SAMPLE_16BIT) != 0;
+    const auto* data8 = reinterpret_cast<const int8_t*>(xxs.data);
+    const auto* data16 = reinterpret_cast<const int16_t*>(xxs.data);
+
+    double pos = ci.position;
+    for (int i = 0; i < width; i++) {
+      if (loop && pos >= xxs.lpe) {
+        pos = xxs.lps + std::fmod(pos - xxs.lpe, static_cast<double>(xxs.lpe - xxs.lps));
+      } else if (pos >= xxs.len) {
+        break;
       }
-      if (xxs->flg & XMP_SAMPLE_LOOP) {
-        for (int i = limit; i < width; i++) {
-          sample_buffer[i] = static_cast<jbyte>(data[current_pos >> 5] >> 8);
-          current_pos += step;
-          if (current_pos >= lpe) {
-            current_pos = lps + current_pos - lpe;
-            if (current_pos >= lpe) current_pos = lps;
-          }
-        }
-      }
-    } else {
-      const auto* data = reinterpret_cast<const jbyte*>(xxs->data);
-      for (int i = 0; i < limit; i++) {
-        sample_buffer[i] = data[current_pos >> 5];
-        current_pos += step;
-      }
-      if (xxs->flg & XMP_SAMPLE_LOOP) {
-        for (int i = limit; i < width; i++) {
-          sample_buffer[i] = data[current_pos >> 5];
-          current_pos += step;
-          if (current_pos >= lpe) {
-            current_pos = lps + current_pos - lpe;
-            if (current_pos >= lpe) current_pos = lps;
-          }
-        }
-      }
+      const int at = static_cast<int>(pos);
+      sample_buffer[i] = is16 ? static_cast<jbyte>(data16[at] >> 8) : static_cast<jbyte>(data8[at]);
+      pos += step;
     }
-
-    state.pos[chn] = current_pos;
   }();
 
   env->SetByteArrayRegion(buffer, 0, width, sample_buffer.data());
