@@ -211,6 +211,11 @@ fun MiniPlayerBar(
                                 WavyProgressIndicatorDefaults.indicatorAmplitude
                             } else {
                                 { 0f }
+                            },
+                            waveSpeed = if (isPlaying) {
+                                WavyProgressIndicatorDefaults.LinearDeterminateWavelength
+                            } else {
+                                0.dp
                             }
                         )
                     }
