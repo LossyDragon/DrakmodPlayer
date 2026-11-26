@@ -4,6 +4,7 @@ import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.*
 import androidx.compose.material.icons.*
 import androidx.compose.material.icons.filled.*
+import androidx.compose.material3.ListItemDefaults
 import androidx.compose.runtime.*
 import androidx.compose.ui.*
 import androidx.compose.ui.platform.*
@@ -33,33 +34,50 @@ internal fun ModuleList(
         modifier = Modifier.fillMaxSize(),
         state = listState,
         contentPadding = PaddingValues(
-            top = padding.calculateTopPadding(),
-            bottom = padding.calculateBottomPadding() + 88.dp, // FAB
-            start = padding.calculateStartPadding(LocalLayoutDirection.current),
-            end = padding.calculateEndPadding(LocalLayoutDirection.current),
+            top = padding.calculateTopPadding() + 8.dp,
+            bottom = padding.calculateBottomPadding() + 96.dp, // Floating toolbar
+            start = padding.calculateStartPadding(LocalLayoutDirection.current) + 16.dp,
+            end = padding.calculateEndPadding(LocalLayoutDirection.current) + 16.dp,
         ),
         content = {
-            items(
+            itemsIndexed(
                 items = directories,
-                key = { it.uri.toString() },
-                itemContent = { dir ->
+                key = { _, dir -> dir.uri.toString() },
+                itemContent = { idx, dir ->
                     BrowserListItem(
+                        modifier = Modifier
+                            .animateItem()
+                            .padding(bottom = ListItemDefaults.SegmentedGap),
                         title = dir.name,
                         comment = stringResource(R.string.directory),
                         leadingIcon = Icons.Default.Folder,
+                        segmentedShapes = ListItemDefaults.segmentedShapes(idx, directories.size),
                         onClick = { onDir(dir) },
                         onTrailingClick = onAddFolderToPlaylist?.let { { it(dir) } },
                     )
                 }
             )
-            items(
+            if (directories.isNotEmpty() && files.isNotEmpty()) {
+                item(key = "group_gap") {
+                    Spacer(
+                        modifier = Modifier
+                            .animateItem()
+                            .height(12.dp)
+                    )
+                }
+            }
+            itemsIndexed(
                 items = files,
-                key = { it.filePath },
-                itemContent = { file ->
+                key = { _, file -> file.filePath },
+                itemContent = { idx, file ->
                     BrowserListItem(
+                        modifier = Modifier
+                            .animateItem()
+                            .padding(bottom = ListItemDefaults.SegmentedGap),
                         title = file.name,
                         comment = file.moduleType.ifBlank { file.fileExtension },
                         leadingIcon = Icons.Default.AudioFile,
+                        segmentedShapes = ListItemDefaults.segmentedShapes(idx, files.size),
                         onClick = { onSelect(file) },
                         onTrailingClick = onAddToPlaylist?.let { { it(file) } },
                     )

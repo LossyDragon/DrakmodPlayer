@@ -58,12 +58,5 @@ fun AppTheme(
     MaterialTheme(
         colorScheme = colorScheme,
         content = content,
-        shapes = MaterialTheme.shapes.copy(
-            extraSmall = ShapeDefaults.ExtraSmall,
-            small = ShapeDefaults.Small,
-            medium = ShapeDefaults.Small,
-            large = ShapeDefaults.Medium,
-            extraLarge = ShapeDefaults.Medium,
-        )
     )
 }

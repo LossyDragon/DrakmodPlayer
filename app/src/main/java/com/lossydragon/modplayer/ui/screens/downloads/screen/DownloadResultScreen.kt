@@ -28,7 +28,6 @@ import com.lossydragon.modplayer.ui.screens.downloads.DownloadsViewModel
 import com.lossydragon.modplayer.ui.screens.downloads.SearchResultType
 import com.lossydragon.modplayer.ui.screens.downloads.SearchType
 import com.lossydragon.modplayer.ui.screens.downloads.components.DownloadListItem
-import com.lossydragon.modplayer.ui.screens.downloads.components.downloadSegmentedShapes
 import com.lossydragon.modplayer.ui.theme.AppTheme
 import com.lossydragon.modplayer.util.UiText
 import com.lossydragon.modplayer.util.asString
@@ -161,7 +160,7 @@ private fun DownloadScreenContent(
                             val itemModifier = Modifier
                                 .animateItem()
                                 .padding(bottom = ListItemDefaults.SegmentedGap)
-                            val shapes = downloadSegmentedShapes(idx, segmentCount)
+                            val shapes = ListItemDefaults.segmentedShapes(idx, segmentCount)
                             when (val item = pagingItems[idx]) {
                                 is Module -> DownloadListItem(
                                     modifier = itemModifier,

@@ -5,6 +5,7 @@ import androidx.compose.foundation.background
 import androidx.compose.foundation.gestures.*
 import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.layout.*
+import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.material.icons.*
 import androidx.compose.material.icons.filled.*
 import androidx.compose.material.icons.rounded.*
@@ -17,6 +18,7 @@ import androidx.compose.ui.layout.*
 import androidx.compose.ui.platform.*
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.semantics.*
+import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.*
 import com.lossydragon.modplayer.R
@@ -30,6 +32,8 @@ import sh.calvin.reorderable.ReorderableCollectionItemScope
 internal fun ReorderableCollectionItemScope.PlaylistEntryItem(
     index: Int,
     file: ModuleEntity,
+    shapes: ListItemShapes,
+    modifier: Modifier = Modifier,
     onPlay: () -> Unit,
     onRemove: () -> Unit
 ) {
@@ -45,7 +49,7 @@ internal fun ReorderableCollectionItemScope.PlaylistEntryItem(
     }
 
     Box(
-        modifier = Modifier
+        modifier = modifier
             .onSizeChanged { componentWidth = it.width.toFloat() }
             .draggable(
                 orientation = Orientation.Horizontal,
@@ -75,7 +79,7 @@ internal fun ReorderableCollectionItemScope.PlaylistEntryItem(
                 .matchParentSize()
                 .background(
                     color = MaterialTheme.colorScheme.errorContainer,
-                    shape = MaterialTheme.shapes.small,
+                    shape = shapes.shape,
                 )
                 .padding(horizontal = 20.dp),
             contentAlignment = Alignment.CenterEnd,
@@ -87,7 +91,7 @@ internal fun ReorderableCollectionItemScope.PlaylistEntryItem(
             )
         }
         Box(modifier = Modifier.offset { IntOffset(swipeOffset.toInt(), 0) }) {
-            ListItem(
+            SegmentedListItem(
                 modifier = Modifier.semantics {
                     customActions = listOf(
                         CustomAccessibilityAction(removeLabel) {
@@ -97,24 +101,37 @@ internal fun ReorderableCollectionItemScope.PlaylistEntryItem(
                     )
                 },
                 onClick = onPlay,
-                shapes = ListItemDefaults.shapes(
-                    shape = MaterialTheme.shapes.small,
-                    focusedShape = MaterialTheme.shapes.small,
-                    pressedShape = MaterialTheme.shapes.small,
+                shapes = shapes,
+                colors = ListItemDefaults.segmentedColors(
+                    containerColor = MaterialTheme.colorScheme.surfaceContainer,
                 ),
                 content = {
                     Text(
                         text = file.name,
                         maxLines = 1,
+                        overflow = TextOverflow.Ellipsis,
                     )
                 },
                 supportingContent = {
-                    Text(text = file.moduleType.ifBlank { file.fileExtension.uppercase() })
+                    Text(
+                        text = file.moduleType.ifBlank { file.fileExtension.uppercase() },
+                        maxLines = 1,
+                        overflow = TextOverflow.Ellipsis,
+                    )
                 },
                 leadingContent = {
-                    Text(
-                        text = "${index + 1}",
-                        style = MaterialTheme.typography.labelSmall,
+                    Box(
+                        modifier = Modifier
+                            .size(40.dp)
+                            .background(MaterialTheme.colorScheme.secondaryContainer, CircleShape),
+                        contentAlignment = Alignment.Center,
+                        content = {
+                            Text(
+                                text = "${index + 1}",
+                                style = MaterialTheme.typography.labelLarge,
+                                color = MaterialTheme.colorScheme.onSecondaryContainer,
+                            )
+                        }
                     )
                 },
                 trailingContent = {
@@ -177,6 +194,7 @@ private fun Preview() {
                     moduleName = "Beneath the Fallen Stars",
                     moduleType = "Impulse Tracker",
                 ),
+                shapes = ListItemDefaults.segmentedShapes(0, 1),
                 onPlay = {},
                 onRemove = {},
             )

@@ -10,6 +10,7 @@ import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.ChevronRight
 import androidx.compose.material3.AssistChip
+import androidx.compose.material3.AssistChipDefaults
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Surface
@@ -55,8 +56,18 @@ internal fun BreadCrumbs(
                         val isLast = index == breadcrumbs.lastIndex
                         AssistChip(
                             modifier = Modifier.padding(horizontal = 2.dp),
-                            shape = MaterialTheme.shapes.extraSmall,
                             enabled = !isLast,
+                            colors = AssistChipDefaults.assistChipColors(
+                                disabledContainerColor =
+                                    MaterialTheme.colorScheme.secondaryContainer,
+                                disabledLabelColor =
+                                    MaterialTheme.colorScheme.onSecondaryContainer,
+                            ),
+                            border = if (isLast) {
+                                null
+                            } else {
+                                AssistChipDefaults.assistChipBorder(enabled = true)
+                            },
                             onClick = { onCrumbClick(index) },
                             label = {
                                 Text(

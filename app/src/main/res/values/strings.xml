@@ -40,8 +40,6 @@
     <string name="desc_clear_history">Clear History Button</string>
     <string name="desc_drag_handle">Drag to reorder</string>
     <string name="desc_folder_pick">Choose Starting Folder Destination</string>
-    <string name="desc_menu_collapse">Close menu</string>
-    <string name="desc_menu_expand">Open menu</string>
     <string name="desc_message_box_icon">Message Box Icon</string>
     <string name="desc_more_options">More options</string>
     <string name="desc_mute_channel">Mute channel %d</string>

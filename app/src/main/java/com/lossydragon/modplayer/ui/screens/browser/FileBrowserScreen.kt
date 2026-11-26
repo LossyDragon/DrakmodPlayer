@@ -10,13 +10,16 @@ import androidx.compose.foundation.text.input.*
 import androidx.compose.material.icons.*
 import androidx.compose.material.icons.filled.*
 import androidx.compose.material3.*
+import androidx.compose.material3.FloatingToolbarDefaults.floatingToolbarVerticalNestedScroll
 import androidx.compose.material3.pulltorefresh.*
 import androidx.compose.runtime.*
+import androidx.compose.runtime.saveable.*
 import androidx.compose.ui.*
 import androidx.compose.ui.graphics.*
 import androidx.compose.ui.input.nestedscroll.*
 import androidx.compose.ui.platform.*
 import androidx.compose.ui.res.*
+import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.tooling.preview.*
 import androidx.compose.ui.unit.*
 import androidx.core.net.toUri
@@ -190,6 +193,9 @@ private fun FileBrowserScreenContent(
     // A refresh keeps the list on screen behind the pull indicator; other loads replace it.
     val isRefreshing = browserState.isLoading && browserState.loadingReason == R.string.reindexing
 
+    var toolbarExpanded by rememberSaveable { mutableStateOf(true) }
+    LaunchedEffect(browserState.breadcrumbs) { toolbarExpanded = true }
+
     LaunchedEffect(textFieldState) {
         snapshotFlow { textFieldState.text.toString() }
             .collect { onFilter(it) }
@@ -215,13 +221,11 @@ private fun FileBrowserScreenContent(
                     state = searchBarState,
                     colors = appBarWithSearchColors,
                     inputField = inputField,
-                    shape = MaterialTheme.shapes.small,
                 )
                 // Quick-pick: the filtered files, where a tap plays just that file.
                 ExpandedDockedSearchBarWithGap(
                     state = searchBarState,
                     inputField = inputField,
-                    shape = MaterialTheme.shapes.small,
                     content = {
                         when {
                             browserState.filterQuery.isBlank() -> QuickPickHint(
@@ -262,7 +266,6 @@ private fun FileBrowserScreenContent(
                         breadcrumbs = browserState.breadcrumbs,
                         onCrumbClick = onBreadcrumb,
                     )
-                    HorizontalDivider()
                 }
             }
         },
@@ -272,13 +275,14 @@ private fun FileBrowserScreenContent(
                 enter = scaleIn() + fadeIn(),
                 exit = scaleOut() + fadeOut(),
             ) {
+                val toggleColors = IconButtonDefaults.iconToggleButtonColors(
+                    checkedContainerColor = MaterialTheme.colorScheme.secondaryContainer,
+                    checkedContentColor = MaterialTheme.colorScheme.onSecondaryContainer,
+                )
                 HorizontalFloatingToolbar(
-                    modifier = Modifier.offset(y = 12.dp),
-                    expanded = true,
-                    shape = MaterialTheme.shapes.small,
+                    expanded = toolbarExpanded,
                     floatingActionButton = {
-                        FloatingActionButton(
-                            shape = MaterialTheme.shapes.small,
+                        FloatingToolbarDefaults.StandardFloatingActionButton(
                             onClick = onPlayAll,
                             content = {
                                 Icon(
@@ -289,41 +293,30 @@ private fun FileBrowserScreenContent(
                         )
                     },
                     content = {
-                        IconButton(
-                            onClick = onShuffle,
+                        IconToggleButton(
+                            checked = browserState.isShuffle,
+                            onCheckedChange = { onShuffle() },
+                            colors = toggleColors,
                             content = {
-                                val icon = if (browserState.isShuffle) {
-                                    Icons.Default.ShuffleOn
-                                } else {
-                                    Icons.Default.Shuffle
-                                }
                                 Icon(
-                                    imageVector = icon,
+                                    imageVector = Icons.Default.Shuffle,
                                     contentDescription = stringResource(R.string.desc_shuffle),
-                                    tint = if (browserState.isShuffle) {
-                                        MaterialTheme.colorScheme.primary
-                                    } else {
-                                        MaterialTheme.colorScheme.onSurfaceVariant
-                                    }
                                 )
                             }
                         )
 
-                        IconButton(
-                            onClick = onRepeatMode,
+                        IconToggleButton(
+                            checked = repeatMode != Player.REPEAT_MODE_OFF,
+                            onCheckedChange = { onRepeatMode() },
+                            colors = toggleColors,
                             content = {
                                 Icon(
-                                    imageVector = when (repeatMode) {
-                                        Player.REPEAT_MODE_ONE -> Icons.Default.RepeatOneOn
-                                        Player.REPEAT_MODE_ALL -> Icons.Default.RepeatOn
-                                        else -> Icons.Default.Repeat
+                                    imageVector = if (repeatMode == Player.REPEAT_MODE_ONE) {
+                                        Icons.Default.RepeatOne
+                                    } else {
+                                        Icons.Default.Repeat
                                     },
                                     contentDescription = stringResource(R.string.desc_repeat),
-                                    tint = if (repeatMode != Player.REPEAT_MODE_OFF) {
-                                        MaterialTheme.colorScheme.primary
-                                    } else {
-                                        MaterialTheme.colorScheme.onSurfaceVariant
-                                    }
                                 )
                             }
                         )
@@ -340,7 +333,12 @@ private fun FileBrowserScreenContent(
                 onRefresh = onRefresh,
                 modifier = Modifier
                     .fillMaxSize()
-                    .padding(top = padding.calculateTopPadding()),
+                    .padding(top = padding.calculateTopPadding())
+                    .floatingToolbarVerticalNestedScroll(
+                        expanded = toolbarExpanded,
+                        onExpand = { toolbarExpanded = true },
+                        onCollapse = { toolbarExpanded = false },
+                    ),
             ) {
                 when {
                     browserState.isLoading && !isRefreshing -> ProgressbarIndicator(
@@ -426,26 +424,33 @@ private fun PlaylistPickerDialog(
             } else {
                 LazyColumn {
                     itemsIndexed(playlists) { idx, playlist ->
-                        ListItem(
-                            colors = ListItemDefaults.colors(
-                                containerColor = Color.Transparent
+                        SegmentedListItem(
+                            modifier = Modifier.padding(bottom = ListItemDefaults.SegmentedGap),
+                            // One step above the dialog's own surfaceContainerHigh.
+                            colors = ListItemDefaults.segmentedColors(
+                                containerColor = MaterialTheme.colorScheme.surfaceContainerHighest,
                             ),
-                            shapes = ListItemDefaults.shapes(
-                                shape = MaterialTheme.shapes.small,
-                                focusedShape = MaterialTheme.shapes.small,
-                                pressedShape = MaterialTheme.shapes.small,
-                            ),
+                            shapes = ListItemDefaults.segmentedShapes(idx, playlists.size),
                             onClick = { onPick(playlist) },
-                            content = { Text(text = playlist.name) },
+                            content = {
+                                Text(
+                                    text = playlist.name,
+                                    maxLines = 1,
+                                    overflow = TextOverflow.Ellipsis,
+                                )
+                            },
                             supportingContent = if (playlist.comment.isNotBlank()) {
-                                { Text(text = playlist.comment) }
+                                {
+                                    Text(
+                                        text = playlist.comment,
+                                        maxLines = 1,
+                                        overflow = TextOverflow.Ellipsis,
+                                    )
+                                }
                             } else {
                                 null
                             }
                         )
-                        if (idx < playlists.size - 1) {
-                            Spacer(modifier = Modifier.height(8.dp))
-                        }
                     }
                 }
             }

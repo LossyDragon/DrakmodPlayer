@@ -10,8 +10,11 @@ import androidx.compose.foundation.lazy.*
 import androidx.compose.material.icons.*
 import androidx.compose.material.icons.filled.*
 import androidx.compose.material3.*
+import androidx.compose.material3.FloatingToolbarDefaults.floatingToolbarVerticalNestedScroll
 import androidx.compose.runtime.*
+import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.ui.*
+import androidx.compose.ui.draw.shadow
 import androidx.compose.ui.hapticfeedback.*
 import androidx.compose.ui.platform.*
 import androidx.compose.ui.res.*
@@ -34,10 +37,8 @@ import com.lossydragon.modplayer.ui.components.ConfirmDialog
 import com.lossydragon.modplayer.ui.components.MessageBox
 import com.lossydragon.modplayer.ui.components.ProgressbarIndicator
 import com.lossydragon.modplayer.ui.screens.playlists.components.NewPlaylistDialog
-import com.lossydragon.modplayer.ui.screens.playlists.components.PlaylistEntriesFabMenu
 import com.lossydragon.modplayer.ui.screens.playlists.components.PlaylistEntryItem
 import com.lossydragon.modplayer.ui.screens.playlists.components.PlaylistListItem
-import com.lossydragon.modplayer.ui.screens.playlists.components.PlaylistsFabMenu
 import com.lossydragon.modplayer.ui.theme.AppTheme
 import com.lossydragon.modplayer.util.asString
 import kotlinx.collections.immutable.ImmutableList
@@ -48,6 +49,9 @@ import sh.calvin.reorderable.ReorderableItem
 import sh.calvin.reorderable.rememberReorderableLazyListState
 
 private const val EXPORT_FILE_NAME = "dragon_player_playlists.json"
+
+// Bottom clears the FAB.
+private val ListPadding = PaddingValues(start = 16.dp, top = 8.dp, end = 16.dp, bottom = 96.dp)
 
 private sealed interface NavKeyPlaylists : NavKey {
     @Serializable data object List : NavKeyPlaylists
@@ -187,7 +191,7 @@ private fun PlaylistListScreen(
     val scope = rememberCoroutineScope()
     val resource = LocalResources.current
 
-    var isFabExpanded by remember { mutableStateOf(false) }
+    var isMenuExpanded by remember { mutableStateOf(false) }
 
     val showSnackBar: (String) -> Unit = {
         scope.launch { snackbarHostState.showSnackbar(message = it) }
@@ -259,6 +263,43 @@ private fun PlaylistListScreen(
             CenterAlignedTopAppBar(
                 title = { Text(text = stringResource(R.string.playlists)) },
                 navigationIcon = { BackButton(onBack = onBack) },
+                actions = {
+                    IconButton(
+                        onClick = { isMenuExpanded = true },
+                        enabled = !state.isLoading,
+                        content = {
+                            Icon(
+                                imageVector = Icons.Default.MoreVert,
+                                contentDescription = stringResource(R.string.desc_more_options)
+                            )
+                        }
+                    )
+                    DropdownMenu(
+                        expanded = isMenuExpanded,
+                        onDismissRequest = { isMenuExpanded = false },
+                    ) {
+                        DropdownMenuItem(
+                            text = { Text(text = stringResource(R.string.fab_import_playlists)) },
+                            leadingIcon = {
+                                Icon(imageVector = Icons.Default.Download, contentDescription = null)
+                            },
+                            onClick = {
+                                isMenuExpanded = false
+                                importLauncher.launch(arrayOf("application/json"))
+                            },
+                        )
+                        DropdownMenuItem(
+                            text = { Text(text = stringResource(R.string.fab_export_playlists)) },
+                            leadingIcon = {
+                                Icon(imageVector = Icons.Default.Upload, contentDescription = null)
+                            },
+                            onClick = {
+                                isMenuExpanded = false
+                                exportLauncher.launch(EXPORT_FILE_NAME)
+                            },
+                        )
+                    }
+                },
             )
         },
         floatingActionButton = {
@@ -267,21 +308,10 @@ private fun PlaylistListScreen(
                 enter = slideInVertically { it } + fadeIn(),
                 exit = slideOutVertically { it } + fadeOut(),
                 content = {
-                    PlaylistsFabMenu(
-                        expanded = isFabExpanded,
-                        onExpand = { isFabExpanded = !isFabExpanded },
-                        onImport = {
-                            importLauncher.launch(arrayOf("application/json"))
-                            isFabExpanded = false
-                        },
-                        onExport = {
-                            exportLauncher.launch(EXPORT_FILE_NAME)
-                            isFabExpanded = false
-                        },
-                        onNewPlaylist = {
-                            isNewPlaylistDialog = true
-                            isFabExpanded = false
-                        },
+                    ExtendedFloatingActionButton(
+                        onClick = { isNewPlaylistDialog = true },
+                        text = { Text(text = stringResource(R.string.fab_new_playlist)) },
+                        icon = { Icon(imageVector = Icons.Default.Add, contentDescription = null) },
                     )
                 }
             )
@@ -311,13 +341,20 @@ private fun PlaylistListScreen(
                             .padding(padding)
                             .fillMaxSize(),
                         state = listState,
+                        contentPadding = ListPadding,
+                        verticalArrangement = Arrangement.spacedBy(ListItemDefaults.SegmentedGap),
                         content = {
-                            items(
+                            itemsIndexed(
                                 items = state.playlists,
-                                key = { it.id },
-                                itemContent = { item ->
+                                key = { _, item -> item.id },
+                                itemContent = { index, item ->
                                     PlaylistListItem(
+                                        modifier = Modifier.animateItem(),
                                         item = item,
+                                        shapes = ListItemDefaults.segmentedShapes(
+                                            index = index,
+                                            count = state.playlists.size,
+                                        ),
                                         onSelect = { onSelectPlaylist(item) },
                                         onDelete = { deletePlaylistItem = item },
                                         onRename = { renamePlaylistItem = item },
@@ -355,7 +392,7 @@ private fun PlaylistEntriesScreen(
     onRemoveEntry: (ModuleEntity) -> Unit,
     onReorderEntry: (Int, Int) -> Unit
 ) {
-    var isFabExpanded by remember { mutableStateOf(false) }
+    var toolbarExpanded by rememberSaveable { mutableStateOf(true) }
 
     Scaffold(
         modifier = modifier,
@@ -371,11 +408,32 @@ private fun PlaylistEntriesScreen(
                 enter = slideInVertically { it } + fadeIn(),
                 exit = slideOutVertically { it } + fadeOut(),
             ) {
-                PlaylistEntriesFabMenu(
-                    expanded = isFabExpanded,
-                    onExpand = { isFabExpanded = !isFabExpanded },
-                    onPlayAll = onPlayAll,
-                    onShuffle = onShuffle,
+                HorizontalFloatingToolbar(
+                    expanded = toolbarExpanded,
+                    floatingActionButton = {
+                        FloatingToolbarDefaults.StandardFloatingActionButton(
+                            onClick = onPlayAll,
+                            content = {
+                                Icon(
+                                    imageVector = Icons.Default.PlayArrow,
+                                    contentDescription = stringResource(R.string.fab_play_all)
+                                )
+                            }
+                        )
+                    },
+                    content = {
+                        IconButton(
+                            onClick = onShuffle,
+                            content = {
+                                Icon(
+                                    imageVector = Icons.Default.Shuffle,
+                                    contentDescription = stringResource(
+                                        R.string.fab_play_shuffled
+                                    )
+                                )
+                            }
+                        )
+                    }
                 )
             }
         },
@@ -391,7 +449,15 @@ private fun PlaylistEntriesScreen(
         )
         val keys = remember(state.entries) { state.entries.stableKeys() }
 
-        Box(modifier = Modifier.padding(padding)) {
+        Box(
+            modifier = Modifier
+                .padding(padding)
+                .floatingToolbarVerticalNestedScroll(
+                    expanded = toolbarExpanded,
+                    onExpand = { toolbarExpanded = true },
+                    onCollapse = { toolbarExpanded = false },
+                )
+        ) {
             when {
                 state.isLoading -> Box(
                     modifier = Modifier.fillMaxSize(),
@@ -415,7 +481,8 @@ private fun PlaylistEntriesScreen(
                     LazyColumn(
                         modifier = Modifier.fillMaxSize(),
                         state = lazyListState,
-                        verticalArrangement = Arrangement.spacedBy(2.dp),
+                        contentPadding = ListPadding,
+                        verticalArrangement = Arrangement.spacedBy(ListItemDefaults.SegmentedGap),
                     ) {
                         itemsIndexed(
                             items = state.entries,
@@ -429,16 +496,18 @@ private fun PlaylistEntriesScreen(
                                     if (isDragging) 4.dp else 0.dp,
                                     label = "elevation"
                                 )
-                                Surface(shadowElevation = elevation) {
-                                    with(this@ReorderableItem) {
-                                        PlaylistEntryItem(
-                                            index = index,
-                                            file = file,
-                                            onPlay = { onPlayEntry(file) },
-                                            onRemove = { onRemoveEntry(file) },
-                                        )
-                                    }
-                                }
+                                val shapes = ListItemDefaults.segmentedShapes(
+                                    index = index,
+                                    count = state.entries.size,
+                                )
+                                PlaylistEntryItem(
+                                    modifier = Modifier.shadow(elevation, shapes.shape),
+                                    index = index,
+                                    file = file,
+                                    shapes = shapes,
+                                    onPlay = { onPlayEntry(file) },
+                                    onRemove = { onRemoveEntry(file) },
+                                )
                             }
                         }
                     }

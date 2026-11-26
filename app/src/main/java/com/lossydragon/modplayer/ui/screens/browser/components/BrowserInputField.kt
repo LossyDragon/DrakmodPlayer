@@ -96,7 +96,6 @@ private fun SortMenu(
         DropdownMenu(
             expanded = showSortMenu,
             onDismissRequest = { showSortMenu = false },
-            shape = MaterialTheme.shapes.small,
             content = {
                 BrowserSortOrder.entries.forEach { order ->
                     val (label, icon) = when (order) {

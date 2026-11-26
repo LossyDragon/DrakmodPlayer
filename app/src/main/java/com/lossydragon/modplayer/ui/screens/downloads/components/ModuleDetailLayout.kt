@@ -34,9 +34,6 @@ import com.lossydragon.modplayer.util.formattedInstruments
 import com.lossydragon.modplayer.util.fromHtml
 import java.util.Locale
 
-private val HeroShape = RoundedCornerShape(28.dp)
-private val SectionShape = RoundedCornerShape(20.dp)
-
 @Composable
 internal fun ModuleDetailLayout(
     moduleResult: ModuleResult,
@@ -139,7 +136,7 @@ private fun ModuleHero(module: Module, isDownloaded: Boolean) {
     Surface(
         modifier = Modifier.fillMaxWidth(),
         color = MaterialTheme.colorScheme.surfaceContainer,
-        shape = HeroShape,
+        shape = MaterialTheme.shapes.extraLarge,
         content = {
             Column(
                 modifier = Modifier.padding(24.dp),
@@ -294,7 +291,7 @@ private fun ModuleStats(module: Module) {
                 Surface(
                     modifier = Modifier.weight(1f),
                     color = MaterialTheme.colorScheme.surfaceContainer,
-                    shape = SectionShape,
+                    shape = MaterialTheme.shapes.largeIncreased,
                     content = {
                         Column(
                             modifier = Modifier.padding(horizontal = 4.dp, vertical = 12.dp),
@@ -334,7 +331,7 @@ private fun SectionCard(
     Surface(
         modifier = Modifier.fillMaxWidth(),
         color = MaterialTheme.colorScheme.surfaceContainer,
-        shape = SectionShape,
+        shape = MaterialTheme.shapes.largeIncreased,
         content = {
             Column(
                 modifier = Modifier.padding(16.dp),

@@ -1,12 +1,16 @@
 package com.lossydragon.modplayer.ui.screens.playlists.components
 
+import androidx.compose.foundation.*
 import androidx.compose.foundation.layout.*
+import androidx.compose.foundation.shape.*
 import androidx.compose.material.icons.*
 import androidx.compose.material.icons.automirrored.filled.*
 import androidx.compose.material.icons.filled.*
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
+import androidx.compose.ui.*
 import androidx.compose.ui.res.*
+import androidx.compose.ui.text.style.*
 import androidx.compose.ui.tooling.preview.*
 import androidx.compose.ui.unit.*
 import com.lossydragon.modplayer.R
@@ -17,34 +21,60 @@ import com.lossydragon.modplayer.util.toReadableDate
 @Composable
 internal fun PlaylistListItem(
     item: PlaylistEntity,
+    shapes: ListItemShapes,
+    modifier: Modifier = Modifier,
     onSelect: () -> Unit,
     onDelete: () -> Unit,
     onRename: () -> Unit
 ) {
     var expanded by remember { mutableStateOf(false) }
 
-    ListItem(
+    SegmentedListItem(
+        modifier = modifier,
         onClick = onSelect,
-        shapes = ListItemDefaults.shapes(
-            shape = MaterialTheme.shapes.small,
-            focusedShape = MaterialTheme.shapes.small,
-            pressedShape = MaterialTheme.shapes.small,
+        shapes = shapes,
+        colors = ListItemDefaults.segmentedColors(
+            containerColor = MaterialTheme.colorScheme.surfaceContainer,
         ),
-        content = { Text(text = item.name) },
+        content = {
+            Text(
+                text = item.name,
+                maxLines = 1,
+                overflow = TextOverflow.Ellipsis,
+            )
+        },
         supportingContent = {
             Column {
-                if (item.comment.isNotBlank()) Text(text = item.comment)
+                if (item.comment.isNotBlank()) {
+                    Text(
+                        text = item.comment,
+                        maxLines = 2,
+                        overflow = TextOverflow.Ellipsis,
+                    )
+                }
                 Text(
                     text = stringResource(
                         R.string.playlist_created,
                         item.createdAt.toReadableDate()
                     ),
-                    fontSize = 10.sp,
+                    style = MaterialTheme.typography.labelSmall,
                 )
             }
         },
         leadingContent = {
-            Icon(imageVector = Icons.AutoMirrored.Filled.List, contentDescription = null)
+            Box(
+                modifier = Modifier
+                    .size(40.dp)
+                    .background(MaterialTheme.colorScheme.secondaryContainer, CircleShape),
+                contentAlignment = Alignment.Center,
+                content = {
+                    Icon(
+                        imageVector = Icons.AutoMirrored.Filled.List,
+                        contentDescription = null,
+                        tint = MaterialTheme.colorScheme.onSecondaryContainer,
+                    )
+                }
+            )
         },
         trailingContent = {
             Box {
@@ -95,14 +125,25 @@ internal fun PlaylistListItem(
 @Composable
 private fun Preview() {
     AppTheme {
-        PlaylistListItem(
-            item = PlaylistEntity(
-                name = "Name Name Name",
-                comment = "Comment Comment"
-            ),
-            onSelect = {},
-            onDelete = {},
-            onRename = {},
-        )
+        Surface {
+            Column(
+                modifier = Modifier.padding(16.dp),
+                verticalArrangement = Arrangement.spacedBy(ListItemDefaults.SegmentedGap),
+                content = {
+                    repeat(3) { index ->
+                        PlaylistListItem(
+                            item = PlaylistEntity(
+                                name = "Name Name Name",
+                                comment = "Comment Comment"
+                            ),
+                            shapes = ListItemDefaults.segmentedShapes(index, 3),
+                            onSelect = {},
+                            onDelete = {},
+                            onRename = {},
+                        )
+                    }
+                }
+            )
+        }
     }
 }

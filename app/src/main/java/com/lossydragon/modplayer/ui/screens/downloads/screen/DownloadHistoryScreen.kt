@@ -19,7 +19,6 @@ import com.lossydragon.modplayer.ui.components.ConfirmDialog
 import com.lossydragon.modplayer.ui.components.MessageBox
 import com.lossydragon.modplayer.ui.screens.downloads.DownloadsViewModel
 import com.lossydragon.modplayer.ui.screens.downloads.components.DownloadListItem
-import com.lossydragon.modplayer.ui.screens.downloads.components.downloadSegmentedShapes
 import com.lossydragon.modplayer.ui.theme.AppTheme
 import java.time.LocalDate
 import java.time.ZoneId
@@ -136,7 +135,7 @@ private fun DownloadHistoryContent(
                                                 R.string.size_kb,
                                                 item.bytes / 1024
                                             ),
-                                            segmentedShapes = downloadSegmentedShapes(
+                                            segmentedShapes = ListItemDefaults.segmentedShapes(
                                                 index = index,
                                                 count = items.size,
                                             ),

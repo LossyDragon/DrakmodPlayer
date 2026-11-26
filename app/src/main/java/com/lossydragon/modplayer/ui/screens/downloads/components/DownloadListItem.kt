@@ -179,7 +179,7 @@ private fun SegmentedListItem_Preview() {
                             supportingText = stringResource(R.string.app_name),
                             leadingText = "669",
                             trailingText = stringResource(R.string.size_kb, 99999),
-                            segmentedShapes = downloadSegmentedShapes(index, 3),
+                            segmentedShapes = ListItemDefaults.segmentedShapes(index, 3),
                             onClick = {},
                         )
                     }
@@ -188,20 +188,3 @@ private fun SegmentedListItem_Preview() {
         }
     }
 }
-
-@Composable
-internal fun downloadSegmentedShapes(index: Int, count: Int): ListItemShapes {
-    val top = if (index == 0) SegmentOuterCorner else SegmentInnerCorner
-    val bottom = if (index == count - 1) SegmentOuterCorner else SegmentInnerCorner
-    return ListItemDefaults.shapes(
-        shape = RoundedCornerShape(
-            topStart = top,
-            topEnd = top,
-            bottomStart = bottom,
-            bottomEnd = bottom,
-        )
-    )
-}
-
-private val SegmentOuterCorner = 20.dp
-private val SegmentInnerCorner = 4.dp
