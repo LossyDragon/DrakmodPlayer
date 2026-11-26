@@ -65,6 +65,11 @@ open class AppPreferences(context: Context) {
     companion object {
         const val DEFAULT_THEME_STYLE = "Vibrant"
         const val DEFAULT_THEME_COLOR: Int = 0xFF660099.toInt()
+
+        const val THEME_MODE_DARK = "dark"
+        const val THEME_MODE_LIGHT = "light"
+        const val THEME_MODE_AUTO = "auto"
+        const val DEFAULT_THEME_MODE = THEME_MODE_DARK
     }
 
     private val dataStore: DataStore<Preferences> = context.dataStore
@@ -93,6 +98,10 @@ open class AppPreferences(context: Context) {
     suspend fun setFileLogging(v: Boolean) = set(fileLogging, v)
 
     /* Application */
+    private val appThemeMode = stringPreferencesKey("app_theme_mode")
+    fun getAppThemeModeFlow() = flow(appThemeMode, DEFAULT_THEME_MODE)
+    suspend fun setAppThemeMode(v: String) = set(appThemeMode, v)
+
     private val appThemeAmoled = booleanPreferencesKey("app_theme_amoled")
     fun getAppThemeAmoledFlow() = flow(appThemeAmoled, false)
     suspend fun setAppThemeAmoled(v: Boolean) = set(appThemeAmoled, v)

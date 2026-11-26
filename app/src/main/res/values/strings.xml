@@ -266,6 +266,13 @@
     <string name="pref_style_item_vibrant">Vibrant</string>
     <string name="pref_style_item_vibrant_desc">Loud, maximum colorfulness</string>
     <string name="pref_theme_color">Theme Color</string>
+    <string name="pref_theme_mode">Theme</string>
+    <string name="pref_theme_mode_auto">Auto</string>
+    <string name="pref_theme_mode_auto_desc">Follow the system setting</string>
+    <string name="pref_theme_mode_dark">Dark</string>
+    <string name="pref_theme_mode_dark_desc">Always use the dark theme</string>
+    <string name="pref_theme_mode_light">Light</string>
+    <string name="pref_theme_mode_light_desc">Always use the light theme</string>
     <string name="pref_title_about">About</string>
     <string name="pref_title_browser">File Browser</string>
     <string name="pref_title_downloads">Downloads</string>

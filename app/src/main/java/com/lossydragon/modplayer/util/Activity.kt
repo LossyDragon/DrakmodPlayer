@@ -13,17 +13,13 @@ import androidx.activity.enableEdgeToEdge
  * disables the system-enforced contrast scrim that would otherwise be applied to the 3-button
  * navigation bar.
  */
-fun ComponentActivity.setEdgeToEdgeConfig() {
-    enableEdgeToEdge(
-        statusBarStyle = SystemBarStyle.auto(
-            android.graphics.Color.TRANSPARENT,
-            android.graphics.Color.TRANSPARENT,
-        ),
-        navigationBarStyle = SystemBarStyle.auto(
-            android.graphics.Color.TRANSPARENT,
-            android.graphics.Color.TRANSPARENT,
-        )
+fun ComponentActivity.setEdgeToEdgeConfig(isDark: Boolean = true) {
+    val style = SystemBarStyle.auto(
+        lightScrim = android.graphics.Color.TRANSPARENT,
+        darkScrim = android.graphics.Color.TRANSPARENT,
+        detectDarkMode = { isDark }
     )
+    enableEdgeToEdge(statusBarStyle = style, navigationBarStyle = style)
     if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
         // Force the 3-button navigation bar to be transparent
         // See: https://developer.android.com/develop/ui/views/layout/edge-to-edge#create-transparent

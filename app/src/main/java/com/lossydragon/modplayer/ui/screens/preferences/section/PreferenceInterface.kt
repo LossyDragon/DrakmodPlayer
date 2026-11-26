@@ -19,6 +19,7 @@ import com.github.skydoves.colorpicker.compose.HsvColorPicker
 import com.github.skydoves.colorpicker.compose.SaturationSlider
 import com.github.skydoves.colorpicker.compose.rememberColorPickerController
 import com.lossydragon.modplayer.R
+import com.lossydragon.modplayer.db.AppPreferences
 import com.lossydragon.modplayer.ui.components.collectPref
 import com.lossydragon.modplayer.ui.components.rememberAppPreferences
 import com.lossydragon.modplayer.ui.screens.preferences.components.PreferenceItem
@@ -32,6 +33,24 @@ import com.materialkolor.ktx.toHex
 import kotlinx.collections.immutable.persistentListOf
 import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.launch
+
+private val modeItems = persistentListOf(
+    PreferenceItem(
+        key = AppPreferences.THEME_MODE_DARK,
+        title = R.string.pref_theme_mode_dark,
+        description = R.string.pref_theme_mode_dark_desc
+    ),
+    PreferenceItem(
+        key = AppPreferences.THEME_MODE_LIGHT,
+        title = R.string.pref_theme_mode_light,
+        description = R.string.pref_theme_mode_light_desc
+    ),
+    PreferenceItem(
+        key = AppPreferences.THEME_MODE_AUTO,
+        title = R.string.pref_theme_mode_auto,
+        description = R.string.pref_theme_mode_auto_desc
+    ),
+)
 
 private val styleItems = persistentListOf(
     PreferenceItem(
@@ -97,6 +116,22 @@ fun PreferenceInterface(
     val color by remember(prefs) {
         prefs.getThemeColorFlow().map { Color(it) }
     }.collectAsStateWithLifecycle(seed)
+
+    val mode by prefs.collectPref(AppPreferences.DEFAULT_THEME_MODE) { getAppThemeModeFlow() }
+
+    var isThemeModeShowing by remember { mutableStateOf(false) }
+    if (isThemeModeShowing) {
+        SingleChoiceAlertDialog(
+            selectedItemKey = mode,
+            items = modeItems,
+            onItemSelected = { key ->
+                key?.let {
+                    scope.launch { prefs.setAppThemeMode(it) }
+                }
+                isThemeModeShowing = false
+            },
+        )
+    }
 
     var isThemeStyleShowing by remember { mutableStateOf(false) }
     if (isThemeStyleShowing) {
@@ -217,27 +252,37 @@ fun PreferenceInterface(
         verticalArrangement = Arrangement.spacedBy(4.dp),
         content = {
             SettingsMenuLink(
+                title = { Text(text = stringResource(R.string.pref_theme_mode)) },
+                subtitle = {
+                    val title = modeItems.find { it.key == mode }?.title
+                    Text(text = title?.let { stringResource(it) } ?: mode)
+                },
+                colors = colors,
+                shapes = ListItemDefaults.segmentedShapes(0, 4),
+                onClick = { isThemeModeShowing = true }
+            )
+            SettingsMenuLink(
                 title = { Text(text = stringResource(R.string.pref_scheme_style)) },
                 subtitle = {
                     val title = styleItems.find { it.key == style.name }?.title
                     Text(text = title?.let { stringResource(it) } ?: style.name)
                 },
                 colors = colors,
-                shapes = ListItemDefaults.segmentedShapes(0, 3),
+                shapes = ListItemDefaults.segmentedShapes(1, 4),
                 onClick = { isThemeStyleShowing = true }
             )
             SettingsMenuLink(
                 title = { Text(text = stringResource(R.string.pref_theme_color)) },
                 subtitle = { Text(text = color.toHex()) },
                 colors = colors,
-                shapes = ListItemDefaults.segmentedShapes(1, 3),
+                shapes = ListItemDefaults.segmentedShapes(2, 4),
                 onClick = { isThemeColorShowing = true }
             )
             SettingsSwitch(
                 title = { Text(text = stringResource(R.string.pref_amoled)) },
                 subtitle = { Text(text = stringResource(R.string.pref_amoled_desc)) },
                 colors = colors,
-                shapes = ListItemDefaults.segmentedShapes(2, 3),
+                shapes = ListItemDefaults.segmentedShapes(3, 4),
                 state = amoled,
                 onCheckedChange = { scope.launch { prefs.setAppThemeAmoled(it) } }
             )
