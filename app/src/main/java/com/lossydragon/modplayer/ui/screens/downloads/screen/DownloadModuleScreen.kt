@@ -211,71 +211,54 @@ private fun DownloadModuleContent(
                         module?.isSupported == false -> null
                         else -> Icons.Default.Download
                     }
-                    val randomLabel = stringResource(R.string.random)
+                    val buttonShape = ButtonDefaults.shapesFor(ActionButtonHeight).shape
 
-                    ButtonGroup(
+                    Row(
                         modifier = Modifier
                             .fillMaxWidth()
                             .padding(horizontal = 16.dp),
-                        overflowIndicator = {},
+                        horizontalArrangement = Arrangement.spacedBy(12.dp),
                         content = {
-                            customItem(
-                                buttonGroupContent = {
-                                    val interactionSource = remember { MutableInteractionSource() }
-                                    Button(
-                                        modifier = Modifier
-                                            .weight(1f)
-                                            .heightIn(min = ActionButtonHeight)
-                                            .animateWidth(interactionSource),
-                                        shapes = ButtonDefaults.shapesFor(ActionButtonHeight),
-                                        contentPadding = ButtonDefaults.contentPaddingFor(
-                                            buttonHeight = ActionButtonHeight,
-                                            hasStartIcon = buttonIcon != null,
-                                        ),
-                                        interactionSource = interactionSource,
-                                        enabled = !state.isLoading && !isDownloading &&
-                                            module?.isSupported != false,
-                                        onClick = {
-                                            if (state.moduleExists) {
-                                                module?.let { onPlay(it) }
-                                            } else {
-                                                module?.let { onDownloadModule(it) }
-                                            }
-                                        },
-                                        content = {
-                                            ActionButtonContent(
-                                                icon = buttonIcon,
-                                                label = buttonLabel,
-                                            )
-                                        }
-                                    )
+                            Button(
+                                modifier = Modifier
+                                    .weight(1f)
+                                    .heightIn(min = ActionButtonHeight),
+                                shape = buttonShape,
+                                contentPadding = ButtonDefaults.contentPaddingFor(
+                                    buttonHeight = ActionButtonHeight,
+                                    hasStartIcon = buttonIcon != null,
+                                ),
+                                enabled = !state.isLoading && !isDownloading &&
+                                    module?.isSupported != false,
+                                onClick = {
+                                    if (state.moduleExists) {
+                                        module?.let { onPlay(it) }
+                                    } else {
+                                        module?.let { onDownloadModule(it) }
+                                    }
                                 },
-                                menuContent = {}
+                                content = {
+                                    ActionButtonContent(
+                                        icon = buttonIcon,
+                                        label = buttonLabel,
+                                    )
+                                }
                             )
-                            customItem(
-                                buttonGroupContent = {
-                                    val interactionSource = remember { MutableInteractionSource() }
-                                    FilledTonalButton(
-                                        modifier = Modifier
-                                            .heightIn(min = ActionButtonHeight)
-                                            .animateWidth(interactionSource),
-                                        shapes = ButtonDefaults.shapesFor(ActionButtonHeight),
-                                        contentPadding = ButtonDefaults.contentPaddingFor(
-                                            buttonHeight = ActionButtonHeight,
-                                            hasStartIcon = true,
-                                        ),
-                                        interactionSource = interactionSource,
-                                        enabled = !state.isLoading && !isDownloading,
-                                        onClick = onRandomModule,
-                                        content = {
-                                            ActionButtonContent(
-                                                icon = Icons.Default.Shuffle,
-                                                label = randomLabel,
-                                            )
-                                        }
+                            FilledTonalButton(
+                                modifier = Modifier.heightIn(min = ActionButtonHeight),
+                                shape = buttonShape,
+                                contentPadding = ButtonDefaults.contentPaddingFor(
+                                    buttonHeight = ActionButtonHeight,
+                                    hasStartIcon = true,
+                                ),
+                                enabled = !state.isLoading && !isDownloading,
+                                onClick = onRandomModule,
+                                content = {
+                                    ActionButtonContent(
+                                        icon = Icons.Default.Shuffle,
+                                        label = stringResource(R.string.random),
                                     )
-                                },
-                                menuContent = {}
+                                }
                             )
                         }
                     )

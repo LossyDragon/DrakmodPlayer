@@ -85,7 +85,6 @@ fun DownloadSearchScreen(
         },
         floatingActionButton = {
             ExtendedFloatingActionButton(
-                shape = MaterialTheme.shapes.small,
                 onClick = submit,
                 text = { Text(text = stringResource(R.string.search)) },
                 icon = {
@@ -183,45 +182,23 @@ fun DownloadSearchScreen(
 
                         SectionLabel(text = stringResource(R.string.search_discover))
 
-                        val randomLabel = stringResource(R.string.random)
-                        val historyLabel = stringResource(R.string.history)
-                        ButtonGroup(
+                        Row(
                             modifier = Modifier.fillMaxWidth(),
-                            overflowIndicator = {},
+                            horizontalArrangement = Arrangement.spacedBy(12.dp),
                             content = {
-                                customItem(
-                                    buttonGroupContent = {
-                                        val interactionSource =
-                                            remember { MutableInteractionSource() }
-                                        DiscoverButton(
-                                            modifier = Modifier
-                                                .weight(1f)
-                                                .animateWidth(interactionSource),
-                                            icon = Icons.Default.Shuffle,
-                                            label = randomLabel,
-                                            enabled = hasApiKey,
-                                            interactionSource = interactionSource,
-                                            onClick = onRandom,
-                                        )
-                                    },
-                                    menuContent = {}
+                                DiscoverButton(
+                                    modifier = Modifier.weight(1f),
+                                    icon = Icons.Default.Shuffle,
+                                    label = stringResource(R.string.random),
+                                    enabled = hasApiKey,
+                                    onClick = onRandom,
                                 )
-                                customItem(
-                                    buttonGroupContent = {
-                                        val interactionSource =
-                                            remember { MutableInteractionSource() }
-                                        DiscoverButton(
-                                            modifier = Modifier
-                                                .weight(1f)
-                                                .animateWidth(interactionSource),
-                                            icon = Icons.Default.History,
-                                            label = historyLabel,
-                                            enabled = hasApiKey,
-                                            interactionSource = interactionSource,
-                                            onClick = onHistory,
-                                        )
-                                    },
-                                    menuContent = {}
+                                DiscoverButton(
+                                    modifier = Modifier.weight(1f),
+                                    icon = Icons.Default.History,
+                                    label = stringResource(R.string.history),
+                                    enabled = hasApiKey,
+                                    onClick = onHistory,
                                 )
                             }
                         )
@@ -318,7 +295,7 @@ private fun SearchTypeButton(
         onCheckedChange = { onClick() },
         enabled = enabled,
         buttonSize = ToggleButtonSize.Medium,
-        shapes = shapes,
+        shapes = ToggleButtonShapes(shapes.shape, shapes.shape, shapes.shape),
         content = {
             Text(
                 text = label,
@@ -330,13 +307,12 @@ private fun SearchTypeButton(
     )
 }
 
-/** Medium tonal button whose corners morph on press. */
+/** Medium tonal button. */
 @Composable
 private fun DiscoverButton(
     icon: ImageVector,
     label: String,
     enabled: Boolean,
-    interactionSource: MutableInteractionSource,
     onClick: () -> Unit,
     modifier: Modifier = Modifier
 ) {
@@ -344,10 +320,9 @@ private fun DiscoverButton(
     FilledTonalButton(
         modifier = modifier.heightIn(min = height),
         onClick = onClick,
-        shapes = ButtonDefaults.shapesFor(height),
+        shape = ButtonDefaults.shapesFor(height).shape,
         enabled = enabled,
         contentPadding = ButtonDefaults.contentPaddingFor(height, hasStartIcon = true),
-        interactionSource = interactionSource,
         content = {
             Icon(
                 modifier = Modifier.size(ButtonDefaults.iconSizeFor(height)),
