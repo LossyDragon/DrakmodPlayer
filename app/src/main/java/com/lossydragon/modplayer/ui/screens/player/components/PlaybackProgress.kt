@@ -13,6 +13,8 @@ import com.lossydragon.renderer.model.FrameInfo
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 
+private const val THUMB_STEPS = 500
+
 /** Collects the 50 Hz frame flow itself; the thumb follows it, the labels recompose per second. */
 @Composable
 internal fun PlaybackProgress(
@@ -26,12 +28,14 @@ internal fun PlaybackProgress(
     var isSeeking by remember { mutableStateOf(false) }
     val state = rememberSliderState()
     // The engine drives the thumb except while the user is dragging it.
+    // Stepped: each thumb move recomposes the whole Slider.
     LaunchedEffect(fi) {
-        snapshotFlow { fi.value }.collect { info ->
-            if (!isSeeking) {
-                val total = info.totalTime.toFloat().coerceAtLeast(1f)
-                state.value = (info.time.toFloat() / total).coerceIn(0f, 1f)
-            }
+        snapshotFlow {
+            val info = fi.value
+            val total = info.totalTime.toFloat().coerceAtLeast(1f)
+            (info.time / total * THUMB_STEPS).toInt().coerceIn(0, THUMB_STEPS)
+        }.collect { step ->
+            if (!isSeeking) state.value = step / THUMB_STEPS.toFloat()
         }
     }
     val shownSec by remember(fi) {

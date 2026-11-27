@@ -1,5 +1,6 @@
 package com.lossydragon.modplayer.ui.screens.player.components.views
 
+import androidx.collection.MutableLongObjectMap
 import androidx.compose.animation.core.*
 import androidx.compose.foundation.*
 import androidx.compose.foundation.gestures.*
@@ -205,7 +206,9 @@ fun ChannelView(
 
     val fontSize = 11.sp * zoom
     val textMeasurer = rememberTextMeasurer()
-    val textCache = remember(fontSize, instrumentNames) { HashMap<Long, TextLayoutResult>(64) }
+    val textCache = remember(fontSize, instrumentNames) {
+        MutableLongObjectMap<TextLayoutResult>(64)
+    }
 
     val textStyle = remember(fontSize) {
         TextStyle(fontSize = fontSize, fontFamily = FontFamily.Monospace)
