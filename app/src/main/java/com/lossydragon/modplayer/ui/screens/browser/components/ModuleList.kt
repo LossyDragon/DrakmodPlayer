@@ -13,6 +13,7 @@ import androidx.compose.ui.tooling.preview.*
 import androidx.compose.ui.unit.*
 import com.lossydragon.modplayer.R
 import com.lossydragon.modplayer.db.entity.ModuleEntity
+import com.lossydragon.modplayer.ui.components.SegmentedListSpacing
 import com.lossydragon.modplayer.ui.screens.browser.FileItem
 import com.lossydragon.modplayer.ui.theme.AppTheme
 import kotlinx.collections.immutable.ImmutableList
@@ -34,10 +35,12 @@ internal fun ModuleList(
         modifier = Modifier.fillMaxSize(),
         state = listState,
         contentPadding = PaddingValues(
-            top = padding.calculateTopPadding() + 8.dp,
-            bottom = padding.calculateBottomPadding() + 96.dp, // Floating toolbar
-            start = padding.calculateStartPadding(LocalLayoutDirection.current) + 16.dp,
-            end = padding.calculateEndPadding(LocalLayoutDirection.current) + 16.dp,
+            top = padding.calculateTopPadding() + SegmentedListSpacing.Vertical,
+            bottom = padding.calculateBottomPadding() + SegmentedListSpacing.FabClearance,
+            start = padding.calculateStartPadding(LocalLayoutDirection.current) +
+                SegmentedListSpacing.Horizontal,
+            end = padding.calculateEndPadding(LocalLayoutDirection.current) +
+                SegmentedListSpacing.Horizontal,
         ),
         content = {
             itemsIndexed(

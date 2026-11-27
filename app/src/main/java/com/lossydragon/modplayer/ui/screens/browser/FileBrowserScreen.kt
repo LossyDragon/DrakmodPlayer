@@ -31,6 +31,7 @@ import com.lossydragon.modplayer.db.entity.PlaylistEntity
 import com.lossydragon.modplayer.player.PlayerViewModel
 import com.lossydragon.modplayer.ui.activityViewModel
 import com.lossydragon.modplayer.ui.components.MessageBox
+import com.lossydragon.modplayer.ui.components.PlayFloatingToolbar
 import com.lossydragon.modplayer.ui.components.ProgressbarIndicator
 import com.lossydragon.modplayer.ui.screens.browser.components.BreadCrumbs
 import com.lossydragon.modplayer.ui.screens.browser.components.BrowserInputField
@@ -279,19 +280,9 @@ private fun FileBrowserScreenContent(
                     checkedContainerColor = MaterialTheme.colorScheme.secondaryContainer,
                     checkedContentColor = MaterialTheme.colorScheme.onSecondaryContainer,
                 )
-                HorizontalFloatingToolbar(
+                PlayFloatingToolbar(
                     expanded = toolbarExpanded,
-                    floatingActionButton = {
-                        FloatingToolbarDefaults.StandardFloatingActionButton(
-                            onClick = onPlayAll,
-                            content = {
-                                Icon(
-                                    imageVector = Icons.Default.PlayArrow,
-                                    contentDescription = stringResource(R.string.fab_play_all)
-                                )
-                            }
-                        )
-                    },
+                    onPlay = onPlayAll,
                     content = {
                         IconToggleButton(
                             checked = browserState.isShuffle,

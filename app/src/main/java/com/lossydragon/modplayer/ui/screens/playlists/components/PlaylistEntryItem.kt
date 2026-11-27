@@ -5,13 +5,13 @@ import androidx.compose.foundation.background
 import androidx.compose.foundation.gestures.*
 import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.layout.*
-import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.material.icons.*
 import androidx.compose.material.icons.filled.*
 import androidx.compose.material.icons.rounded.*
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.*
+import androidx.compose.ui.draw.clip
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.hapticfeedback.*
 import androidx.compose.ui.layout.*
@@ -23,6 +23,8 @@ import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.*
 import com.lossydragon.modplayer.R
 import com.lossydragon.modplayer.db.entity.ModuleEntity
+import com.lossydragon.modplayer.ui.components.LeadingBadge
+import com.lossydragon.modplayer.ui.components.segmentedRowColors
 import com.lossydragon.modplayer.ui.theme.AppTheme
 import kotlin.math.abs
 import sh.calvin.reorderable.DragGestureDetector
@@ -50,6 +52,8 @@ internal fun ReorderableCollectionItemScope.PlaylistEntryItem(
 
     Box(
         modifier = modifier
+            // Keeps the sliding row out of the list's side margin.
+            .clip(shapes.shape)
             .onSizeChanged { componentWidth = it.width.toFloat() }
             .draggable(
                 orientation = Orientation.Horizontal,
@@ -102,9 +106,7 @@ internal fun ReorderableCollectionItemScope.PlaylistEntryItem(
                 },
                 onClick = onPlay,
                 shapes = shapes,
-                colors = ListItemDefaults.segmentedColors(
-                    containerColor = MaterialTheme.colorScheme.surfaceContainer,
-                ),
+                colors = segmentedRowColors(),
                 content = {
                     Text(
                         text = file.name,
@@ -119,21 +121,7 @@ internal fun ReorderableCollectionItemScope.PlaylistEntryItem(
                         overflow = TextOverflow.Ellipsis,
                     )
                 },
-                leadingContent = {
-                    Box(
-                        modifier = Modifier
-                            .size(40.dp)
-                            .background(MaterialTheme.colorScheme.secondaryContainer, CircleShape),
-                        contentAlignment = Alignment.Center,
-                        content = {
-                            Text(
-                                text = "${index + 1}",
-                                style = MaterialTheme.typography.labelLarge,
-                                color = MaterialTheme.colorScheme.onSecondaryContainer,
-                            )
-                        }
-                    )
-                },
+                leadingContent = { LeadingBadge(text = "${index + 1}") },
                 trailingContent = {
                     IconButton(
                         modifier = Modifier.draggableHandle(

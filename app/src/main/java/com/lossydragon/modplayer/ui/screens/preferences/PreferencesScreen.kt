@@ -17,6 +17,7 @@ import com.lossydragon.modplayer.core.FileLoggingTree
 import com.lossydragon.modplayer.ui.components.BackButton
 import com.lossydragon.modplayer.ui.components.ConfirmDialog
 import com.lossydragon.modplayer.ui.components.rememberAppPreferences
+import com.lossydragon.modplayer.ui.components.segmentedRowColors
 import com.lossydragon.modplayer.ui.screens.preferences.section.PreferenceBrowser
 import com.lossydragon.modplayer.ui.screens.preferences.section.PreferenceDownloads
 import com.lossydragon.modplayer.ui.screens.preferences.section.PreferenceInfo
@@ -87,9 +88,7 @@ internal fun PreferencesScreen(
         },
         content = { paddingValues ->
             val scrollState = rememberScrollState()
-            val colors = ListItemDefaults.segmentedColors(
-                containerColor = MaterialTheme.colorScheme.surfaceContainer,
-            )
+            val colors = segmentedRowColors()
 
             Column(
                 modifier = Modifier

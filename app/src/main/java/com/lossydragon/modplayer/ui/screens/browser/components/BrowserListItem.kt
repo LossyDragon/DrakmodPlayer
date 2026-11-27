@@ -1,8 +1,6 @@
 package com.lossydragon.modplayer.ui.screens.browser.components
 
-import androidx.compose.foundation.*
 import androidx.compose.foundation.layout.*
-import androidx.compose.foundation.shape.*
 import androidx.compose.material.icons.*
 import androidx.compose.material.icons.filled.*
 import androidx.compose.material3.*
@@ -14,6 +12,8 @@ import androidx.compose.ui.text.style.*
 import androidx.compose.ui.tooling.preview.*
 import androidx.compose.ui.unit.*
 import com.lossydragon.modplayer.R
+import com.lossydragon.modplayer.ui.components.LeadingBadge
+import com.lossydragon.modplayer.ui.components.segmentedRowColors
 import com.lossydragon.modplayer.ui.theme.AppTheme
 
 /** Segmented when [segmentedShapes] is given, otherwise a plain row. */
@@ -47,19 +47,7 @@ internal fun BrowserListItem(
     val leadingContent: (@Composable () -> Unit)? = leadingIcon?.let {
         {
             if (segmentedShapes != null) {
-                Box(
-                    modifier = Modifier
-                        .size(40.dp)
-                        .background(MaterialTheme.colorScheme.secondaryContainer, CircleShape),
-                    contentAlignment = Alignment.Center,
-                    content = {
-                        Icon(
-                            imageVector = it,
-                            contentDescription = null,
-                            tint = MaterialTheme.colorScheme.onSecondaryContainer,
-                        )
-                    }
-                )
+                LeadingBadge(icon = it)
             } else {
                 Icon(imageVector = it, contentDescription = null)
             }
@@ -84,9 +72,7 @@ internal fun BrowserListItem(
             modifier = modifier.fillMaxWidth(),
             onClick = onClick,
             shapes = segmentedShapes,
-            colors = ListItemDefaults.segmentedColors(
-                containerColor = MaterialTheme.colorScheme.surfaceContainer,
-            ),
+            colors = segmentedRowColors(),
             leadingContent = leadingContent,
             content = content,
             supportingContent = supportingContent,

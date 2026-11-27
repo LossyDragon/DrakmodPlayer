@@ -22,6 +22,7 @@ import com.lossydragon.modplayer.R
 import com.lossydragon.modplayer.db.AppPreferences
 import com.lossydragon.modplayer.ui.components.collectPref
 import com.lossydragon.modplayer.ui.components.rememberAppPreferences
+import com.lossydragon.modplayer.ui.components.segmentedRowColors
 import com.lossydragon.modplayer.ui.screens.preferences.components.PreferenceItem
 import com.lossydragon.modplayer.ui.screens.preferences.components.PreferenceSection
 import com.lossydragon.modplayer.ui.screens.preferences.components.SingleChoiceAlertDialog
@@ -294,9 +295,7 @@ fun PreferenceInterface(
 @Composable
 private fun Preview() {
     AppTheme {
-        val colors = ListItemDefaults.segmentedColors(
-            containerColor = MaterialTheme.colorScheme.surfaceContainer,
-        )
+        val colors = segmentedRowColors()
         Surface {
             PreferenceInterface(colors)
         }

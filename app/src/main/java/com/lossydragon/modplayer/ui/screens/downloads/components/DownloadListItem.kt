@@ -13,6 +13,8 @@ import androidx.compose.ui.text.style.*
 import androidx.compose.ui.tooling.preview.*
 import androidx.compose.ui.unit.*
 import com.lossydragon.modplayer.R
+import com.lossydragon.modplayer.ui.components.LeadingBadge
+import com.lossydragon.modplayer.ui.components.segmentedRowColors
 import com.lossydragon.modplayer.ui.theme.AppTheme
 import com.lossydragon.modplayer.util.fromHtml
 
@@ -29,25 +31,17 @@ internal fun DownloadListItem(
 ) {
     val leadingContent: (@Composable () -> Unit)? = when {
         leadingText != null -> {
-            { FormatsIcon(text = leadingText, tonal = segmentedShapes != null) }
+            {
+                if (segmentedShapes != null) {
+                    LeadingBadge(text = leadingText)
+                } else {
+                    FormatsIcon(text = leadingText)
+                }
+            }
         }
 
         leadingIcon != null -> {
-            {
-                Box(
-                    modifier = Modifier
-                        .size(40.dp)
-                        .background(MaterialTheme.colorScheme.secondaryContainer, CircleShape),
-                    contentAlignment = Alignment.Center,
-                    content = {
-                        Icon(
-                            imageVector = leadingIcon,
-                            contentDescription = null,
-                            tint = MaterialTheme.colorScheme.onSecondaryContainer,
-                        )
-                    }
-                )
-            }
+            { LeadingBadge(icon = leadingIcon) }
         }
 
         else -> null
@@ -83,9 +77,7 @@ internal fun DownloadListItem(
             modifier = modifier,
             onClick = onClick,
             shapes = segmentedShapes,
-            colors = ListItemDefaults.segmentedColors(
-                containerColor = MaterialTheme.colorScheme.surfaceContainer,
-            ),
+            colors = segmentedRowColors(),
             leadingContent = leadingContent,
             content = content,
             supportingContent = supportingContent,
@@ -109,30 +101,19 @@ internal fun DownloadListItem(
 }
 
 @Composable
-private fun FormatsIcon(text: String, tonal: Boolean = false) {
-    val shape = if (tonal) CircleShape else MaterialTheme.shapes.extraSmall
-    val modifier = if (tonal) {
-        Modifier.background(MaterialTheme.colorScheme.secondaryContainer, shape)
-    } else {
-        Modifier
-            .background(MaterialTheme.colorScheme.surfaceContainerHighest, shape)
-            .border(2.dp, MaterialTheme.colorScheme.outline, shape)
-    }
+private fun FormatsIcon(text: String) {
+    val shape = MaterialTheme.shapes.extraSmall
     Box(
         modifier = Modifier
             .size(40.dp)
-            .then(modifier),
+            .background(MaterialTheme.colorScheme.surfaceContainerHighest, shape)
+            .border(2.dp, MaterialTheme.colorScheme.outline, shape),
         contentAlignment = Alignment.Center,
         content = {
             Text(
                 text = text,
                 fontSize = 11.sp,
-                fontWeight = if (tonal) FontWeight.Bold else null,
-                color = if (tonal) {
-                    MaterialTheme.colorScheme.onSecondaryContainer
-                } else {
-                    MaterialTheme.colorScheme.onSurface
-                }
+                color = MaterialTheme.colorScheme.onSurface,
             )
         }
     )

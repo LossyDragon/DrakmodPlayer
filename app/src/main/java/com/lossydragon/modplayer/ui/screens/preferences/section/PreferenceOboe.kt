@@ -10,6 +10,7 @@ import com.alorma.compose.settings.ui.expressive.SettingsMenuLink
 import com.lossydragon.modplayer.R
 import com.lossydragon.modplayer.ui.components.collectPref
 import com.lossydragon.modplayer.ui.components.rememberAppPreferences
+import com.lossydragon.modplayer.ui.components.segmentedRowColors
 import com.lossydragon.modplayer.ui.screens.preferences.components.PreferenceItem
 import com.lossydragon.modplayer.ui.screens.preferences.components.PreferenceSection
 import com.lossydragon.modplayer.ui.screens.preferences.components.SingleChoiceAlertDialog
@@ -131,9 +132,7 @@ fun PreferenceOboe(
 private fun Preview() {
     AppTheme {
         Surface {
-            val colors = ListItemDefaults.segmentedColors(
-                containerColor = MaterialTheme.colorScheme.surfaceContainer,
-            )
+            val colors = segmentedRowColors()
             PreferenceOboe(colors = colors)
         }
     }

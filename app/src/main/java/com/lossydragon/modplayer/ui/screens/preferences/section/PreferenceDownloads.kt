@@ -17,6 +17,7 @@ import com.lossydragon.modplayer.BuildConfig
 import com.lossydragon.modplayer.R
 import com.lossydragon.modplayer.ui.components.collectPref
 import com.lossydragon.modplayer.ui.components.rememberAppPreferences
+import com.lossydragon.modplayer.ui.components.segmentedRowColors
 import com.lossydragon.modplayer.ui.screens.preferences.components.PreferenceSection
 import com.lossydragon.modplayer.ui.theme.AppTheme
 import kotlinx.coroutines.launch
@@ -118,9 +119,7 @@ private fun ApiKeyDialog(
 private fun Preview() {
     AppTheme {
         Surface {
-            val colors = ListItemDefaults.segmentedColors(
-                containerColor = MaterialTheme.colorScheme.surfaceContainer,
-            )
+            val colors = segmentedRowColors()
             PreferenceDownloads(colors)
         }
     }

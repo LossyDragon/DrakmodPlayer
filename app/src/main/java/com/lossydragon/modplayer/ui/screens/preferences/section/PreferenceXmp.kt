@@ -15,6 +15,7 @@ import com.alorma.compose.settings.ui.expressive.SettingsSwitch
 import com.lossydragon.modplayer.R
 import com.lossydragon.modplayer.ui.components.collectPref
 import com.lossydragon.modplayer.ui.components.rememberAppPreferences
+import com.lossydragon.modplayer.ui.components.segmentedRowColors
 import com.lossydragon.modplayer.ui.screens.preferences.components.FlagItem
 import com.lossydragon.modplayer.ui.screens.preferences.components.MultiChoiceAlertDialog
 import com.lossydragon.modplayer.ui.screens.preferences.components.PreferenceItem
@@ -348,9 +349,7 @@ fun PreferenceXmp(
 @Composable
 private fun Preview() {
     AppTheme {
-        val colors = ListItemDefaults.segmentedColors(
-            containerColor = MaterialTheme.colorScheme.surfaceContainer,
-        )
+        val colors = segmentedRowColors()
         Surface {
             Column(modifier = Modifier.verticalScroll(rememberScrollState())) {
                 PreferenceXmp(colors)

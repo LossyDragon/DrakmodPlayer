@@ -35,7 +35,9 @@ import com.lossydragon.modplayer.ui.activityViewModel
 import com.lossydragon.modplayer.ui.components.BackButton
 import com.lossydragon.modplayer.ui.components.ConfirmDialog
 import com.lossydragon.modplayer.ui.components.MessageBox
+import com.lossydragon.modplayer.ui.components.PlayFloatingToolbar
 import com.lossydragon.modplayer.ui.components.ProgressbarIndicator
+import com.lossydragon.modplayer.ui.components.SegmentedListSpacing
 import com.lossydragon.modplayer.ui.screens.playlists.components.NewPlaylistDialog
 import com.lossydragon.modplayer.ui.screens.playlists.components.PlaylistEntryItem
 import com.lossydragon.modplayer.ui.screens.playlists.components.PlaylistListItem
@@ -49,9 +51,6 @@ import sh.calvin.reorderable.ReorderableItem
 import sh.calvin.reorderable.rememberReorderableLazyListState
 
 private const val EXPORT_FILE_NAME = "dragon_player_playlists.json"
-
-// Bottom clears the FAB.
-private val ListPadding = PaddingValues(start = 16.dp, top = 8.dp, end = 16.dp, bottom = 96.dp)
 
 private sealed interface NavKeyPlaylists : NavKey {
     @Serializable data object List : NavKeyPlaylists
@@ -341,7 +340,7 @@ private fun PlaylistListScreen(
                             .padding(padding)
                             .fillMaxSize(),
                         state = listState,
-                        contentPadding = ListPadding,
+                        contentPadding = SegmentedListSpacing.PaddingWithFab,
                         verticalArrangement = Arrangement.spacedBy(ListItemDefaults.SegmentedGap),
                         content = {
                             itemsIndexed(
@@ -408,19 +407,9 @@ private fun PlaylistEntriesScreen(
                 enter = slideInVertically { it } + fadeIn(),
                 exit = slideOutVertically { it } + fadeOut(),
             ) {
-                HorizontalFloatingToolbar(
+                PlayFloatingToolbar(
                     expanded = toolbarExpanded,
-                    floatingActionButton = {
-                        FloatingToolbarDefaults.StandardFloatingActionButton(
-                            onClick = onPlayAll,
-                            content = {
-                                Icon(
-                                    imageVector = Icons.Default.PlayArrow,
-                                    contentDescription = stringResource(R.string.fab_play_all)
-                                )
-                            }
-                        )
-                    },
+                    onPlay = onPlayAll,
                     content = {
                         IconButton(
                             onClick = onShuffle,
@@ -481,7 +470,7 @@ private fun PlaylistEntriesScreen(
                     LazyColumn(
                         modifier = Modifier.fillMaxSize(),
                         state = lazyListState,
-                        contentPadding = ListPadding,
+                        contentPadding = SegmentedListSpacing.PaddingWithFab,
                         verticalArrangement = Arrangement.spacedBy(ListItemDefaults.SegmentedGap),
                     ) {
                         itemsIndexed(

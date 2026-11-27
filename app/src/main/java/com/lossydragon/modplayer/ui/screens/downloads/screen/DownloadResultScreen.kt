@@ -23,6 +23,7 @@ import com.lossydragon.modplayer.model.Module
 import com.lossydragon.modplayer.model.ResultItem
 import com.lossydragon.modplayer.ui.components.BackButton
 import com.lossydragon.modplayer.ui.components.MessageBox
+import com.lossydragon.modplayer.ui.components.SegmentedListSpacing
 import com.lossydragon.modplayer.ui.screens.downloads.DownloadSearchState
 import com.lossydragon.modplayer.ui.screens.downloads.DownloadsViewModel
 import com.lossydragon.modplayer.ui.screens.downloads.SearchResultType
@@ -151,7 +152,7 @@ private fun DownloadScreenContent(
                     }
                     LazyColumn(
                         modifier = Modifier.fillMaxSize(),
-                        contentPadding = PaddingValues(horizontal = 16.dp, vertical = 8.dp),
+                        contentPadding = SegmentedListSpacing.Padding,
                     ) {
                         items(
                             count = itemCount,

@@ -1,8 +1,6 @@
 package com.lossydragon.modplayer.ui.screens.playlists.components
 
-import androidx.compose.foundation.*
 import androidx.compose.foundation.layout.*
-import androidx.compose.foundation.shape.*
 import androidx.compose.material.icons.*
 import androidx.compose.material.icons.automirrored.filled.*
 import androidx.compose.material.icons.filled.*
@@ -15,6 +13,8 @@ import androidx.compose.ui.tooling.preview.*
 import androidx.compose.ui.unit.*
 import com.lossydragon.modplayer.R
 import com.lossydragon.modplayer.db.entity.PlaylistEntity
+import com.lossydragon.modplayer.ui.components.LeadingBadge
+import com.lossydragon.modplayer.ui.components.segmentedRowColors
 import com.lossydragon.modplayer.ui.theme.AppTheme
 import com.lossydragon.modplayer.util.toReadableDate
 
@@ -33,9 +33,7 @@ internal fun PlaylistListItem(
         modifier = modifier,
         onClick = onSelect,
         shapes = shapes,
-        colors = ListItemDefaults.segmentedColors(
-            containerColor = MaterialTheme.colorScheme.surfaceContainer,
-        ),
+        colors = segmentedRowColors(),
         content = {
             Text(
                 text = item.name,
@@ -61,21 +59,7 @@ internal fun PlaylistListItem(
                 )
             }
         },
-        leadingContent = {
-            Box(
-                modifier = Modifier
-                    .size(40.dp)
-                    .background(MaterialTheme.colorScheme.secondaryContainer, CircleShape),
-                contentAlignment = Alignment.Center,
-                content = {
-                    Icon(
-                        imageVector = Icons.AutoMirrored.Filled.List,
-                        contentDescription = null,
-                        tint = MaterialTheme.colorScheme.onSecondaryContainer,
-                    )
-                }
-            )
-        },
+        leadingContent = { LeadingBadge(icon = Icons.AutoMirrored.Filled.List) },
         trailingContent = {
             Box {
                 IconButton(onClick = { expanded = true }) {

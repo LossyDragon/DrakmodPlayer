@@ -14,6 +14,7 @@ import com.alorma.compose.settings.ui.expressive.SettingsMenuLink
 import com.lossydragon.modplayer.R
 import com.lossydragon.modplayer.data.ModuleRepository
 import com.lossydragon.modplayer.ui.components.rememberAppPreferences
+import com.lossydragon.modplayer.ui.components.segmentedRowColors
 import com.lossydragon.modplayer.ui.screens.preferences.components.PreferenceSection
 import com.lossydragon.modplayer.ui.theme.AppTheme
 import kotlinx.coroutines.flow.map
@@ -67,9 +68,7 @@ fun PreferenceBrowser(colors: ListItemColors) {
 private fun Preview() {
     AppTheme {
         Surface {
-            val colors = ListItemDefaults.segmentedColors(
-                containerColor = MaterialTheme.colorScheme.surfaceContainer,
-            )
+            val colors = segmentedRowColors()
             PreferenceBrowser(colors)
         }
     }
