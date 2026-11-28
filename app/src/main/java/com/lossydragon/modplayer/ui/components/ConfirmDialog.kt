@@ -1,9 +1,12 @@
 package com.lossydragon.modplayer.ui.components
 
+import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.material.icons.*
 import androidx.compose.material.icons.filled.*
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
+import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.tooling.preview.*
@@ -47,13 +50,15 @@ fun ConfirmDialog(
 @Composable
 private fun Preview() {
     AppTheme {
-        ConfirmDialog(
-            icon = Icons.Default.DeleteForever,
-            title = stringResource(R.string.dialog_title_delete_playlist),
-            text = stringResource(R.string.dialog_message_delete_playlist, "Amiga Tunes"),
-            confirmLabel = stringResource(R.string.delete),
-            onConfirm = {},
-            onDismiss = {},
-        )
+        Box(modifier = Modifier.fillMaxSize()) {
+            ConfirmDialog(
+                icon = Icons.Default.DeleteForever,
+                title = stringResource(R.string.dialog_title_delete_playlist),
+                text = stringResource(R.string.dialog_message_delete_playlist, "Amiga Tunes"),
+                confirmLabel = stringResource(R.string.delete),
+                onConfirm = {},
+                onDismiss = {},
+            )
+        }
     }
 }

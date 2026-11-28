@@ -17,7 +17,7 @@ val seed = Color(AppPreferences.DEFAULT_THEME_COLOR)
 
 /** Resolves a persisted PaletteStyle name, falling back to the default for unknown names. */
 fun paletteStyleOf(name: String): PaletteStyle =
-    PaletteStyle.entries.firstOrNull { it.name == name } ?: PaletteStyle.Vibrant
+    PaletteStyle.entries.firstOrNull { it.name == name } ?: PaletteStyle.Rainbow
 
 @Composable
 fun AppTheme(
@@ -26,16 +26,22 @@ fun AppTheme(
 ) {
     val prefs = rememberAppPreferences()
 
-    val mode by prefs.collectPref(AppPreferences.DEFAULT_THEME_MODE) { getAppThemeModeFlow() }
+    val mode by prefs.collectPref(AppPreferences.DEFAULT_THEME_MODE) {
+        getAppThemeModeFlow()
+    }
 
     val styleName by prefs.collectPref(AppPreferences.DEFAULT_THEME_STYLE) {
         getAppThemeStyleFlow()
     }
     val style = remember(styleName) { paletteStyleOf(styleName) }
 
-    val amoled by prefs.collectPref(false) { getAppThemeAmoledFlow() }
+    val amoled by prefs.collectPref(false) {
+        getAppThemeAmoledFlow()
+    }
 
-    val prefColor by prefs.collectPref(AppPreferences.DEFAULT_THEME_COLOR) { getThemeColorFlow() }
+    val prefColor by prefs.collectPref(AppPreferences.DEFAULT_THEME_COLOR) {
+        getThemeColorFlow()
+    }
     val color = remember(prefColor) { Color(prefColor) }
 
     // AMOLED forces dark whatever the mode.

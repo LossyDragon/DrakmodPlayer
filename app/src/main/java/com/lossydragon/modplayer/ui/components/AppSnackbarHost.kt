@@ -15,7 +15,10 @@ private var shownPlayerError: String? = null
 
 /** Shows a player error once, whichever root entry is on screen when it arrives. */
 @Composable
-fun PlayerErrorEffect(message: String?, hostState: SnackbarHostState = AppSnackbarHostState) {
+fun PlayerErrorEffect(
+    message: String?,
+    hostState: SnackbarHostState = AppSnackbarHostState
+) {
     LaunchedEffect(message) {
         if (message == shownPlayerError) return@LaunchedEffect
         shownPlayerError = message

@@ -40,7 +40,7 @@ fun MessageBox(
             Surface(
                 modifier = Modifier.padding(horizontal = 16.dp),
                 color = MaterialTheme.colorScheme.surfaceContainerHighest,
-                shape = MaterialTheme.shapes.small,
+                shape = MaterialTheme.shapes.large,
                 tonalElevation = 3.dp,
             ) {
                 Column(
@@ -100,7 +100,7 @@ private fun Preview() {
                 MessageBox(
                     text = LoremIpsum(50).values.first(),
                     actions = {
-                        TextButton(onClick = {}) { Text(text = stringResource(R.string.confirm)) }
+                        TextButton(onClick = {}) { Text(text = stringResource(R.string.cancel)) }
                         TextButton(onClick = {}) { Text(text = stringResource(R.string.confirm)) }
                     }
                 )

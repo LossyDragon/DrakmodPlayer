@@ -63,8 +63,8 @@ fun legacyPaletteStyleName(ordinal: Int?): String =
 open class AppPreferences(context: Context) {
 
     companion object {
-        const val DEFAULT_THEME_STYLE = "Vibrant"
-        const val DEFAULT_THEME_COLOR: Int = 0xFF660099.toInt()
+        const val DEFAULT_THEME_STYLE = "Rainbow" // Accents UI element with gray-ish background
+        const val DEFAULT_THEME_COLOR: Int = 0xFF660099.toInt() // Purple
 
         const val THEME_MODE_DARK = "dark"
         const val THEME_MODE_LIGHT = "light"

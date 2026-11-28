@@ -3,6 +3,7 @@ package com.lossydragon.modplayer.ui.components
 import androidx.compose.foundation.layout.RowScope
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.PlayArrow
+import androidx.compose.material.icons.filled.Repeat
 import androidx.compose.material.icons.filled.Shuffle
 import androidx.compose.material3.FloatingToolbarDefaults
 import androidx.compose.material3.HorizontalFloatingToolbar
@@ -24,7 +25,6 @@ fun PlayFloatingToolbar(
 ) {
     HorizontalFloatingToolbar(
         expanded = expanded,
-        // The default container matches the list rows it floats over.
         colors = FloatingToolbarDefaults.standardFloatingToolbarColors(
             toolbarContainerColor = MaterialTheme.colorScheme.surfaceContainerHighest,
         ),
@@ -53,7 +53,16 @@ private fun Preview() {
             content = {
                 IconButton(
                     onClick = {},
-                    content = { Icon(imageVector = Icons.Default.Shuffle, contentDescription = null) }
+                    content = {
+                        Icon(imageVector = Icons.Default.Shuffle, contentDescription = null)
+                    }
+                )
+
+                IconButton(
+                    onClick = {},
+                    content = {
+                        Icon(imageVector = Icons.Default.Repeat, contentDescription = null)
+                    }
                 )
             }
         )
